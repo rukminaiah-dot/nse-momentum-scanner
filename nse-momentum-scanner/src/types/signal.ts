@@ -1,0 +1,1 @@
+export type Signal = { symbol:string; name:string; price:number; changePct:number; relativeVolume:number; score:number; trend:'Bullish'|'Neutral'; reason:string; invalidation:string; observedAt:string };

@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "NSE Momentum Scanner",
+    "slug": "nse-momentum-scanner",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "nsemomentum",
+    "plugins": [
+      "expo-router",
+      "expo-notifications",
+      "expo-asset"
+    ],
+    "android": {
+      "package": "com.personal.nsemomentum",
+      "permissions": [
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
