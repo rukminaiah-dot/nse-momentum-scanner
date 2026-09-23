@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+requests
+pyotp
+smartapi-python
+
+httpx
+
+yfinance
+logzero

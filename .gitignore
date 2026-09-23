@@ -2,3 +2,11 @@
 node_modules/
 error.txt
 files.txt
+
+.env
+backend/.env
+
+backend/__pycache__/
+backend/scanner.*.py
+backend/server.*.py
+backend/server.py.backup
