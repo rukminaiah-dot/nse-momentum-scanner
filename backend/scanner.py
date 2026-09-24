@@ -35,4 +35,4 @@ def prices():
 
 def signals():
     p=prices()
-    return [{**x,"price":float(p[x["ticker"]])} for x in candidates()]
+    return [{**x, "price": float(p[x["ticker"]])} for x in candidates()]
