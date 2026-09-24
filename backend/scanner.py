@@ -1,12 +1,5 @@
 import yfinance as yf
 SYMBOLS=["RELIANCE.NS","TCS.NS","HDFCBANK.NS","ICICIBANK.NS","INFY.NS","SBIN.NS","BHARTIARTL.NS","ITC.NS","LT.NS","AXISBANK.NS"]
-def scan():
-    data = yf.download(SYMBOLS, period="5d", interval="15m", progress=False)
-    print("SCANNER DATA OK:", len(data), "candles")
-
-if __name__ == "__main__":
-    scan()
-
 def momentum():
     d=yf.download(SYMBOLS,period="5d",interval="15m",progress=False)
     c=d["Close"].ffill()
