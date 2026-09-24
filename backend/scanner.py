@@ -31,9 +31,7 @@ def prices():
     d=yf.download(SYMBOLS,period="5d",interval="15m",progress=False)
     return d["Close"].ffill().iloc[-1].round(2)
 
-def signals():
-    p=prices()
-    return [{**x,"price":float(p[x["ticker"]])} for x in candidates()]
+
 
 def signals():
     p=prices()
