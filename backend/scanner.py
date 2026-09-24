@@ -22,11 +22,6 @@ def candidates():
     v=volume_strength()
     return [{"ticker":x,"momentum_pct":float(m[x]),"relative_volume":float(v[x])} for x in m.index if m[x]>0 and v[x]>=1.0]
 
-def candidates():
-    m=momentum()
-    v=volume_strength()
-    return [{"ticker":x,"momentum_pct":float(m[x]),"relative_volume":float(v[x])} for x in m.index if m[x]>0 and v[x]>=1.0]
-
 def prices():
     d=yf.download(SYMBOLS,period="5d",interval="15m",progress=False)
     return d["Close"].ffill().iloc[-1].round(2)
