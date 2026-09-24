@@ -1,9 +1,10 @@
-import React,{useState} from 'react';
+import React, {useEffect,useState} from 'react';
 import {SafeAreaView,ScrollView,View,Text,StyleSheet,Pressable,Switch} from 'react-native';
 import {StatusBar} from 'expo-status-bar';
-import {mockSignals} from '../src/data/mockSignals';
+const mockSignals: any[] = [];
+import {getSignals} from "../src/lib/api";
 import {enableNotifications,sendTestNotification} from '../src/lib/notifications';
-export default function Home(){
+export default function Home(){ const [signals,setSignals]=useState<any[]>([]); useEffect(()=>{getSignals().then(setSignals).catch(console.error)},[]);
  const [notifications,setNotifications]=useState(false);
  async function toggle(v:boolean){if(v){const ok=await enableNotifications();setNotifications(ok);if(ok) await sendTestNotification();}else setNotifications(false)}
  return <SafeAreaView style={s.safe}><StatusBar style="light"/><ScrollView contentContainerStyle={s.page}>
