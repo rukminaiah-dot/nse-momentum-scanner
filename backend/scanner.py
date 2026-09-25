@@ -1,35 +1,119 @@
 import yfinance as yf
-from backend.symbols import SYMBOLS
+import pandas as pd
+
+SYMBOLS = [
+    "RELIANCE.NS",
+    "TCS.NS",
+    "HDFCBANK.NS",
+    "ICICIBANK.NS",
+    "INFY.NS",
+    "SBIN.NS",
+    "BHARTIARTL.NS",
+    "ITC.NS",
+    "LT.NS",
+    "AXISBANK.NS",
+]
 
 
 def signals():
-    data = yf.download(SYMBOLS, period="5d", interval="15m", progress=False, group_by="column")
-    results = []
-    if data.empty:
-        return results
+    try:
+        data = yf.download(
+            SYMBOLS,
+            period="5d",
+            interval="15m",
+            group_by="column",
+            auto_adjust=True,
+            progress=False,
+            threads=True,
+        )
 
-    close = data["Close"].ffill()
-    volume = data["Volume"].fillna(0)
-    low = data["Low"].ffill()
+        if data.empty:
+            return []
 
-    for ticker in SYMBOLS:
-        try:
-            c = close[ticker].dropna()
-            v = volume[ticker].dropna()
-            lo = low[ticker].dropna()
-            if len(c) < 21 or len(v) < 21:
+        results = []
+
+        for ticker in SYMBOLS:
+            try:
+                close = data["Close"][ticker].dropna()
+                volume = data["Volume"][ticker].dropna()
+
+                if len(close) < 20 or len(volume) < 20:
+                    continue
+
+                price = float(close.iloc[-1])
+                previous = float(close.iloc[-2])
+
+                change_pct = (
+                    ((price - previous) / previous) * 100
+                    if previous
+                    else 0
+                )
+
+                avg_volume = float(volume.tail(20).mean())
+                current_volume = float(volume.iloc[-1])
+
+                relative_volume = (
+                    current_volume / avg_volume
+                    if avg_volume > 0
+                    else 0
+                )
+
+                ema9 = close.ewm(span=9, adjust=False).mean()
+                ema20 = close.ewm(span=20, adjust=False).mean()
+
+                bullish_trend = (
+                    price > float(ema9.iloc[-1])
+                    and price > float(ema20.iloc[-1])
+                )
+
+                recent_low = float(close.tail(10).min())
+
+                # Only show stronger observed momentum.
+                if change_pct <= 0:
+                    continue
+
+                if relative_volume < 0.80:
+                    continue
+
+                if not bullish_trend:
+                    continue
+
+                score = min(
+                    100,
+                    round(
+                        50
+                        + min(relative_volume, 3) * 12
+                        + min(change_pct, 2) * 10
+                    ),
+                )
+
+                results.append(
+                    {
+                        "ticker": ticker,
+                        "price": round(price, 2),
+                        "momentum_pct": round(change_pct, 2),
+                        "relative_volume": round(relative_volume, 2),
+                        "trend": "Bullish",
+                        "score": score,
+                        "reason": (
+                            f"Positive 15m momentum • "
+                            f"RVOL {relative_volume:.2f}x • "
+                            f"price above EMA9 and EMA20"
+                        ),
+                        "invalidation": round(recent_low, 2),
+                    }
+                )
+
+            except Exception:
                 continue
 
-            price = float(c.iloc[-1])
-            momentum = float((c.iloc[-1] / c.iloc[-2] - 1) * 100)
-            avg_volume = float(v.iloc[-21:-1].mean())
-            relative_volume = float(v.iloc[-1] / avg_volume) if avg_volume > 0 else 0.0
-            ema20 = float(c.ewm(span=20, adjust=False).mean().iloc[-1])
-            invalidation = float(lo.tail(5).min())
+        results.sort(
+            key=lambda item: item["score"],
+            reverse=True,
+        )
 
-            if momentum > 0 and relative_volume >= 1.2 and price > ema20:
-                results.append({"ticker": ticker, "price": round(price, 2), "momentum_pct": round(momentum, 2), "relative_volume": round(relative_volume, 2), "trend": "above_ema20", "invalidation": round(invalidation, 2)})
-        except (KeyError, IndexError, TypeError, ValueError):
-            continue
+        return results
 
-    return sorted(results, key=lambda x: (x["relative_volume"], x["momentum_pct"]), reverse=True)
+    except Exception as exc:
+        print("Scanner error:", exc)
+        return []
