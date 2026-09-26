@@ -1,3 +1,5 @@
+import os
+import psycopg
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -5,56 +7,92 @@ import backend.scanner as scanner
 
 app = FastAPI(title="NSE/BSE Momentum Scanner API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=False, allow_methods=["*"], allow_headers=["*"])
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
 class ScripRequest(BaseModel):
     ticker: str
 
-def normalize_ticker(value: str) -> str:
+def normalize_ticker(value):
     ticker = value.strip().upper()
     if not ticker:
-        raise HTTPException(status_code=400, detail="Ticker is required")
+        raise HTTPException(400, "Ticker is required")
     if "." not in ticker:
         ticker += ".NS"
+    if not ticker.endswith((".NS", ".BO")):
+        raise HTTPException(400, "Use an NSE (.NS) or BSE (.BO) ticker")
     return ticker
 
-def clear_scan_cache():
+def connect():
+    if not DATABASE_URL:
+        raise HTTPException(503, "DATABASE_URL is not configured")
+    return psycopg.connect(DATABASE_URL)
+
+def init_db():
+    if DATABASE_URL:
+        with psycopg.connect(DATABASE_URL) as conn:
+            conn.execute("""CREATE TABLE IF NOT EXISTS universe_changes (
+                ticker TEXT PRIMARY KEY, enabled BOOLEAN NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())""")
+
+def current_symbols():
+    symbols = set(scanner.SYMBOLS)
+    if DATABASE_URL:
+        with connect() as conn:
+            for ticker, enabled in conn.execute("SELECT ticker, enabled FROM universe_changes"):
+                symbols.add(ticker) if enabled else symbols.discard(ticker)
+    return sorted(symbols)
+
+def clear_cache():
     scanner._CACHE["at"] = 0.0
     scanner._CACHE["data"] = []
 
+@app.on_event("startup")
+def startup():
+    init_db()
+
 @app.get("/")
 def home():
-    return {"status": "ok", "app": "NSE/BSE Momentum Scanner", "mode": "paper"}
+    return {"status":"ok","app":"NSE/BSE Momentum Scanner","mode":"paper"}
 
 @app.get("/health")
 def health():
-    return {"status": "healthy"}
+    return {"status":"healthy","database":"configured" if DATABASE_URL else "missing"}
 
 @app.get("/universe")
-def get_universe():
-    return {"count": len(scanner.SYMBOLS), "symbols": scanner.SYMBOLS}
+def universe():
+    s = current_symbols()
+    return {"count":len(s),"symbols":s}
 
 @app.post("/universe")
 def add_scrip(request: ScripRequest):
     ticker = normalize_ticker(request.ticker)
-    if ticker in scanner.SYMBOLS:
-        return {"status": "exists", "ticker": ticker, "count": len(scanner.SYMBOLS)}
-    scanner.SYMBOLS.append(ticker)
-    clear_scan_cache()
-    return {"status": "added", "ticker": ticker, "count": len(scanner.SYMBOLS),
-            "note": "Runtime change; resets when the Render service restarts."}
+    with connect() as conn:
+        conn.execute("""INSERT INTO universe_changes(ticker,enabled,updated_at)
+        VALUES(%s,TRUE,NOW()) ON CONFLICT(ticker) DO UPDATE
+        SET enabled=TRUE,updated_at=NOW()""",(ticker,))
+    clear_cache()
+    return {"status":"added","ticker":ticker,"count":len(current_symbols()),"persistent":True}
 
 @app.delete("/universe/{ticker}")
 def remove_scrip(ticker: str):
     ticker = normalize_ticker(ticker)
-    if ticker not in scanner.SYMBOLS:
-        raise HTTPException(status_code=404, detail=f"{ticker} is not in the universe")
-    scanner.SYMBOLS.remove(ticker)
-    clear_scan_cache()
-    return {"status": "removed", "ticker": ticker, "count": len(scanner.SYMBOLS),
-            "note": "Runtime change; resets when the Render service restarts."}
+    if ticker not in current_symbols():
+        raise HTTPException(404, f"{ticker} is not in the universe")
+    with connect() as conn:
+        conn.execute("""INSERT INTO universe_changes(ticker,enabled,updated_at)
+        VALUES(%s,FALSE,NOW()) ON CONFLICT(ticker) DO UPDATE
+        SET enabled=FALSE,updated_at=NOW()""",(ticker,))
+    clear_cache()
+    return {"status":"removed","ticker":ticker,"count":len(current_symbols()),"persistent":True}
 
 @app.get("/signals")
 def get_signals():
-    result = scanner.signals()
-    return {"mode": "scanner", "universe_count": len(scanner.SYMBOLS), "count": len(result),
-            "signals": result, "message": "Observed momentum scan; not a prediction or recommendation."}
+    original = scanner.SYMBOLS
+    scanner.SYMBOLS = current_symbols()
+    try:
+        result = scanner.signals()
+        universe_count = len(scanner.SYMBOLS)
+    finally:
+        scanner.SYMBOLS = original
+    return {"mode":"scanner","universe_count":universe_count,"count":len(result),
+            "signals":result,"message":"Observed momentum scan; not a prediction or recommendation."}
