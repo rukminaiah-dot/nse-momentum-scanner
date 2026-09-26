@@ -10,15 +10,42 @@ export type LiveSignal = {
 };
 
 export const API_URL =
-  "https://bug-free-umbrella-w9rq5gxw7qqc5p5g-8000.app.github.dev";
+  "https://nse-momentum-scanner-api.onrender.com";
 
-export async function getSignals(): Promise<LiveSignal[]> {
-  const response = await fetch(`${API_URL}/signals`);
+async function apiRequest(path: string, options?: RequestInit) {
+  const response = await fetch(`${API_URL}${path}`, options);
 
   if (!response.ok) {
-    throw new Error("Failed to load signals");
+    const message = await response.text();
+    throw new Error(message || `Request failed: ${response.status}`);
   }
 
-  const data = await response.json();
+  return response.json();
+}
+
+export async function getSignals(): Promise<LiveSignal[]> {
+  const data = await apiRequest("/signals");
   return data.signals ?? [];
+}
+
+export async function getUniverse(): Promise<string[]> {
+  const data = await apiRequest("/universe");
+  return data.symbols ?? [];
+}
+
+export async function addScrip(ticker: string) {
+  return apiRequest("/universe", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ticker}),
+  });
+}
+
+export async function removeScrip(ticker: string) {
+  const normalized = ticker.trim().toUpperCase();
+
+  return apiRequest(
+    `/universe/${encodeURIComponent(normalized)}`,
+    {method: "DELETE"}
+  );
 }
