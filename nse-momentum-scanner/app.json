@@ -8,7 +8,8 @@
     "plugins": [
       "expo-router",
       "expo-notifications",
-      "expo-asset"
+      "expo-asset",
+      "expo-font"
     ],
     "android": {
       "package": "com.personal.nsemomentum",
@@ -18,6 +19,17 @@
     },
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "3083d1c9-4fe5-4ae9-be75-869319398af0"
+      }
+    },
+    "web": {
+      "output": "single"
     }
   }
 }
