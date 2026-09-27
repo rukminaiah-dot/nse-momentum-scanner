@@ -9,7 +9,7 @@ export type LiveSignal = {
   invalidation: number;
 };
 
-export const API_URL =
+export const API_URL = "https://nse-momentum-scanner-api.onrender.com";
   "https://nse-momentum-scanner-api.onrender.com";
 
 async function apiRequest(path: string, options?: RequestInit) {
