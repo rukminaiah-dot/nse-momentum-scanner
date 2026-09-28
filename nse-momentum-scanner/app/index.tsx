@@ -34,13 +34,11 @@ export default function Home() {
 
   async function loadData() {
     try {
-      const [signalData, universeData] = await Promise.all([
-        getSignals(),
-        getUniverse(),
-      ]);
-
-      setSignals(signalData);
+      const universeData = await getUniverse();
       setUniverse(universeData);
+
+      const signalData = await getSignals();
+      setSignals(signalData);
     } catch (error) {
       console.error(error);
       setMessage('Unable to load scanner data.');
