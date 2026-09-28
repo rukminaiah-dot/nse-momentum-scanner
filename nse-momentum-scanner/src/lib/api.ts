@@ -6,6 +6,9 @@ export type LiveSignal = {
   trend: string;
   score: number;
   reason: string;
+  entry: number;
+  target_1: number;
+  target_2: number;
   invalidation: number;
 };
 

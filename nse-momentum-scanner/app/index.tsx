@@ -272,8 +272,16 @@ export default function Home() {
               RVOL {x.relative_volume.toFixed(1)}× • {x.trend}
             </Text>
 
+            <Text style={s.meta}>
+              Entry: ₹{x.entry.toFixed(2)}
+            </Text>
+
+            <Text style={s.positive}>
+              T1: ₹{x.target_1.toFixed(2)} • T2: ₹{x.target_2.toFixed(2)}
+            </Text>
+
             <Text style={s.risk}>
-              Invalidation: ₹{x.invalidation}
+              Invalidation: ₹{x.invalidation.toFixed(2)}
             </Text>
           </View>
         ))}

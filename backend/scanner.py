@@ -108,6 +108,9 @@ def signals():
                         f"20D {ret_20d:.2f}% • RVOL {rvol:.2f}x • "
                         f"price above EMA9/EMA20"
                     ),
+                    "entry": round(price, 2),
+                    "target_1": round(price + (price - recent_low), 2),
+                    "target_2": round(price + 2 * (price - recent_low), 2),
                     "invalidation": round(recent_low, 2),
                 })
             except Exception:
