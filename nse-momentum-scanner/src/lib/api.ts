@@ -12,15 +12,36 @@ export type LiveSignal = {
 export const API_URL = "https://nse-momentum-scanner-api.onrender.com";
   "https://nse-momentum-scanner-api.onrender.com";
 
-async function apiRequest(path: string, options?: RequestInit) {
-  const response = await fetch(`${API_URL}${path}`, options);
+const sleep = (ms: number) =>
+  new Promise(resolve => setTimeout(resolve, ms));
 
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || `Request failed: ${response.status}`);
+async function apiRequest(path: string, options?: RequestInit) {
+  const isRead = !options?.method || options.method === "GET";
+  const attempts = isRead ? 5 : 1;
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const response = await fetch(`${API_URL}${path}`, options);
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || `Request failed: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      lastError = error;
+
+      if (attempt < attempts) {
+        await sleep(attempt * 3000);
+      }
+    }
   }
 
-  return response.json();
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Unable to reach scanner API.");
 }
 
 export async function getSignals(): Promise<LiveSignal[]> {
