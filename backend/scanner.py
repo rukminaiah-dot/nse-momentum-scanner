@@ -1,3 +1,5 @@
+from backend.upstox_data import instrument_map, daily_candles, candles_frame
+from datetime import date, timedelta
 import yfinance as yf
 import pandas as pd
 import time
@@ -25,26 +27,23 @@ def signals():
         return _CACHE["data"]
     """Scan the fixed universe and return the strongest observed momentum."""
     try:
-        data = yf.download(
-            SYMBOLS,
-            period="1mo",
-            interval="1d",
-            group_by="column",
-            auto_adjust=True,
-            progress=False,
-            threads=True,
-        )
-        if data.empty:
-            return []
+        instruments = instrument_map()
+        to_date = date.today().isoformat()
+        from_date = (date.today() - timedelta(days=45)).isoformat()
 
         results = []
 
         for ticker in SYMBOLS:
             try:
-                close = _series(data, "Close", ticker)
-                high = _series(data, "High", ticker)
-                low = _series(data, "Low", ticker)
-                volume = _series(data, "Volume", ticker)
+                symbol = ticker.removesuffix(".NS")
+                instrument_key = instruments.get(symbol)
+                if not instrument_key:
+                    continue
+                frame = candles_frame(daily_candles(instrument_key, from_date, to_date))
+                close = frame["Close"]
+                high = frame["High"]
+                low = frame["Low"]
+                volume = frame["Volume"]
 
                 if min(len(close), len(high), len(low), len(volume)) < 21:
                     continue
