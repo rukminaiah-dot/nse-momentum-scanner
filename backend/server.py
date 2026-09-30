@@ -116,3 +116,8 @@ def get_signals():
         scanner.SYMBOLS = original
     return {"mode":"scanner","universe_count":universe_count,"count":len(result),
             "signals":result,"message":"Observed momentum scan; not a prediction or recommendation."}
+
+@app.get("/diagnostics/upstox")
+def upstox_diagnostics():
+    import os
+    return {"token_present": bool(os.getenv("UPSTOX_ACCESS_TOKEN"))}
