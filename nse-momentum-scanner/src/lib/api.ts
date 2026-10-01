@@ -49,7 +49,14 @@ async function apiRequest(path: string, options?: RequestInit) {
 
 export async function getSignals(): Promise<LiveSignal[]> {
   const data = await apiRequest("/signals");
-  return data.signals ?? [];
+  return (data.signals ?? []).map((x: any) => ({
+    ...x,
+    symbol: x.symbol ?? x.ticker ?? "",
+    name: x.name ?? x.ticker ?? "",
+    changePct: Number(x.changePct ?? x.return_1d_pct ?? 0),
+    relativeVolume: Number(x.relativeVolume ?? x.relative_volume ?? 0),
+    observedAt: x.observedAt ?? x.observed_at ?? "",
+  }));
 }
 
 export async function getUniverse(): Promise<string[]> {
