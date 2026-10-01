@@ -53,7 +53,7 @@ export async function getSignals(): Promise<LiveSignal[]> {
     ...x,
     symbol: x.symbol ?? x.ticker ?? "",
     name: x.name ?? x.ticker ?? "",
-    changePct: Number(x.changePct ?? x.return_1d_pct ?? 0),
+    changePct: Number(x.return_1d_pct ?? x.changePct ?? 0),
     relativeVolume: Number(x.relativeVolume ?? x.relative_volume ?? 0),
     observedAt: x.observedAt ?? x.observed_at ?? "",
   }));
