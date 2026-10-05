@@ -101,6 +101,25 @@ def on_tick(key, data):
     if price is None or ts is None:
         return
 
+    # Manage any open trade on every live tick.
+    con = sqlite3.connect(DB_PATH)
+    row = con.execute(
+        "SELECT id,target_1,target_2,invalidation FROM trades WHERE symbol=? AND status NOT IN ('SELL','CLOSED') ORDER BY id DESC LIMIT 1",
+        (key,)
+    ).fetchone()
+    con.close()
+
+    if row:
+        trade_id, t1, t2, invalidation = row
+        if price <= invalidation:
+            sell(trade_id, price, "Invalidation hit")
+        elif price >= t2:
+            sell(trade_id, price, "Target 2 hit")
+        elif price >= t1:
+            update_state(trade_id, price, "TARGET_1", "Target 1 hit")
+        else:
+            update_state(trade_id, price)
+
     before = len(candles.completed.get(key, []))
     candles.update(key, price, ts)
     after = len(candles.completed.get(key, []))
