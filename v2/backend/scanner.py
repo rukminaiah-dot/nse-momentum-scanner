@@ -1,12 +1,14 @@
+import time
 import os
 import upstox_client
 from .market_config import INDICES
 from .candles import Candle
 from .upstox_live import UpstoxLiveV3
 from .candle_manager import CandleManager
-from .indicators import ema, momentum
+from .indicators import ema, momentum, atr
 from .signal_engine import generate_signal
 from .market_regime import index_signal
+from .trade_engine import buy
 
 candles = CandleManager()
 
@@ -36,6 +38,9 @@ def analyse(key):
         return
 
     closes = [c.close for c in history]
+    highs = [c.high for c in history]
+    lows = [c.low for c in history]
+    atr_value = atr(highs, lows, closes, 14)
     price = closes[-1]
 
     ema9 = ema(closes, 9)
@@ -59,6 +64,8 @@ def analyse(key):
         market,
     )
 
+    if signal == "BUY" and atr_value is not None:
+        buy(key, price, price + atr_value, price + (2 * atr_value), price - atr_value, "V2 momentum BUY")
     print(
         "SIGNAL:",
         key,
@@ -73,7 +80,7 @@ def analyse(key):
 
 def on_tick(key, data):
     price = data.get("ltp")
-    ts = data.get("ltt")
+    ts = int(time.time() * 1000)
 
     if price is None or ts is None:
         return
