@@ -81,7 +81,10 @@ def analyse(key):
         elif price >= t1:
             update_state(trade_id, price, "TARGET_1", "Target 1 hit")
         else:
-            update_state(trade_id, price)
+            con = sqlite3.connect(DB_PATH)
+            status = con.execute("SELECT status FROM trades WHERE id=?", (trade_id,)).fetchone()
+            con.close()
+            update_state(trade_id, price, status[0] if status else "HOLD")
     print(
         "SIGNAL:",
         key,
