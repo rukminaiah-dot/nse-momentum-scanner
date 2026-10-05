@@ -1,3 +1,4 @@
+import sqlite3
 import time
 import os
 import upstox_client
@@ -8,7 +9,8 @@ from .candle_manager import CandleManager
 from .indicators import ema, momentum, atr
 from .signal_engine import generate_signal
 from .market_regime import index_signal
-from .trade_engine import buy
+from .trade_engine import buy, update_state, sell
+from .database import DB_PATH
 
 candles = CandleManager()
 
@@ -66,6 +68,20 @@ def analyse(key):
 
     if signal == "BUY" and atr_value is not None:
         buy(key, price, price + atr_value, price + (2 * atr_value), price - atr_value, "V2 momentum BUY")
+
+    con = sqlite3.connect(DB_PATH)
+    row = con.execute("SELECT id,target_1,target_2,invalidation FROM trades WHERE symbol=? AND status NOT IN ('SELL','CLOSED') ORDER BY id DESC LIMIT 1", (key,)).fetchone()
+    con.close()
+    if row:
+        trade_id, t1, t2, invalidation = row
+        if price <= invalidation:
+            sell(trade_id, price, "Invalidation hit")
+        elif price >= t2:
+            sell(trade_id, price, "Target 2 hit")
+        elif price >= t1:
+            update_state(trade_id, price, "TARGET_1", "Target 1 hit")
+        else:
+            update_state(trade_id, price)
     print(
         "SIGNAL:",
         key,
