@@ -10,3 +10,8 @@ backend/__pycache__/
 backend/scanner.*.py
 backend/server.*.py
 backend/server.py.backup
+
+# V2 runtime/generated files
+v2/backend/__pycache__/
+v2/backend/*.bak*
+v2/data/*.db
