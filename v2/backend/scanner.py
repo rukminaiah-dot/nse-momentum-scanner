@@ -118,7 +118,11 @@ def on_tick(key, data):
         elif price >= t1:
             update_state(trade_id, price, "TARGET_1", "Target 1 hit")
         else:
-            update_state(trade_id, price)
+            # Preserve TARGET_1 once reached; only update its live price.
+            con = sqlite3.connect(DB_PATH)
+            status = con.execute("SELECT status FROM trades WHERE id=?", (trade_id,)).fetchone()
+            con.close()
+            update_state(trade_id, price, status[0] if status else "HOLD")
 
     before = len(candles.completed.get(key, []))
     candles.update(key, price, ts)
