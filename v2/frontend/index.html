@@ -28,6 +28,7 @@ async function loadTrades(){
         Status: <b class="${t.status==='SELL'?'sell':t.status==='TARGET_1'?'target':'buy'}">${t.status}</b><br>
         Entry: ${t.entry_price}<br>
         Current: ${t.current_price}<br>
+        ${t.status==="CLOSED" ? `Realized P&L: ${Number(t.realized_pnl).toFixed(2)} (${Number(t.realized_pnl_pct).toFixed(2)}%)<br>` : ""}
         Target 1: ${t.target_1}<br>
         Target 2: ${t.target_2}<br>
         Invalidation: ${t.invalidation}<br>
