@@ -1,0 +1,14 @@
+from .upstox_live import UpstoxLiveV3
+from .candle_manager import CandleManager
+
+candles = CandleManager()
+
+def on_tick(key, data):
+    price = data.get("ltp")
+    ts = data.get("ltt")
+    print("DEBUG_LTT:", repr(ts), type(ts).__name__)
+    if price is not None and ts is not None:
+        candles.update(key, price, ts)
+
+if __name__ == "__main__":
+    UpstoxLiveV3(on_tick=on_tick).connect()

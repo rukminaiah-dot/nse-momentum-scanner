@@ -1,0 +1,61 @@
+import os
+import upstox_client
+
+from .market_config import INDICES
+
+
+class UpstoxLiveV3:
+    def __init__(self, on_tick=None):
+        self.on_tick = on_tick
+        token = os.getenv("UPSTOX_ACCESS_TOKEN")
+        if not token:
+            raise RuntimeError("UPSTOX_ACCESS_TOKEN missing")
+
+        config = upstox_client.Configuration()
+        config.access_token = token
+
+        self.api_client = upstox_client.ApiClient(config)
+        self.instrument_keys = list(INDICES.values())
+
+        self.streamer = upstox_client.MarketDataStreamerV3(
+            self.api_client,
+            self.instrument_keys,
+            "ltpc",
+        )
+
+        self.streamer.on("open", self._on_open)
+        self.streamer.on("message", self._on_message)
+        self.streamer.on("error", self._on_error)
+
+    def _on_open(self):
+        print("V2_UPSTOX_V3_CONNECTED")
+
+    def _on_message(self, message):
+        if message.get("type") == "market_info":
+            return
+
+        feeds = message.get("feeds", {})
+
+        for instrument_key, feed in feeds.items():
+            print("DEBUG_FEED:", instrument_key, feed)
+            ltpc = feed.get("ltpc")
+            if not ltpc:
+                continue
+
+            if self.on_tick:
+                self.on_tick(instrument_key, ltpc)
+            print(
+                instrument_key,
+                "| LTP:", ltpc.get("ltp"),
+                "| CP:", ltpc.get("cp"),
+            )
+
+    def _on_error(self, error):
+        print("V2_UPSTOX_V3_ERROR:", error)
+
+    def connect(self):
+        self.streamer.connect()
+
+
+if __name__ == "__main__":
+    UpstoxLiveV3().connect()
