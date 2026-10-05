@@ -32,7 +32,7 @@ async function loadTrades(){
         Entry: ${t.entry_price}<br>
         Current: ${t.current_price}<br>
         ${t.status!=="CLOSED" ? `<span class="${Number(t.current_price)>=Number(t.entry_price) ? "profit" : "loss"}">Live P&L: ${(Number(t.current_price)-Number(t.entry_price)).toFixed(2)} (${(((Number(t.current_price)-Number(t.entry_price))/Number(t.entry_price))*100).toFixed(2)}%)</span><br>` : ""}
-        ${t.status==="CLOSED" ? `Realized P&L: ${Number(t.realized_pnl).toFixed(2)} (${Number(t.realized_pnl_pct).toFixed(2)}%)<br>` : ""}
+        ${t.status==="CLOSED" ? `<span class="${Number(t.realized_pnl)>=0 ? "profit" : "loss"}">Realized P&L: ${Number(t.realized_pnl).toFixed(2)} (${Number(t.realized_pnl_pct).toFixed(2)}%)</span><br>` : ""}
         ${t.status==="CLOSED" ? `Exit: ${t.exit_price}<br>Reason: ${t.exit_reason}<br>` : ""}
         Target 1: ${t.target_1}<br>
         Target 2: ${t.target_2}<br>
