@@ -41,15 +41,11 @@ def buy(symbol, price, t1, t2, invalidation, reason):
 
 def update_state(trade_id, price, action="HOLD", reason="Chart remains valid"):
     con = connect()
-    con.execute(
-        "UPDATE trades SET current_price=?, status=? WHERE id=?",
-        (price, action, trade_id)
-    )
-    con.execute("""
-        INSERT INTO trade_events
-        (trade_id,event_time,action,price,reason)
-        VALUES (?,?,?,?,?)
-    """, (trade_id, now(), action, price, reason))
+    row = con.execute("SELECT status FROM trades WHERE id=?", (trade_id,)).fetchone()
+    old_status = row[0] if row else None
+    con.execute("UPDATE trades SET current_price=?, status=? WHERE id=?", (price, action, trade_id))
+    if old_status != action:
+        con.execute("INSERT INTO trade_events (trade_id,event_time,action,price,reason) VALUES (?,?,?,?,?)", (trade_id, now(), action, price, reason))
     con.commit()
     con.close()
 
