@@ -150,7 +150,7 @@ if __name__ == "__main__":
     init_db()
     close_stale_trades()
     for key in INDICES.values():
-        if key != "BSE_INDEX|SENSEX":
+        if False:
             preload_history(key)
         else:
             print("PRELOAD: SENSEX will warm up from live candles")
