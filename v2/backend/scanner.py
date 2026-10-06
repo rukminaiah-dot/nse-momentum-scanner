@@ -10,7 +10,7 @@ from .indicators import ema, momentum, atr
 from .signal_engine import generate_signal
 from .market_regime import index_signal
 from .trade_engine import buy, update_state, sell
-from .database import DB_PATH
+from .database import DB_PATH, init_db
 
 candles = CandleManager()
 
@@ -147,6 +147,7 @@ def on_tick(key, data):
 
 
 if __name__ == "__main__":
+    init_db()
     close_stale_trades()
     for key in INDICES.values():
         if key != "BSE_INDEX|SENSEX":
