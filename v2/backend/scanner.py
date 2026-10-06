@@ -153,5 +153,5 @@ if __name__ == "__main__":
         if False:
             preload_history(key)
         else:
-            print("PRELOAD: live candle warmup for")
+            print("PRELOAD: live candle warmup for", key)
     UpstoxLiveV3(on_tick=on_tick).connect()
