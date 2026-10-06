@@ -43,11 +43,6 @@ class UpstoxLiveV3:
 
             if self.on_tick:
                 self.on_tick(instrument_key, ltpc)
-            print(
-                instrument_key,
-                "| LTP:", ltpc.get("ltp"),
-                "| CP:", ltpc.get("cp"),
-            )
 
     def _on_error(self, error):
         print("V2_UPSTOX_V3_ERROR:", error)
