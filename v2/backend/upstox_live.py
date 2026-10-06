@@ -37,7 +37,6 @@ class UpstoxLiveV3:
         feeds = message.get("feeds", {})
 
         for instrument_key, feed in feeds.items():
-            print("DEBUG_FEED:", instrument_key, feed)
             ltpc = feed.get("ltpc")
             if not ltpc:
                 continue
