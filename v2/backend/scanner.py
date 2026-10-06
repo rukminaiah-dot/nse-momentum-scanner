@@ -15,6 +15,13 @@ from .database import DB_PATH
 candles = CandleManager()
 
 
+def close_stale_trades():
+    con = sqlite3.connect(DB_PATH)
+    con.execute("""UPDATE trades SET status='CLOSED', exit_reason='Session reset', exit_time=datetime('now'), exit_price=current_price, realized_pnl=current_price-entry_price, realized_pnl_pct=((current_price-entry_price)/entry_price)*100 WHERE status NOT IN ('CLOSED','SELL') AND date(signal_time) < date('now')""")
+    con.commit()
+    con.close()
+
+
 def preload_history(key):
     config = upstox_client.Configuration()
     config.access_token = os.environ["UPSTOX_ACCESS_TOKEN"]
@@ -140,6 +147,7 @@ def on_tick(key, data):
 
 
 if __name__ == "__main__":
+    close_stale_trades()
     for key in INDICES.values():
         if key != "BSE_INDEX|SENSEX":
             preload_history(key)
