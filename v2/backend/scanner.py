@@ -140,5 +140,9 @@ def on_tick(key, data):
 
 
 if __name__ == "__main__":
-    for key in INDICES.values(): preload_history(key)
+    for key in INDICES.values():
+        if key != "BSE_INDEX|SENSEX":
+            preload_history(key)
+        else:
+            print("PRELOAD: SENSEX will warm up from live candles")
     UpstoxLiveV3(on_tick=on_tick).connect()
