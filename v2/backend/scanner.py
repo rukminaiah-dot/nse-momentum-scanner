@@ -149,9 +149,19 @@ def on_tick(key, data):
 if __name__ == "__main__":
     init_db()
     close_stale_trades()
+
     for key in INDICES.values():
-        if False:
+        try:
             preload_history(key)
-        else:
+            loaded = len(candles.completed.get(key, []))
+
+            if loaded >= 20:
+                print("PRELOAD READY:", key, loaded, "/20 candles")
+            else:
+                print("PRELOAD: live candle warmup for", key, "starting at", loaded, "/20")
+
+        except Exception as e:
+            print("PRELOAD ERROR:", key, str(e))
             print("PRELOAD: live candle warmup for", key)
+
     UpstoxLiveV3(on_tick=on_tick).connect()
