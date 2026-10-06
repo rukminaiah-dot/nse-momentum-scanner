@@ -20,7 +20,10 @@ def preload_history(key):
     config.access_token = os.environ["UPSTOX_ACCESS_TOKEN"]
     api = upstox_client.HistoryV3Api(upstox_client.ApiClient(config))
     response = api.get_intra_day_candle_data(key, "minutes", 1)
-    rows = response.data.candles
+    rows = response.data.candles or []
+    if not rows:
+        print("PRELOAD: no historical candles for", key)
+        return
 
     loaded = []
     for row in reversed(rows[:20]):
