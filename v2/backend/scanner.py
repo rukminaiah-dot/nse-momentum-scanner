@@ -102,9 +102,9 @@ def analyse(key):
 
 def on_tick(key, data):
     price = data.get("ltp")
-    ts = int(time.time() * 1000)
+    ts = data.get("ltt") or int(time.time() * 1000)
 
-    if price is None or ts is None:
+    if price is None:
         return
 
     # Manage any open trade on every live tick.
