@@ -6,7 +6,9 @@ def now():
     return datetime.now().astimezone().isoformat(timespec="seconds")
 
 def connect():
-    return sqlite3.connect(DB_PATH)
+    con = sqlite3.connect(DB_PATH, timeout=10)
+    con.execute("PRAGMA busy_timeout=10000")
+    return con
 
 def buy(symbol, price, t1, t2, invalidation, reason):
     con = connect()
