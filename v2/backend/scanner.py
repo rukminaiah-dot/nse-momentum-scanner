@@ -176,7 +176,7 @@ if __name__ == "__main__":
     init_db()
     close_stale_trades()
 
-    for key in list(INDICES.values()) + list(NIFTY_200.values()):
+    for key in INDICES.values():
         try:
             preload_history(key)
             loaded = len(candles.completed.get(key, []))
