@@ -198,9 +198,12 @@ if __name__ == "__main__":
     init_db()
     close_stale_trades()
 
-    for key in INDICES.values():
+    preload_keys = list(INDICES.values()) + list(NIFTY_200.values())
+
+    for key in preload_keys:
         try:
             preload_history(key)
+            time.sleep(0.15)
             loaded = len(candles.completed.get(key, []))
 
             if loaded >= 20:
