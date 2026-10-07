@@ -196,8 +196,13 @@ def on_tick(key, data):
             sell(trade_id, price, "Target 2 hit")
             active_trades.pop(key, None)
         elif price >= t1:
-            trade["status"] = "TARGET_1"
-            update_state(trade_id, price, "TARGET_1", "Target 1 hit")
+            if trade["status"] != "TARGET_1":
+                trade["status"] = "TARGET_1"
+                update_state(trade_id, price, "TARGET_1", "Target 1 hit")
+                last_trade_updates[key] = time.time()
+            elif time.time() - last_trade_updates.get(key, 0) >= 5:
+                update_state(trade_id, price, "TARGET_1")
+                last_trade_updates[key] = time.time()
         else:
             if time.time() - last_trade_updates.get(key, 0) >= 5:
                 update_state(trade_id, price, trade["status"])
