@@ -15,7 +15,6 @@ from .database import DB_PATH, init_db
 
 candles = CandleManager()
 active_trades = {}
-active_trades = {}
 
 
 def load_active_trades():
@@ -97,6 +96,13 @@ def five_minute_trend(history):
         return "BEARISH"
     return "NEUTRAL"
 
+def save_scan_result(key, price, ema9_value, ema20_value, mom, market, trend_5m, signal):
+    con = sqlite3.connect(DB_PATH)
+    con.execute("""INSERT OR REPLACE INTO scanner_results (symbol,updated_at,price,ema9,ema20,momentum,market,trend_5m,signal) VALUES (?,datetime('now','+5 hours','+30 minutes'),?,?,?,?,?,?,?)""", (key, price, ema9_value, ema20_value, mom, market, trend_5m, signal))
+    con.commit()
+    con.close()
+
+
 def analyse(key):
     history = candles.completed.get(key, [])
 
@@ -139,6 +145,7 @@ def analyse(key):
     elif signal == "SELL" and trend_5m != "BEARISH":
         signal = "HOLD"
 
+    save_scan_result(key, price, ema9, ema20, mom, market, trend_5m, signal)
     if signal == "BUY" and atr_value is not None:
         buy(key, price, price + atr_value, price + (2 * atr_value), price - atr_value, "V2 momentum BUY")
         load_active_trades()

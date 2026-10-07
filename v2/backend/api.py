@@ -19,3 +19,13 @@ from fastapi.responses import FileResponse
 @app.get("/")
 def dashboard():
     return FileResponse("v2/frontend/index.html")
+
+@app.get("/api/v2/scanner")
+def get_scanner_results():
+    con = sqlite3.connect(DB_PATH)
+    con.row_factory = sqlite3.Row
+    rows = con.execute(
+        "SELECT * FROM scanner_results ORDER BY updated_at DESC"
+    ).fetchall()
+    con.close()
+    return [dict(row) for row in rows]

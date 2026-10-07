@@ -36,6 +36,7 @@ def init_db():
             FOREIGN KEY(trade_id) REFERENCES trades(id)
         )
     """)
+    con.execute("""CREATE TABLE IF NOT EXISTS scanner_results (symbol TEXT PRIMARY KEY, updated_at TEXT NOT NULL, price REAL, ema9 REAL, ema20 REAL, momentum REAL, market TEXT, trend_5m TEXT, signal TEXT)""")
     con.commit()
     con.close()
 
