@@ -17,6 +17,9 @@ small{color:#aaa}
 </head>
 <body>
 <h2>NSE Momentum Scanner V2</h2>
+<h3>Live NIFTY 200 Scanner</h3>
+<div id="scanner">Waiting for live market data...</div>
+<h3>Trades</h3>
 <div id="trades">Loading trades...</div>
 
 <script>
@@ -41,6 +44,14 @@ async function loadTrades(){
       </div>
     `).join('') : 'No trades yet';
 }
+async function loadScanner(){
+  const r=await fetch("/api/v2/scanner");
+  const rows=await r.json();
+  document.getElementById("scanner").innerHTML = rows.length ? rows.map(s=>`<div class="card"><b>${s.symbol}</b><br>Price: ${s.price}<br>EMA9: ${Number(s.ema9).toFixed(2)} | EMA20: ${Number(s.ema20).toFixed(2)}<br>Momentum: ${Number(s.momentum).toFixed(2)}<br>Market: ${s.market} | 5M: ${s.trend_5m}<br>Signal: <b class="${s.signal==="BUY"?"buy":s.signal==="SELL"?"sell":""}">${s.signal}</b><br><small>${s.updated_at}</small></div>`).join("") : "Waiting for live market data...";
+}
+loadScanner();
+setInterval(loadScanner,3000);
+
 loadTrades();
 setInterval(loadTrades, 3000);
 </script>
