@@ -44,18 +44,26 @@ def preload_history(key):
 
 
 def five_minute_trend(history):
-    if len(history) < 20:
+    if len(history) < 15:
         return "NEUTRAL"
 
-    closes = [c.close for c in history]
-    five_closes = closes[-20::5]
+    bars = []
+    recent = history[-15:]
 
-    if len(five_closes) < 4:
-        return "NEUTRAL"
+    for i in range(0, 15, 5):
+        group = recent[i:i + 5]
+        bars.append({
+            "open": group[0].open,
+            "high": max(c.high for c in group),
+            "low": min(c.low for c in group),
+            "close": group[-1].close,
+        })
 
-    if five_closes[-1] > five_closes[-2] > five_closes[-3]:
+    closes = [bar["close"] for bar in bars]
+
+    if closes[-1] > closes[-2] > closes[-3]:
         return "BULLISH"
-    if five_closes[-1] < five_closes[-2] < five_closes[-3]:
+    if closes[-1] < closes[-2] < closes[-3]:
         return "BEARISH"
     return "NEUTRAL"
 
