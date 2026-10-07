@@ -2,6 +2,7 @@ import os
 import upstox_client
 
 from .market_config import INDICES
+from .stock_universe import NIFTY_200
 
 
 class UpstoxLiveV3:
@@ -15,7 +16,8 @@ class UpstoxLiveV3:
         config.access_token = token
 
         self.api_client = upstox_client.ApiClient(config)
-        self.instrument_keys = list(INDICES.values())
+        self.instrument_keys = list(INDICES.values()) + list(NIFTY_200.values())
+        print('V2 LIVE UNIVERSE:', len(self.instrument_keys), 'instruments')
 
         self.streamer = upstox_client.MarketDataStreamerV3(
             self.api_client,

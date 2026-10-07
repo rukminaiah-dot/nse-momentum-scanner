@@ -3,6 +3,7 @@ import time
 import os
 import upstox_client
 from .market_config import INDICES
+from .stock_universe import NIFTY_200
 from .candles import Candle
 from .upstox_live import UpstoxLiveV3
 from .candle_manager import CandleManager
@@ -175,7 +176,7 @@ if __name__ == "__main__":
     init_db()
     close_stale_trades()
 
-    for key in INDICES.values():
+    for key in list(INDICES.values()) + list(NIFTY_200.values()):
         try:
             preload_history(key)
             loaded = len(candles.completed.get(key, []))
