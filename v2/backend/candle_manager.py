@@ -1,4 +1,5 @@
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from .candles import Candle
 
 class CandleManager:
@@ -7,7 +8,7 @@ class CandleManager:
         self.completed = {}
 
     def minute_key(self, ts):
-        return datetime.fromtimestamp(float(ts) / 1000).replace(second=0, microsecond=0)
+        return datetime.fromtimestamp(float(ts) / 1000, ZoneInfo("Asia/Kolkata")).replace(second=0, microsecond=0, tzinfo=None)
 
     def update(self, key, price, ts, volume=0):
         minute = self.minute_key(ts)
