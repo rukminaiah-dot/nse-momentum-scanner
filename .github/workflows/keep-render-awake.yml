@@ -1,0 +1,14 @@
+name: Keep Render Scanner Awake
+
+on:
+  schedule:
+    - cron: '*/10 3-9 * * 1-5'
+    - cron: '0 10 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping scanner API
+        run: curl -fsS --max-time 60 https://nse-momentum-scanner-api.onrender.com/api/v2/trades > /dev/null
