@@ -17,6 +17,7 @@ candles = CandleManager()
 active_trades = {}
 instrument_symbols = {key: symbol for symbol, key in NIFTY_200.items()}
 market_regimes = {}
+last_trade_updates = {}
 
 
 def load_active_trades():
