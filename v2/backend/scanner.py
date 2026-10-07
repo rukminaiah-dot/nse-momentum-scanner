@@ -27,21 +27,35 @@ def preload_history(key):
     config = upstox_client.Configuration()
     config.access_token = os.environ["UPSTOX_ACCESS_TOKEN"]
     api = upstox_client.HistoryV3Api(upstox_client.ApiClient(config))
-    response = api.get_intra_day_candle_data(key, "minutes", 1)
+
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+    to_date = today - timedelta(days=1)
+    from_date = to_date - timedelta(days=7)
+
+    response = api.get_historical_candle_data1(
+        key, "minutes", "1",
+        str(to_date), str(from_date)
+    )
     rows = response.data.candles or []
+
     if not rows:
         print("PRELOAD: no historical candles for", key)
         return
 
     loaded = []
     for row in reversed(rows[:20]):
-        c = Candle(float(row[4]), 0)
+        c = Candle(float(row[1]), float(row[5]))
+        c.open = float(row[1])
+        c.high = float(row[2])
+        c.low = float(row[3])
+        c.close = float(row[4])
         loaded.append(c)
 
     candles.completed[key] = loaded
-    print("PRELOAD:", key, len(loaded), "candles")
-
-
+    print("PRELOAD:", key, len(loaded), "historical candles")
 
 def five_minute_trend(history):
     if len(history) < 15:
