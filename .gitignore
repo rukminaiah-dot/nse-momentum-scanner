@@ -15,3 +15,6 @@ backend/server.py.backup
 v2/backend/__pycache__/
 v2/backend/*.bak*
 v2/data/*.db
+
+v2/backend/*.before_*
+v2/frontend/*.bak_*
