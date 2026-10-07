@@ -196,7 +196,9 @@ def on_tick(key, data):
             trade["status"] = "TARGET_1"
             update_state(trade_id, price, "TARGET_1", "Target 1 hit")
         else:
-            update_state(trade_id, price, trade["status"])
+            if time.time() - last_trade_updates.get(key, 0) >= 5:
+                update_state(trade_id, price, trade["status"])
+                last_trade_updates[key] = time.time()
 
     before = len(candles.completed.get(key, []))
     candles.update(key, price, ts)
