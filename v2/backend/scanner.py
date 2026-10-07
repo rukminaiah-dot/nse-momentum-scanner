@@ -41,6 +41,23 @@ def preload_history(key):
     print("PRELOAD:", key, len(loaded), "candles")
 
 
+
+def five_minute_trend(history):
+    if len(history) < 20:
+        return "NEUTRAL"
+
+    closes = [c.close for c in history]
+    five_closes = closes[-20::5]
+
+    if len(five_closes) < 4:
+        return "NEUTRAL"
+
+    if five_closes[-1] > five_closes[-2] > five_closes[-3]:
+        return "BULLISH"
+    if five_closes[-1] < five_closes[-2] < five_closes[-3]:
+        return "BEARISH"
+    return "NEUTRAL"
+
 def analyse(key):
     history = candles.completed.get(key, [])
 
@@ -76,6 +93,13 @@ def analyse(key):
         market,
     )
 
+    trend_5m = five_minute_trend(history)
+
+    if signal == "BUY" and trend_5m != "BULLISH":
+        signal = "HOLD"
+    elif signal == "SELL" and trend_5m != "BEARISH":
+        signal = "HOLD"
+
     if signal == "BUY" and atr_value is not None:
         buy(key, price, price + atr_value, price + (2 * atr_value), price - atr_value, "V2 momentum BUY")
 
@@ -103,6 +127,7 @@ def analyse(key):
         "| EMA20:", ema20,
         "| MOM:", mom,
         "| MARKET:", market,
+        "| 5M TREND:", trend_5m,
         "| SIGNAL:", signal,
     )
 
