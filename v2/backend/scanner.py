@@ -14,7 +14,18 @@ from .trade_engine import buy, update_state, sell
 from .database import DB_PATH, init_db
 
 candles = CandleManager()
+active_trades = {}
+active_trades = {}
 
+
+def load_active_trades():
+    active_trades.clear()
+    con = sqlite3.connect(DB_PATH)
+    rows = con.execute("SELECT id,symbol,target_1,target_2,invalidation,status FROM trades WHERE status NOT IN ('SELL','CLOSED')").fetchall()
+    con.close()
+    for trade_id, symbol, t1, t2, invalidation, status in rows:
+        active_trades[symbol] = {"id": trade_id, "target_1": t1, "target_2": t2, "invalidation": invalidation, "status": status}
+    print("ACTIVE TRADE CACHE:", len(active_trades))
 
 def close_stale_trades():
     con = sqlite3.connect(DB_PATH)
@@ -130,23 +141,8 @@ def analyse(key):
 
     if signal == "BUY" and atr_value is not None:
         buy(key, price, price + atr_value, price + (2 * atr_value), price - atr_value, "V2 momentum BUY")
+        load_active_trades()
 
-    con = sqlite3.connect(DB_PATH)
-    row = con.execute("SELECT id,target_1,target_2,invalidation FROM trades WHERE symbol=? AND status NOT IN ('SELL','CLOSED') ORDER BY id DESC LIMIT 1", (key,)).fetchone()
-    con.close()
-    if row:
-        trade_id, t1, t2, invalidation = row
-        if price <= invalidation:
-            sell(trade_id, price, "Invalidation hit")
-        elif price >= t2:
-            sell(trade_id, price, "Target 2 hit")
-        elif price >= t1:
-            update_state(trade_id, price, "TARGET_1", "Target 1 hit")
-        else:
-            con = sqlite3.connect(DB_PATH)
-            status = con.execute("SELECT status FROM trades WHERE id=?", (trade_id,)).fetchone()
-            con.close()
-            update_state(trade_id, price, status[0] if status else "HOLD")
     print(
         "SIGNAL:",
         key,
@@ -167,28 +163,25 @@ def on_tick(key, data):
     if price is None:
         return
 
-    # Manage any open trade on every live tick.
-    con = sqlite3.connect(DB_PATH)
-    row = con.execute(
-        "SELECT id,target_1,target_2,invalidation FROM trades WHERE symbol=? AND status NOT IN ('SELL','CLOSED') ORDER BY id DESC LIMIT 1",
-        (key,)
-    ).fetchone()
-    con.close()
+    # Manage open trades from memory instead of querying SQLite every tick.
+    trade = active_trades.get(key)
+    if trade:
+        trade_id = trade["id"]
+        t1 = trade["target_1"]
+        t2 = trade["target_2"]
+        invalidation = trade["invalidation"]
 
-    if row:
-        trade_id, t1, t2, invalidation = row
         if price <= invalidation:
             sell(trade_id, price, "Invalidation hit")
+            active_trades.pop(key, None)
         elif price >= t2:
             sell(trade_id, price, "Target 2 hit")
+            active_trades.pop(key, None)
         elif price >= t1:
+            trade["status"] = "TARGET_1"
             update_state(trade_id, price, "TARGET_1", "Target 1 hit")
         else:
-            # Preserve TARGET_1 once reached; only update its live price.
-            con = sqlite3.connect(DB_PATH)
-            status = con.execute("SELECT status FROM trades WHERE id=?", (trade_id,)).fetchone()
-            con.close()
-            update_state(trade_id, price, status[0] if status else "HOLD")
+            update_state(trade_id, price, trade["status"])
 
     before = len(candles.completed.get(key, []))
     candles.update(key, price, ts)
@@ -202,6 +195,7 @@ def on_tick(key, data):
 if __name__ == "__main__":
     init_db()
     close_stale_trades()
+    load_active_trades()
 
     preload_keys = list(INDICES.values()) + list(NIFTY_200.values())
 
