@@ -15,6 +15,7 @@ from .database import DB_PATH, init_db
 
 candles = CandleManager()
 active_trades = {}
+instrument_symbols = {key: symbol for symbol, key in NIFTY_200.items()}
 
 
 def load_active_trades():
@@ -145,7 +146,7 @@ def analyse(key):
     elif signal == "SELL" and trend_5m != "BEARISH":
         signal = "HOLD"
 
-    save_scan_result(key, price, ema9, ema20, mom, market, trend_5m, signal)
+    save_scan_result(instrument_symbols.get(key, key), price, ema9, ema20, mom, market, trend_5m, signal)
     if signal == "BUY" and atr_value is not None:
         buy(key, price, price + atr_value, price + (2 * atr_value), price - atr_value, "V2 momentum BUY")
         load_active_trades()
