@@ -222,6 +222,11 @@ if __name__ == "__main__":
             time.sleep(0.15)
             loaded = len(candles.completed.get(key, []))
 
+            if key == INDICES["NIFTY 50"] and loaded >= 20:
+                closes = [c.close for c in candles.completed[key]]
+                market_regimes["NIFTY 50"] = index_signal(closes[-1], ema(closes, 9), ema(closes, 20), None)
+                print("INITIAL NIFTY 50 REGIME:", market_regimes["NIFTY 50"])
+
             if loaded >= 20:
                 print("PRELOAD READY:", key, loaded, "/20 candles")
             else:
