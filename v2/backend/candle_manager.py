@@ -16,6 +16,7 @@ class CandleManager:
         if item is None or item["minute"] != minute:
             if item:
                 closed = item["candle"]
+                closed.timestamp = item["minute"]
                 self.completed.setdefault(key, []).append(closed)
                 print("CANDLE_CLOSED", key, closed.__dict__)
             self.current[key] = {"minute": minute, "candle": Candle(price, volume)}

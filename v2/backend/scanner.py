@@ -52,32 +52,37 @@ def preload_history(key):
         c.high = float(row[2])
         c.low = float(row[3])
         c.close = float(row[4])
+        c.timestamp = datetime.fromisoformat(row[0]).astimezone(ZoneInfo("Asia/Kolkata")).replace(tzinfo=None)
         loaded.append(c)
 
     candles.completed[key] = loaded
     print("PRELOAD:", key, len(loaded), "historical candles")
 
 def five_minute_trend(history):
-    if len(history) < 15:
+    timed = [c for c in history if hasattr(c, "timestamp")]
+    if len(timed) < 15:
         return "NEUTRAL"
 
-    bars = []
-    recent = history[-15:]
+    buckets = {}
+    for c in timed:
+        ts = c.timestamp
+        bucket = ts.replace(minute=(ts.minute // 5) * 5, second=0, microsecond=0)
+        buckets.setdefault(bucket, []).append(c)
 
-    for i in range(0, 15, 5):
-        group = recent[i:i + 5]
-        bars.append({
-            "open": group[0].open,
-            "high": max(c.high for c in group),
-            "low": min(c.low for c in group),
-            "close": group[-1].close,
-        })
+    complete = []
+    for bucket in sorted(buckets):
+        group = buckets[bucket]
+        if len(group) == 5:
+            complete.append(group)
 
-    closes = [bar["close"] for bar in bars]
+    if len(complete) < 3:
+        return "NEUTRAL"
 
-    if closes[-1] > closes[-2] > closes[-3]:
+    closes = [group[-1].close for group in complete[-3:]]
+
+    if closes[0] < closes[1] < closes[2]:
         return "BULLISH"
-    if closes[-1] < closes[-2] < closes[-3]:
+    if closes[0] > closes[1] > closes[2]:
         return "BEARISH"
     return "NEUTRAL"
 
