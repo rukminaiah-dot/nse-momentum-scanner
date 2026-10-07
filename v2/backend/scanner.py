@@ -73,6 +73,9 @@ def preload_history(key):
 
 def five_minute_trend(history):
     timed = [c for c in history if hasattr(c, "timestamp")]
+    if timed:
+        session_date = timed[-1].timestamp.date()
+        timed = [c for c in timed if c.timestamp.date() == session_date]
     if len(timed) < 15:
         return "NEUTRAL"
 
