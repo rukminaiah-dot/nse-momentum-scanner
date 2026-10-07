@@ -154,7 +154,7 @@ def analyse(key):
 
     if key in NIFTY_200.values():
         save_scan_result(instrument_symbols.get(key, key), price, ema9, ema20, mom, market, trend_5m, signal)
-    if signal == "BUY" and atr_value is not None:
+    if key in NIFTY_200.values() and signal == "BUY" and atr_value is not None:
         buy(key, price, price + atr_value, price + (2 * atr_value), price - atr_value, "V2 momentum BUY")
         load_active_trades()
 
