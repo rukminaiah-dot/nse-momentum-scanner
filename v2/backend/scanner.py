@@ -16,6 +16,7 @@ from .database import DB_PATH, init_db
 candles = CandleManager()
 active_trades = {}
 instrument_symbols = {key: symbol for symbol, key in NIFTY_200.items()}
+market_regimes = {}
 
 
 def load_active_trades():
@@ -128,6 +129,10 @@ def analyse(key):
     rvol = None
 
     market = index_signal(price, ema9, ema20, vwap_value)
+    if key == INDICES["NIFTY 50"]:
+        market_regimes["NIFTY 50"] = market
+    elif key in NIFTY_200.values():
+        market = market_regimes.get("NIFTY 50", "NEUTRAL")
 
     signal = generate_signal(
         price,
