@@ -6,7 +6,6 @@ def now():
     return datetime.now().astimezone().isoformat(timespec="seconds")
 
 def connect():
-    init_db()
     return sqlite3.connect(DB_PATH)
 
 def buy(symbol, price, t1, t2, invalidation, reason):
