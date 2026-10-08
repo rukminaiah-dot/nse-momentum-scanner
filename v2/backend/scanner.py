@@ -121,7 +121,7 @@ def five_minute_trend(history):
     return "NEUTRAL"
 
 def save_scan_result(key, price, ema9_value, ema20_value, mom, market, trend_5m, signal, previous_close=None):
-    candle_time = candles.completed[key][-1].timestamp.strftime('%Y-%m-%d %H:%M:%S')
+    candle_time = next((items[-1].timestamp.strftime('%Y-%m-%d %H:%M:%S') for instrument, items in candles.completed.items() if instrument_symbols.get(instrument, instrument) == key and items), None)
     con = sqlite3.connect(DB_PATH)
     con.execute("""INSERT OR REPLACE INTO scanner_results (symbol,updated_at,price,ema9,ema20,momentum,market,trend_5m,signal,previous_close) VALUES (?,?,?,?,?,?,?,?,?,?)""", (key, candle_time, price, ema9_value, ema20_value, mom, market, trend_5m, signal, previous_close))
     con.commit()
