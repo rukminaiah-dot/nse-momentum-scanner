@@ -29,3 +29,6 @@ def init_history():
             )
         """)
     print("PostgreSQL history table ready")
+
+if __name__ == "__main__":
+    init_history()
