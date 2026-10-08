@@ -11,7 +11,7 @@ from .indicators import ema, momentum, atr
 from .signal_engine import generate_signal
 from .market_regime import index_signal
 from .trade_engine import buy, update_state, sell
-from .database import DB_PATH, init_db
+from .database import DB_PATH, init_db, reset_scanner_results
 
 candles = CandleManager()
 active_trades = {}
