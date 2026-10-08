@@ -1,9 +1,10 @@
 import sqlite3
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from .database import DB_PATH, init_db
 
 def now():
-    return datetime.now().astimezone().isoformat(timespec="seconds")
+    return datetime.now(ZoneInfo("Asia/Kolkata")).isoformat(timespec="seconds")
 
 def connect():
     con = sqlite3.connect(DB_PATH, timeout=10)
