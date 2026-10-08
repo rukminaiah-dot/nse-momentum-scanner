@@ -19,6 +19,7 @@ instrument_symbols = {key: symbol for symbol, key in {**NIFTY_200, **INDICES}.it
 market_regimes = {}
 previous_closes = {}
 last_trade_updates = {}
+last_cumulative_volumes = {}
 
 
 def load_active_trades():
@@ -229,8 +230,20 @@ def on_tick(key, data):
                 update_state(trade_id, price, trade["status"])
                 last_trade_updates[key] = time.time()
 
+    cumulative = data.get("vtt")
+    minute_volume = 0
+    if cumulative is not None:
+        try:
+            cumulative = int(float(cumulative))
+            previous = last_cumulative_volumes.get(key)
+            if previous is not None and cumulative >= previous:
+                minute_volume = cumulative - previous
+            last_cumulative_volumes[key] = cumulative
+        except (ValueError, TypeError):
+            pass
+
     before = len(candles.completed.get(key, []))
-    candles.update(key, price, ts)
+    candles.update(key, price, ts, minute_volume)
     after = len(candles.completed.get(key, []))
 
     # Analyse only when a minute candle has actually closed.

@@ -22,7 +22,7 @@ class UpstoxLiveV3:
         self.streamer = upstox_client.MarketDataStreamerV3(
             self.api_client,
             self.instrument_keys,
-            "ltpc",
+            "full",
         )
 
         self.streamer.on("open", self._on_open)
@@ -39,12 +39,18 @@ class UpstoxLiveV3:
         feeds = message.get("feeds", {})
 
         for instrument_key, feed in feeds.items():
-            ltpc = feed.get("ltpc")
+            ltpc = feed.get("ltpc") or feed.get("fullFeed", {}).get("marketFF", {}).get("ltpc") or feed.get("fullFeed", {}).get("indexFF", {}).get("ltpc")
             if not ltpc:
                 continue
 
             if self.on_tick:
-                self.on_tick(instrument_key, ltpc)
+                tick = dict(ltpc)
+                market_ff = feed.get("fullFeed", {}).get("marketFF", {})
+                tick["vtt"] = market_ff.get("eFeedDetails", {}).get("vtt")
+                if market_ff and not hasattr(self, "_volume_sample_logged"):
+                    print("UPSTOX_VOLUME_SAMPLE:", tick["vtt"], flush=True)
+                    self._volume_sample_logged = True
+                self.on_tick(instrument_key, tick)
 
     def _on_error(self, error):
         print("V2_UPSTOX_V3_ERROR:", error)
