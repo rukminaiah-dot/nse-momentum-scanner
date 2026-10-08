@@ -120,6 +120,17 @@ def analyse(key):
         print("WARMUP:", key, len(history), "/20 candles")
         return
 
+    if key in INDICES.values():
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+        history = [
+            c for c in history
+            if hasattr(c, "timestamp") and c.timestamp.date() == today
+        ]
+        if len(history) < 20:
+            return
+
     closes = [c.close for c in history]
     highs = [c.high for c in history]
     lows = [c.low for c in history]
