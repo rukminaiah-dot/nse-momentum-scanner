@@ -48,7 +48,12 @@ class UpstoxLiveV3:
                 market_ff = feed.get("fullFeed", {}).get("marketFF", {})
                 tick["vtt"] = market_ff.get("eFeedDetails", {}).get("vtt")
                 if market_ff and not hasattr(self, "_volume_sample_logged"):
-                    print("UPSTOX_VOLUME_SAMPLE:", tick["vtt"], flush=True)
+                    print("UPSTOX_FEED_STRUCTURE:", {
+                        "feed_keys": list(feed.keys()),
+                        "full_feed_keys": list(feed.get("fullFeed", {}).keys()),
+                        "market_ff_keys": list(market_ff.keys()),
+                        "details": market_ff.get("eFeedDetails")
+                    }, flush=True)
                     self._volume_sample_logged = True
                 self.on_tick(instrument_key, tick)
 
