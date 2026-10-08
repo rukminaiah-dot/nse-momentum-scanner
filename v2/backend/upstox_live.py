@@ -36,21 +36,31 @@ class UpstoxLiveV3:
         if message.get("type") == "market_info":
             return
 
+        if not hasattr(self, "_raw_structure_logged") and message.get("feeds"):
+            feeds_sample = message["feeds"]
+            sample = next(iter(feeds_sample.values()))
+            print("UPSTOX_RAW_STRUCTURE:", {
+                "message_keys": list(message.keys()),
+                "feed_keys": list(sample.keys()),
+                "full_feed_keys": list(sample.get("fullFeed", {}).keys()),
+            }, flush=True)
+            self._raw_structure_logged = True
+
         feeds = message.get("feeds", {})
 
         for instrument_key, feed in feeds.items():
-            ltpc = feed.get("ltpc") or feed.get("fullFeed", {}).get("marketFF", {}).get("ltpc") or feed.get("fullFeed", {}).get("indexFF", {}).get("ltpc")
+            ltpc = feed.get("ltpc") or (feed.get("ff") or feed.get("fullFeed") or {}).get("marketFF", {}).get("ltpc") or (feed.get("ff") or feed.get("fullFeed") or {}).get("indexFF", {}).get("ltpc")
             if not ltpc:
                 continue
 
             if self.on_tick:
                 tick = dict(ltpc)
-                market_ff = feed.get("fullFeed", {}).get("marketFF", {})
+                market_ff = (feed.get("ff") or feed.get("fullFeed") or {}).get("marketFF", {})
                 tick["vtt"] = market_ff.get("eFeedDetails", {}).get("vtt")
                 if market_ff and not hasattr(self, "_volume_sample_logged"):
                     print("UPSTOX_FEED_STRUCTURE:", {
                         "feed_keys": list(feed.keys()),
-                        "full_feed_keys": list(feed.get("fullFeed", {}).keys()),
+                        "full_feed_keys": list((feed.get("ff") or feed.get("fullFeed") or {}).keys()),
                         "market_ff_keys": list(market_ff.keys()),
                         "details": market_ff.get("eFeedDetails")
                     }, flush=True)
