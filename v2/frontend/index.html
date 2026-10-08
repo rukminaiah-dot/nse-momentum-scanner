@@ -52,7 +52,11 @@ async function loadScanner(){
   const names = ["NIFTY 50", "BANK NIFTY", "SENSEX"];
   document.getElementById("indices").innerHTML = names.map(name => {
     const x = rows.find(r => r.symbol === name);
-    const signal = x?.signal || "WAITING";
+    const now = new Date();
+    const ist = new Date(now.toLocaleString("en-US", {timeZone:"Asia/Kolkata"}));
+    const mins = ist.getHours()*60 + ist.getMinutes();
+    const closed = ist.getDay()===0 || ist.getDay()===6 || mins<555 || mins>=930;
+    const signal = closed ? "MARKET CLOSED" : (x?.signal || "WAITING");
     const cls = signal === "BUY" ? "buy" : signal === "SELL" ? "sell" : "";
     return `<div class="card"><b>${name}</b><br>
       Live Price: ${x?.price == null ? "Waiting..." : Number(x.price).toFixed(2)}<br>
