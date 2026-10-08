@@ -293,4 +293,7 @@ if __name__ == "__main__":
             print("PRELOAD ERROR:", key, str(e))
             print("PRELOAD: live candle warmup for", key)
 
+    for key in INDICES.values():
+        if len(candles.completed.get(key, [])) >= 20:
+            analyse(key)
     UpstoxLiveV3(on_tick=on_tick).connect()
