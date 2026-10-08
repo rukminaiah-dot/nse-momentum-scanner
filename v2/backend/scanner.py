@@ -87,8 +87,6 @@ def preload_history(key):
             print("INTRADAY PRELOAD:", key, len(current), "candles")
 
     candles.completed[key] = loaded
-    if key in INDICES.values() and loaded:
-        previous_closes[key] = loaded[-1].close
     print("PRELOAD:", key, len(loaded), "historical candles")
 
 def five_minute_trend(history):
