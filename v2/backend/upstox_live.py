@@ -56,7 +56,7 @@ class UpstoxLiveV3:
             if self.on_tick:
                 tick = dict(ltpc)
                 market_ff = (feed.get("ff") or feed.get("fullFeed") or {}).get("marketFF", {})
-                tick["vtt"] = market_ff.get("eFeedDetails", {}).get("vtt")
+                tick["vtt"] = market_ff.get("vtt")
                 if market_ff and not hasattr(self, "_volume_sample_logged"):
                     print("UPSTOX_FEED_STRUCTURE:", {
                         "feed_keys": list(feed.keys()),
