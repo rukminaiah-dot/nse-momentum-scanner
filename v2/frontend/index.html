@@ -59,7 +59,7 @@ async function loadScanner(){
     const signal = closed ? "MARKET CLOSED" : (x?.signal || "WAITING");
     const cls = signal === "BUY" ? "buy" : signal === "SELL" ? "sell" : "";
     return `<div class="card"><b>${name}</b><br>
-      Live Price: ${x?.price == null ? "Waiting..." : Number(x.price).toFixed(2)}<br>
+      Last Price: ${x?.price == null ? "Waiting..." : Number(x.price).toFixed(2)}<br>
       ${x?.previous_close > 0 && x?.price != null ? (() => {
         const change = Number(x.price) - Number(x.previous_close);
         const pct = change / Number(x.previous_close) * 100;
