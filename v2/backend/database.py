@@ -47,3 +47,16 @@ def init_db():
 if __name__ == "__main__":
     init_db()
     print("V2_DB_OK")
+
+
+def reset_scanner_results():
+    con = sqlite3.connect(DB_PATH, timeout=10)
+    con.execute("PRAGMA busy_timeout=10000")
+    con.execute("""
+        UPDATE scanner_results
+        SET updated_at=datetime('now','+5 hours','+30 minutes'),
+            price=NULL, ema9=NULL, ema20=NULL, momentum=NULL,
+            market=NULL, trend_5m=NULL, signal='WAITING'
+    """)
+    con.commit()
+    con.close()

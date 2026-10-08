@@ -219,6 +219,7 @@ def on_tick(key, data):
 
 if __name__ == "__main__":
     init_db()
+    reset_scanner_results()
     close_stale_trades()
     load_active_trades()
 
