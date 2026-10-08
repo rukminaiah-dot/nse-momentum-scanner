@@ -9,7 +9,7 @@ app = FastAPI(title="NSE Momentum Scanner V2")
 
 @app.get("/api/v2/trades")
 def get_trades():
-    con = sqlite3.connect(DB_PATH)
+    con = sqlite3.connect(DB_PATH, timeout=10)
     con.row_factory = sqlite3.Row
     rows = con.execute(
         "SELECT * FROM trades ORDER BY id DESC LIMIT 100"
@@ -28,7 +28,7 @@ def dashboard():
 
 @app.get("/api/v2/scanner")
 def get_scanner_results():
-    con = sqlite3.connect(DB_PATH)
+    con = sqlite3.connect(DB_PATH, timeout=10)
     con.row_factory = sqlite3.Row
     rows = con.execute(
         "SELECT * FROM scanner_results ORDER BY updated_at DESC"
