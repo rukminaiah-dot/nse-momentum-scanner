@@ -15,8 +15,9 @@ from .database import DB_PATH, init_db, reset_scanner_results
 
 candles = CandleManager()
 active_trades = {}
-instrument_symbols = {key: symbol for symbol, key in NIFTY_200.items()}
+instrument_symbols = {key: symbol for symbol, key in {**NIFTY_200, **INDICES}.items()}
 market_regimes = {}
+previous_closes = {}
 last_trade_updates = {}
 
 
@@ -69,6 +70,8 @@ def preload_history(key):
         loaded.append(c)
 
     candles.completed[key] = loaded
+    if key in INDICES.values() and loaded:
+        previous_closes[key] = loaded[-1].close
     print("PRELOAD:", key, len(loaded), "historical candles")
 
 def five_minute_trend(history):
@@ -102,9 +105,9 @@ def five_minute_trend(history):
         return "BEARISH"
     return "NEUTRAL"
 
-def save_scan_result(key, price, ema9_value, ema20_value, mom, market, trend_5m, signal):
+def save_scan_result(key, price, ema9_value, ema20_value, mom, market, trend_5m, signal, previous_close=None):
     con = sqlite3.connect(DB_PATH)
-    con.execute("""INSERT OR REPLACE INTO scanner_results (symbol,updated_at,price,ema9,ema20,momentum,market,trend_5m,signal) VALUES (?,datetime('now','+5 hours','+30 minutes'),?,?,?,?,?,?,?)""", (key, price, ema9_value, ema20_value, mom, market, trend_5m, signal))
+    con.execute("""INSERT OR REPLACE INTO scanner_results (symbol,updated_at,price,ema9,ema20,momentum,market,trend_5m,signal,previous_close) VALUES (?,datetime('now','+5 hours','+30 minutes'),?,?,?,?,?,?,?,?)""", (key, price, ema9_value, ema20_value, mom, market, trend_5m, signal, previous_close))
     con.commit()
     con.close()
 
@@ -135,7 +138,7 @@ def analyse(key):
     market = index_signal(price, ema9, ema20, vwap_value)
     if key == INDICES["NIFTY 50"]:
         market_regimes["NIFTY 50"] = market
-    elif key in NIFTY_200.values():
+    elif key in NIFTY_200.values() or key in INDICES.values():
         market = market_regimes.get("NIFTY 50", "NEUTRAL")
 
     signal = generate_signal(
@@ -155,8 +158,8 @@ def analyse(key):
     elif signal == "SELL" and trend_5m != "BEARISH":
         signal = "HOLD"
 
-    if key in NIFTY_200.values():
-        save_scan_result(instrument_symbols.get(key, key), price, ema9, ema20, mom, market, trend_5m, signal)
+    if key in NIFTY_200.values() or key in INDICES.values():
+        save_scan_result(instrument_symbols.get(key, key), price, ema9, ema20, mom, market, trend_5m, signal, previous_closes.get(key))
     if key in NIFTY_200.values() and signal == "BUY" and atr_value is not None:
         buy(key, price, price + atr_value, price + (2 * atr_value), price - atr_value, "V2 momentum BUY")
         load_active_trades()

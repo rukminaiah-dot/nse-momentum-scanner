@@ -17,7 +17,9 @@ small{color:#aaa}
 </head>
 <body>
 <h2>NSE Momentum Scanner V2</h2>
-<h3>Live NIFTY 200 Scanner</h3>
+<h3>Market Index Signals</h3>
+<div id="indices">Loading live indices...</div>
+<h3>Top 5 BUY Stocks</h3>
 <div id="scanner">Waiting for live market data...</div>
 <h3>Trades</h3>
 <div id="trades">Loading trades...</div>
@@ -47,6 +49,22 @@ async function loadTrades(){
 async function loadScanner(){
   const r=await fetch("/api/v2/scanner");
   const rows=await r.json();
+  const names = ["NIFTY 50", "BANK NIFTY", "SENSEX"];
+  document.getElementById("indices").innerHTML = names.map(name => {
+    const x = rows.find(r => r.symbol === name);
+    const signal = x?.signal || "WAITING";
+    const cls = signal === "BUY" ? "buy" : signal === "SELL" ? "sell" : "";
+    return `<div class="card"><b>${name}</b><br>
+      Live Price: ${x?.price == null ? "Waiting..." : Number(x.price).toFixed(2)}<br>
+      ${x?.previous_close > 0 && x?.price != null ? (() => {
+        const change = Number(x.price) - Number(x.previous_close);
+        const pct = change / Number(x.previous_close) * 100;
+        const up = change >= 0;
+        return `<span class="${up ? "buy" : "sell"}">${up ? "▲ UP" : "▼ DOWN"} ${change >= 0 ? "+" : ""}${change.toFixed(2)} (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%)</span><br>`;
+      })() : "Daily change: Waiting...<br>"}
+      Suggestion: <b class="${cls}">${signal}</b><br>
+      <small>${x?.updated_at || ""}</small></div>`;
+  }).join("");
   document.getElementById("scanner").innerHTML = rows.some(s=>s.signal==="BUY") ? rows.filter(s=>s.signal==="BUY").sort((a,b)=>(Number(b.momentum)+100*(b.ema9-b.ema20)/b.price)-(Number(a.momentum)+100*(a.ema9-a.ema20)/a.price)).slice(0,5).sort((a,b)=>(["BUY","SELL","HOLD","WAITING"].indexOf(a.signal)-["BUY","SELL","HOLD","WAITING"].indexOf(b.signal))).map(s=>s.signal==="WAITING"?`<div class="card"><b>${s.symbol}</b><br>Signal: <b>WAITING</b></div>`:`<div class="card"><b>${s.symbol}</b><br>Price: ${s.price}<br>EMA9: ${Number(s.ema9).toFixed(2)} | EMA20: ${Number(s.ema20).toFixed(2)}<br>Momentum: ${Number(s.momentum).toFixed(2)}<br>Market: ${s.market} | 5M: ${s.trend_5m}<br>Signal: <b class="${s.signal==="BUY"?"buy":s.signal==="SELL"?"sell":""}">${s.signal}</b><br><small>${s.updated_at}</small></div>`).join("") : "No qualifying BUY stocks right now";
 }
 loadScanner();

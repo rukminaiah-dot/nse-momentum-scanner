@@ -41,6 +41,9 @@ def init_db():
     """)
     con.execute("""CREATE TABLE IF NOT EXISTS scanner_results (symbol TEXT PRIMARY KEY, updated_at TEXT NOT NULL, price REAL, ema9 REAL, ema20 REAL, momentum REAL, market TEXT, trend_5m TEXT, signal TEXT)""")
     con.executemany("""INSERT OR IGNORE INTO scanner_results (symbol,updated_at,signal) VALUES (?,datetime('now','+5 hours','+30 minutes'),'WAITING')""", [(symbol,) for symbol in NIFTY_200.keys()])
+    columns = [row[1] for row in con.execute("PRAGMA table_info(scanner_results)")]
+    if "previous_close" not in columns:
+        con.execute("ALTER TABLE scanner_results ADD COLUMN previous_close REAL")
     con.commit()
     con.close()
 
