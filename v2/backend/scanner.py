@@ -70,6 +70,22 @@ def preload_history(key):
         c.timestamp = datetime.fromisoformat(row[0]).astimezone(ZoneInfo("Asia/Kolkata")).replace(tzinfo=None)
         loaded.append(c)
 
+    if key in INDICES.values() and loaded:
+        previous_closes[key] = loaded[-1].close
+
+    if key in INDICES.values():
+        intraday = api.get_intra_day_candle_data(key, "minutes", "1")
+        today_rows = intraday.data.candles or []
+        current = []
+        for row in reversed(today_rows):
+            c = Candle(float(row[1]), float(row[5]))
+            c.open, c.high, c.low, c.close = map(float, row[1:5])
+            c.timestamp = datetime.fromisoformat(row[0]).astimezone(ZoneInfo("Asia/Kolkata")).replace(tzinfo=None)
+            current.append(c)
+        if current:
+            loaded = current
+            print("INTRADAY PRELOAD:", key, len(current), "candles")
+
     candles.completed[key] = loaded
     if key in INDICES.values() and loaded:
         previous_closes[key] = loaded[-1].close
