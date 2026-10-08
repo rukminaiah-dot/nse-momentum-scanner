@@ -82,6 +82,12 @@ def sell(trade_id, price, reason):
     con.commit()
     con.close()
 
+    try:
+        from .postgres_history import save_completed_trades
+        save_completed_trades()
+    except Exception as exc:
+        print(f"PostgreSQL trade history sync failed: {exc}")
+
 if __name__ == "__main__":
     init_db()
     print("V2_ENGINE_OK")

@@ -37,6 +37,12 @@ def close_stale_trades():
     con.commit()
     con.close()
 
+    try:
+        from .postgres_history import save_completed_trades
+        save_completed_trades()
+    except Exception as exc:
+        print(f"PostgreSQL session-reset history sync failed: {exc}")
+
 
 def preload_history(key):
     config = upstox_client.Configuration()
