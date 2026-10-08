@@ -153,7 +153,14 @@ def analyse(key):
 
     trend_5m = five_minute_trend(history)
 
-    if signal == "BUY" and trend_5m != "BULLISH":
+    if key in INDICES.values():
+        if ema9 > ema20 and mom > 0:
+            signal = "BUY"
+        elif ema9 < ema20 and mom < 0:
+            signal = "SELL"
+        else:
+            signal = "HOLD"
+    elif signal == "BUY" and trend_5m != "BULLISH":
         signal = "HOLD"
     elif signal == "SELL" and trend_5m != "BEARISH":
         signal = "HOLD"
