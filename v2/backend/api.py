@@ -1,6 +1,9 @@
 import sqlite3
 from fastapi import FastAPI
 from .database import DB_PATH
+from .stock_universe import NIFTY_200
+
+instrument_symbols = {key: symbol for symbol, key in NIFTY_200.items()}
 
 app = FastAPI(title="NSE Momentum Scanner V2")
 
@@ -12,7 +15,10 @@ def get_trades():
         "SELECT * FROM trades ORDER BY id DESC LIMIT 100"
     ).fetchall()
     con.close()
-    return [dict(row) for row in rows]
+    items = [dict(row) for row in rows]
+    for item in items:
+        item["symbol"] = instrument_symbols.get(item["symbol"], item["symbol"])
+    return items
 
 from fastapi.responses import FileResponse
 
