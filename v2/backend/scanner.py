@@ -219,6 +219,7 @@ def analyse(key):
         "| EMA9:", ema9,
         "| EMA20:", ema20,
         "| MOM:", mom,
+        "| RVOL:", round(rvol, 2) if rvol is not None else "N/A",
         "| MARKET:", market,
         "| 5M TREND:", trend_5m,
         "| SIGNAL:", signal,
