@@ -137,6 +137,26 @@ def save_scan_result(key, price, ema9_value, ema20_value, mom, market, trend_5m,
 def analyse(key):
     history = candles.completed.get(key, [])
 
+    # Measure signal processing delay without changing trading rules.
+    if history and hasattr(history[-1], "timestamp"):
+        from datetime import datetime, timedelta
+        from zoneinfo import ZoneInfo
+
+        candle_time = history[-1].timestamp
+        expected_close = candle_time + timedelta(minutes=1)
+        now_ist = datetime.now(ZoneInfo("Asia/Kolkata")).replace(tzinfo=None)
+
+        if candle_time.date() == now_ist.date():
+            delay_seconds = (now_ist - expected_close).total_seconds()
+            if delay_seconds >= 0:
+                print(
+                    "SIGNAL_TIMING:",
+                    key,
+                    "| CANDLE:", candle_time,
+                    "| DELAY_SECONDS:", round(delay_seconds, 1),
+                    flush=True,
+                )
+
     # EMA20 requires enough completed candles.
     if len(history) < 20:
         print("WARMUP:", key, len(history), "/20 candles")
