@@ -43,3 +43,39 @@
   <p class="muted">Research mode only. No automatic orders.</p>
 </body>
 </html>
+
+<script>
+async function updateIndexPrices() {
+  try {
+    const response = await fetch('/api/v2/scanner', {cache: 'no-store'});
+    if (!response.ok) throw new Error('API unavailable');
+
+    const data = await response.json();
+
+    for (const name of ['NIFTY 50', 'SENSEX']) {
+      const item = data.find(row => row.symbol === name);
+      const card = [...document.querySelectorAll('.card')]
+        .find(el => el.querySelector('h2')?.textContent.trim() === name);
+
+      if (!card) continue;
+
+      let display = card.querySelector('.live-price');
+      if (!display) {
+        display = document.createElement('p');
+        display.className = 'live-price';
+        card.querySelector('h2').after(display);
+      }
+
+      display.textContent = item && item.price != null
+        ? 'Index: ' + Number(item.price).toLocaleString('en-IN') +
+          ' | Candle: ' + (item.updated_at || 'Unknown')
+        : 'Price unavailable';
+    }
+  } catch (error) {
+    console.warn('Index price update failed:', error);
+  }
+}
+
+updateIndexPrices();
+setInterval(updateIndexPrices, 5000);
+</script>
