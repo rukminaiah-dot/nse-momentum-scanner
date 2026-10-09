@@ -77,3 +77,7 @@ def get_daily_trade_history():
             status_code=503,
             detail="Trade history temporarily unavailable"
         ) from exc
+
+@app.get("/history")
+def history_page():
+    return FileResponse("v2/frontend/history.html")
