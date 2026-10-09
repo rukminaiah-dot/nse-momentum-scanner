@@ -206,6 +206,18 @@ def analyse(key):
     elif signal == "SELL" and trend_5m != "BEARISH":
         signal = "HOLD"
 
+    # Avoid chasing an extended stock BUY entry.
+    # Keep index and SELL signal rules unchanged.
+    if (
+        key in NIFTY_200.values()
+        and signal == "BUY"
+        and atr_value is not None
+        and atr_value > 0
+        and price > ema9 + (0.5 * atr_value)
+    ):
+        signal = "HOLD"
+        print("LATE BUY REJECTED:", key, "| PRICE:", price, "| EMA9:", ema9, "| ATR:", atr_value)
+
     if key in NIFTY_200.values() or key in INDICES.values():
         save_scan_result(instrument_symbols.get(key, key), price, ema9, ema20, mom, market, trend_5m, signal, previous_closes.get(key))
     if key in NIFTY_200.values() and signal == "BUY" and atr_value is not None:
