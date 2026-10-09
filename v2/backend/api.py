@@ -81,3 +81,7 @@ def get_daily_trade_history():
 @app.get("/history")
 def history_page():
     return FileResponse("v2/frontend/history.html")
+
+@app.get("/expiry-momentum")
+def expiry_momentum_page():
+    return FileResponse("v2/frontend/expiry-momentum.html")
