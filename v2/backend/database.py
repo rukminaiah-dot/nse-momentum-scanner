@@ -58,8 +58,7 @@ def reset_scanner_results():
     con.execute("""
         UPDATE scanner_results
         SET updated_at=datetime('now','+5 hours','+30 minutes'),
-            price=NULL, ema9=NULL, ema20=NULL, momentum=NULL,
-            market=NULL, trend_5m=NULL, signal='WAITING'
+            signal='WAITING'
     """)
     con.commit()
     con.close()

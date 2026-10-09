@@ -303,4 +303,22 @@ if __name__ == "__main__":
     for key in INDICES.values():
         if len(candles.completed.get(key, [])) >= 20:
             analyse(key)
+    # Display last available index values before live candles arrive.
+    # These are informational only; do not run trading analysis here.
+    for key in INDICES.values():
+        history = candles.completed.get(key, [])
+        if len(history) >= 20:
+            closes = [c.close for c in history]
+            save_scan_result(
+                instrument_symbols.get(key, key),
+                closes[-1],
+                ema(closes, 9),
+                ema(closes, 20),
+                momentum(closes),
+                "PREVIOUS SESSION",
+                None,
+                "WAITING",
+                previous_closes.get(key),
+            )
+
     UpstoxLiveV3(on_tick=on_tick).connect()
