@@ -288,6 +288,13 @@ if __name__ == "__main__":
     init_db()
     reset_scanner_results()
     close_stale_trades()
+
+    try:
+        from .postgres_history import restore_active_trades
+        restore_active_trades()
+    except Exception as exc:
+        print(f"Active trade restoration failed: {exc}")
+
     load_active_trades()
 
     preload_keys = list(INDICES.values()) + list(NIFTY_200.values())

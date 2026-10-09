@@ -39,6 +39,13 @@ def buy(symbol, price, t1, t2, invalidation, reason):
 
     con.commit()
     con.close()
+
+    try:
+        from .postgres_history import backup_active_trade
+        backup_active_trade(trade_id)
+    except Exception as exc:
+        print(f"Active trade backup failed: {exc}")
+
     return trade_id
 
 def update_state(trade_id, price, action="HOLD", reason="Chart remains valid"):
@@ -81,6 +88,12 @@ def sell(trade_id, price, reason):
 
     con.commit()
     con.close()
+
+    try:
+        from .postgres_history import backup_active_trade
+        backup_active_trade(trade_id)
+    except Exception as exc:
+        print(f"Closed trade backup failed: {exc}")
 
     try:
         from .postgres_history import save_completed_trades
