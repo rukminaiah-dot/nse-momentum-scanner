@@ -260,6 +260,9 @@ def on_tick(key, data):
             if previous is not None and cumulative >= previous:
                 minute_volume = cumulative - previous
             last_cumulative_volumes[key] = cumulative
+            if key in NIFTY_200.values() and previous is not None and cumulative > previous and not getattr(on_tick, "_volume_verified", False):
+                print("VOLUME_VERIFIED:", key, "previous:", previous, "current:", cumulative, "minute_increment:", minute_volume, flush=True)
+                on_tick._volume_verified = True
         except (ValueError, TypeError):
             pass
 
