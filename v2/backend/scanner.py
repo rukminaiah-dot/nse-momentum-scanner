@@ -137,6 +137,18 @@ def save_scan_result(key, price, ema9_value, ema20_value, mom, market, trend_5m,
 def analyse(key):
     history = candles.completed.get(key, [])
 
+    # Reject old candles before generating any signals.
+    if history:
+        from datetime import datetime, timedelta
+        from zoneinfo import ZoneInfo
+
+        last_candle = history[-1].timestamp
+        now_ist = datetime.now(ZoneInfo("Asia/Kolkata")).replace(tzinfo=None)
+
+        if last_candle > now_ist or now_ist - last_candle > timedelta(minutes=3):
+            print("STALE_CANDLE_BLOCKED:", key, flush=True)
+            return
+
     # Measure signal processing delay without changing trading rules.
     if history and hasattr(history[-1], "timestamp"):
         from datetime import datetime, timedelta
