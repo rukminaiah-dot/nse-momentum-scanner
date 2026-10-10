@@ -20,6 +20,21 @@ def snapshot():
                     watchlist_count=len(RESEARCH_UNIVERSE),
                     insufficient_symbols=[{"symbol":s,"sessions":len(v)} for s,v in _history.items() if len(v)<70])
 
+def latest_closes():
+    """Last verified completed NSE closing candle for each base watchlist stock."""
+    with _lock:
+        result = []
+        for symbol, rows in _history.items():
+            if rows:
+                row = max(rows, key=lambda item: item["date"])
+                result.append({"symbol": symbol, "price": row["close"],
+                               "session": row["date"], "status": "NSE_DAILY_CLOSE_NOT_LIVE"})
+            else:
+                result.append({"symbol": symbol, "price": None, "session": None,
+                               "status": "NO_VERIFIED_NSE_CLOSE"})
+        return {"source": "NSE official CM-UDiFF daily bhavcopy",
+                "collection_status": _state["status"], "stocks": result}
+
 def signals():
     with _lock:
         history = {s: list(rows) for s, rows in _history.items()}
