@@ -17,7 +17,8 @@ _state = {"status":"NOT_STARTED","sessions":0,"attempted":0,"errors":0,"latest_s
 def snapshot():
     with _lock:
         return dict(_state, stocks_with_70_sessions=sum(len(v)>=70 for v in _history.values()),
-                    watchlist_count=len(RESEARCH_UNIVERSE))
+                    watchlist_count=len(RESEARCH_UNIVERSE),
+                    insufficient_symbols=[{"symbol":s,"sessions":len(v)} for s,v in _history.items() if len(v)<70])
 
 def signals():
     with _lock:
