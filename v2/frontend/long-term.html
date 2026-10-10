@@ -16,7 +16,7 @@ table{border-collapse:collapse;width:100%}th,td{padding:15px 12px;border-bottom:
 <div class="note">Target guideline: 10–18% · Stop-loss guideline: 4–6%. These are planning assumptions, not guaranteed returns or automatic trading instructions.</div>
 <section class="panel"><h2 class="section-title">56-stock Screener research watchlist</h2><p class="section-subtitle">Open any company on Screener.in to review financial statements and ratios. Added stocks are saved in this browser only; no orders are placed.</p><form id="add-stock-form" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px"><label for="new-stock">NSE ticker</label><input id="new-stock" name="ticker" autocomplete="off" maxlength="20" placeholder="e.g. HAVELLS" required style="background:#0a1020;color:white;border:1px solid #50637d;border-radius:8px;padding:10px"><button class="refresh" type="submit">+ Add stock</button></form><p id="stock-message" role="status"></p><p id="research-count"></p><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0"><label for="stock-search">Find stock</label><input id="stock-search" type="search" autocomplete="off" placeholder="Search e.g. BEL, POLYCAB" style="flex:1;min-width:170px;background:#0a1020;color:white;border:1px solid #50637d;border-radius:8px;padding:11px"><button id="toggle-stocks" type="button" class="refresh">Show all 56</button></div><p id="stock-filter-count" role="status"></p><div class="table-scroll"><table><thead><tr><th>NSE symbol</th><th>Fundamental research</th><th>Action</th></tr></thead><tbody id="research-stocks"></tbody></table></div></section>
 <section class="panel"><h2 class="section-title">Historical NSE data coverage</h2><p class="section-subtitle">Official completed daily sessions, independently downloaded and validated. A missing stock cannot receive a trading signal.</p><p id="history-status" role="status">Checking NSE history collection…</p><p id="history-missing"></p></section>
-<section class="panel"><h2 class="section-title">Separate 10-stock Upstox quote monitor</h2><p class="section-subtitle">Verified price snapshots only. Stale data remains visible as historical information, never as a live quote.</p><p id="source" role="status" aria-live="polite">Loading independent Upstox quotes...</p><div class="table-scroll"><table><thead><tr><th>Symbol</th><th>Last recorded price</th><th>Exchange / scanner time</th><th>Feed status</th></tr></thead><tbody id="stocks"></tbody></table></div><p id="coverage"></p><p id="diagnostics" role="status"></p></section>
+<section class="panel"><h2 class="section-title">Official NSE closing prices — 56 stocks</h2><p class="section-subtitle">Latest completed daily closing prices from NSE official reports, not live or intraday quotes.</p><p id="source" role="status" aria-live="polite">Loading NSE closing prices...</p><div class="table-scroll"><table><thead><tr><th>Symbol</th><th>NSE close</th><th>Trading session</th><th>Data status</th></tr></thead><tbody id="stocks"></tbody></table></div><p id="coverage"></p><p id="diagnostics" role="status"></p></section>
 <section class="panel"><h2 class="section-title">Daily breakout research</h2><p class="section-subtitle">Completed daily candles only. A target and stop are shown only after a confirmed breakout with volume and trend support. Indicative research, not orders.</p><p id="breakout-source" role="status">Checking verified NSE daily OHLCV history...</p><div class="table-scroll"><table><thead><tr><th>Stock</th><th>Setup</th><th>Entry</th><th>Stop</th><th>Target 2R</th><th>Target 3R</th><th>Shares</th></tr></thead><tbody id="breakout-rows"></tbody></table></div></section>
 <section class="panel"><h2 class="section-title">Data transparency</h2><p class="section-subtitle">Daily price and volume history comes from official NSE bhavcopy reports. Screener.in is linked for independent fundamental research. Yahoo Finance is disabled; no technical levels are estimated without validated candles.</p><p class="footnote">This dashboard is read-only. It does not modify scanner subscriptions, place orders, or use unavailable Upstox historical candles. Missing or stale prices must not be used as trade signals.</p></section>
 </div>
@@ -34,58 +34,30 @@ function validTime(raw){
 }
 async function load(){
  const source=document.getElementById('source'),coverage=document.getElementById('coverage'),diagnostics=document.getElementById('diagnostics'),body=document.getElementById('stocks');
- source.textContent='Loading selected stocks directly from Upstox V3...';
- body.replaceChildren();
+ source.textContent='Checking verified NSE completed daily closing prices…';
  try{
-  const response=await fetch('/api/v2/watchlist-quotes',{cache:'no-store'});
-  if(!response.ok)throw Error('Scanner API HTTP '+response.status);
-  const rows=await response.json();
-  if(!Array.isArray(rows))throw Error('Invalid scanner API response');
-  const scanner={};
-  const totalRows=rows.length;
-  let matchingRows=0,validRows=0;
-  for(const item of rows){
-   if(!item||typeof item!=='object')continue;
-   const name=byKey[item.symbol]||item.symbol;
-   if(!names.includes(name))continue;
-   matchingRows++;
-   const price=Number(item.price),time=validTime(item.updated_at);
-   if(!Number.isFinite(price)||price<=0||(time!==null&&time>Date.now()+60000))continue;
-   validRows++;
-   if(!scanner[name]||(time!==null&&(scanner[name].time===null||time>scanner[name].time)))scanner[name]={price,time,raw:item.updated_at,source:item.source,quoteType:item.quote_type};
-  }
-  let fresh=0,stale=0;
-  for(const name of names){
-   const item=scanner[name],available=Boolean(item&&item.quoteType!=='DAILY_CLOSE_NOT_LIVE'&&item.time!==null&&Date.now()-item.time<=15*60*1000);
-   if(available)fresh++;else if(item)stale++;
-   const daily=Boolean(item&&item.quoteType==='DAILY_CLOSE_NOT_LIVE');
-   const status=daily?'DAILY_CLOSE_NOT_LIVE':available?'PRICE_FRESH':item?(item.time===null?'PRICE_TIME_UNAVAILABLE':'PRICE_STALE'):'PRICE_UNAVAILABLE';
-   const values=[name,item?'₹'+fmt(item.price)+(daily?' (daily close)':available?' (fresh)':' (stale)'):'—',item?(item.quoteType==='DAILY_CLOSE_NOT_LIVE'?'Historical trading day: '+(item.raw||'unavailable').slice(0,10):item.raw||'Trade time unavailable'):'—',status];
+  const response=await fetch('/api/v2/nse-daily-closes',{cache:'no-store'});
+  if(!response.ok)throw Error('NSE daily close API HTTP '+response.status);
+  const data=await response.json();
+  if(!Array.isArray(data.stocks))throw Error('Invalid NSE closing-price response');
+  body.replaceChildren();
+  let available=0;
+  for(const item of data.stocks){
+   const price=Number(item.price);
+   const valid=item.price!==null&&Number.isFinite(price)&&price>0&&/^\\d{4}-\\d{2}-\\d{2}$/.test(item.session||'');
+   if(valid)available++;
+   const values=[item.symbol,valid?'₹'+fmt(price):'—',valid?item.session:'—',valid?'NSE_DAILY_CLOSE_NOT_LIVE':'NO_VERIFIED_NSE_CLOSE'];
    const tr=document.createElement('tr');
-   for(const [index,value] of values.entries()){const td=document.createElement('td');td.dataset.label=['Symbol','Price','Quote time','Status'][index];td.textContent=value;tr.appendChild(td);}
+   for(const [index,value] of values.entries()){const td=document.createElement('td');td.dataset.label=['Stock','Closing price','Trading date','Status'][index];td.textContent=value;tr.appendChild(td);}
    body.appendChild(tr);
   }
-  
-  source.textContent='Upstox V3 quote source; Yahoo Finance disabled. Checked: '+new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata'});
-  coverage.textContent='Independent price records: '+totalRows+'; matching watchlist records: '+matchingRows+'; valid price/timestamp records: '+validRows+'. Fresh quotes: '+fresh+'; stale quotes: '+stale+'.';
-  diagnostics.textContent='Preview quote records: '+totalRows+'. Checking production scanner coverage...';
-  try {
-   const diagResponse=await fetch('/api/v2/watchlist-diagnostics',{cache:'no-store'});
-   if(diagResponse.ok){
-    const d=await diagResponse.json();
-    diagnostics.textContent='Upstox requested: '+d.requested+'; valid prices: '+d.valid+'; missing: '+(d.missing||[]).join(', ')+'.';
-   }
-  }catch(_error) { /* Optional diagnostic; no impact on quotes. */ }
+  source.textContent='Official NSE daily closing prices (not live quotes). Collection: '+data.collection_status+'.';
+  coverage.textContent='Verified daily closes: '+available+' / '+data.stocks.length+'.';
+  diagnostics.textContent='No live Upstox feed required. Missing NSE data is shown as unavailable.';
  }catch(error){
-  source.textContent='Independent price data unavailable';
-  coverage.textContent='No verified independent quotes available.';
-  diagnostics.textContent='The Upstox quote API is unavailable ('+error.message+'). Prices are intentionally hidden until verified. The watchlist remains accessible.';
-  for(const name of names){
-   const tr=document.createElement('tr');
-   const values=[name,'—','—','FEED_UNAVAILABLE'];
-   for(const value of values){const td=document.createElement('td');td.textContent=value;tr.appendChild(td);}
-   body.appendChild(tr);
-  }
+  source.textContent='NSE closing prices unavailable';
+  coverage.textContent='No unverified prices will be displayed.';
+  diagnostics.textContent=error.message;
  }
 }
 async function loadBreakouts(){
