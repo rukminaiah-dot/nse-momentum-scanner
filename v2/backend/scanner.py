@@ -21,6 +21,36 @@ previous_closes = {}
 last_trade_updates = {}
 last_cumulative_volumes = {}
 
+_tick_seen = {}
+_last_health_write = 0.0
+_HEALTH_PATH = "/tmp/nse_200_feed_health.json"
+
+def record_feed_health(key):
+    global _last_health_write
+    if key not in NIFTY_200.values():
+        return
+    now = time.time()
+    _tick_seen[key] = now
+    if now - _last_health_write < 10:
+        return
+    import json
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from pathlib import Path
+    _last_health_write = now
+    try:
+        path = Path(_HEALTH_PATH)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps({
+            "observed_at_ist": datetime.now(ZoneInfo("Asia/Kolkata")).isoformat(),
+            "observed_at_epoch": now,
+            "last_tick_epoch": _tick_seen,
+        }))
+        tmp.replace(path)
+    except OSError as exc:
+        print("FEED_HEALTH_WRITE_ERROR:", type(exc).__name__, flush=True)
+
+
 
 def load_active_trades():
     active_trades.clear()
@@ -282,6 +312,8 @@ def on_tick(key, data):
 
     if price is None:
         return
+
+    record_feed_health(key)
 
     # Manage open trades from memory instead of querying SQLite every tick.
     trade = active_trades.get(key)
