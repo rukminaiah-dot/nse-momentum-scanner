@@ -5,7 +5,7 @@ HTTP retrieval time is NOT proof that exchange quotes are fresh.
 """
 import json
 import os
-from datetime import datetime
+from datetime import datetime, date
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -40,7 +40,7 @@ def _get(path, params, token):
     return payload["data"]
 
 
-def fetch_option_chain(index, expiry="current_month"):
+def fetch_option_chain(index, expiry=None):
     """Fetch option-chain and matching contract metadata for one index.
 
     Does not rank contracts: Upstox chain response has no reliable per-quote
@@ -48,15 +48,24 @@ def fetch_option_chain(index, expiry="current_month"):
     """
     if index not in ("NIFTY 50", "SENSEX"):
         raise ValueError("Unsupported index")
-    if expiry not in ("current_month", "next_month", "far_month"):
-        raise ValueError("Unsupported expiry selector")
+    if expiry is not None:
+        try:
+            if date.fromisoformat(expiry) < datetime.now(IST).date():
+                raise ValueError("Expired option chain date")
+        except (TypeError, ValueError):
+            raise ValueError("Expiry must be a future YYYY-MM-DD date") from None
     token = os.environ.get("UPSTOX_ACCESS_TOKEN")
     if not token:
         return {"status": "NOT_CONNECTED", "reason": "UPSTOX_TOKEN_MISSING", "contracts": []}
     key = INDICES[index]
-    params = {"instrument_key": key, "expiry_date": expiry}
-    chain = _get("/option/chain", params, token)
-    metadata = _get("/option/contract", params, token)
+    metadata = _get("/option/contract", {"instrument_key": key}, token)
+    available = sorted({str(row.get("expiry")) for row in metadata if isinstance(row, dict) and row.get("expiry")})
+    if not available:
+        return {"status": "NO_CONTRACTS", "reason": "NO_AVAILABLE_EXPIRIES", "contracts": []}
+    chosen_expiry = expiry or next((d for d in available if d >= datetime.now(IST).date().isoformat()), None)
+    if chosen_expiry not in available:
+        return {"status": "NO_CONTRACTS", "reason": "EXPIRY_NOT_AVAILABLE", "contracts": []}
+    chain = _get("/option/chain", {"instrument_key": key, "expiry_date": chosen_expiry}, token)
     lots = {
         c.get("instrument_key"): c.get("lot_size")
         for c in metadata if isinstance(c, dict) and c.get("instrument_key")
@@ -80,7 +89,7 @@ def fetch_option_chain(index, expiry="current_month"):
                 "type": option_type,
                 "instrument_key": instrument_key,
                 "strike": item.get("strike_price"),
-                "expiry": item.get("expiry"),
+                "expiry": chosen_expiry,
                 "bid": market.get("bid_price"),
                 "ask": market.get("ask_price"),
                 "volume": market.get("volume"),
@@ -92,7 +101,7 @@ def fetch_option_chain(index, expiry="current_month"):
     return {
         "status": "DATA_RETRIEVED_UNVERIFIED_FRESHNESS",
         "index": index,
-        "expiry_selector": expiry,
+        "expiry": chosen_expiry,
         "retrieved_at_ist": datetime.now(IST).isoformat(),
         "exchange_quote_time_ist": None,
         "contracts": contracts,
