@@ -22,7 +22,7 @@ def direct_upstox_quotes():
         raise LookupError("WATCHLIST_INSTRUMENT_KEY_MISSING")
     query = urllib.parse.urlencode({"instrument_key": ",".join(keys.values())})
     request = urllib.request.Request(
-        "https://api.upstox.com/v3/market-quote/quotes?" + query,
+        "https://api.upstox.com/v3/market-quote/ltp?" + query,
         headers={"Accept": "application/json", "Authorization": "Bearer " + token})
     with urllib.request.urlopen(request, timeout=18) as response:
         payload = json.load(response)
@@ -61,78 +61,19 @@ class Handler(BaseHTTPRequestHandler):
             payload = {"status": "ok", "mode": "isolated-investment-preview",
                        "upstox_configured": bool(os.getenv("UPSTOX_ACCESS_TOKEN"))}
             return self.respond(200, payload)
-        if self.path in ("/api/v2/scanner-quotes", "/api/v2/scanner", "/api/v2/scanner-diagnostics"):
-            # Read-only public scanner endpoint; never forwards the Upstox token.
-            url = "https://nse-momentum-scanner-api.onrender.com/api/v2/scanner"
+        if self.path in ("/api/v2/watchlist-quotes", "/api/v2/watchlist-diagnostics"):
             try:
-                request = urllib.request.Request(url, headers={"Accept": "application/json"})
-                # Retry transient wake-up/deployment errors; never fabricate prices.
-                rows = None
-                for attempt in range(3):
-                    try:
-                        with urllib.request.urlopen(request, timeout=18) as response:
-                            rows = json.load(response)
-                        break
-                    except urllib.error.HTTPError as exc:
-                        if exc.code not in (502, 503, 504) or attempt == 2:
-                            raise
-                    except (urllib.error.URLError, TimeoutError):
-                        if attempt == 2:
-                            raise
-                    time.sleep(1 + attempt)
-                by_key = {v: k for k, v in NIFTY_200.items()}
-                selected = []
-                matched = 0
-                invalid_price = 0
-                if not isinstance(rows, list):
-                    raise ValueError("Unexpected scanner response")
-                for row in rows:
-                    if not isinstance(row, dict):
-                        continue
-                    symbol = row.get("symbol")
-                    symbol = by_key.get(symbol, symbol)
-                    if symbol not in SYMBOLS:
-                        continue
-                    matched += 1
-                    price = row.get("price")
-                    if not isinstance(price, (int, float)) or isinstance(price, bool) or not (0 < price < 10000000):
-                        invalid_price += 1
-                        continue
-                    selected.append({"symbol": symbol, "price": price,
-                                     "updated_at": row.get("updated_at") if isinstance(row.get("updated_at"), str) else None})
-                # Scanner universe excludes COROMANDEL and DALBHARAT.
-                # Supplement missing symbols from Upstox even when scanner responds 200.
-                missing_symbols = set(SYMBOLS) - {item["symbol"] for item in selected}
-                if missing_symbols:
-                    try:
-                        direct = direct_upstox_quotes()
-                        selected.extend(item for item in direct if item["symbol"] in missing_symbols)
-                    except Exception as exc:
-                        status = exc.code if isinstance(exc, urllib.error.HTTPError) else None
-                        print("UPSTOX_SUPPLEMENT_FAILURE:", type(exc).__name__,
-                              "http_status:", status, flush=True)
-                if self.path == "/api/v2/scanner-diagnostics":
-                    return self.respond(200, {"upstream_rows": len(rows), "watchlist_rows": matched, "invalid_price_rows": invalid_price, "valid_watchlist_rows": len(selected)})
-                return self.respond(200, selected if self.path == "/api/v2/scanner" else {"source": "existing scanner; not daily close", "quotes": selected})
-            except (urllib.error.URLError, TimeoutError, ValueError, TypeError, OSError) as exc:
-                # Log only the exception class and upstream HTTP status, never credentials.
-                upstream_status = exc.code if isinstance(exc, urllib.error.HTTPError) else None
-                print("SCANNER_UPSTREAM_FAILURE:", type(exc).__name__, "http_status:", upstream_status, flush=True)
-                try:
-                    selected = direct_upstox_quotes()
-                    if self.path == "/api/v2/scanner-diagnostics":
-                        return self.respond(200, {"source": "upstox_v3_direct", "upstream_rows": None,
-                                                  "watchlist_rows": len(selected), "invalid_price_rows": 0,
-                                                  "valid_watchlist_rows": len(selected)})
-                    return self.respond(200, selected if self.path == "/api/v2/scanner" else
-                                        {"source": "Upstox V3 direct quotes", "quotes": selected})
-                except Exception as fallback_exc:
-                    fallback_status = fallback_exc.code if isinstance(fallback_exc, urllib.error.HTTPError) else None
-                    print("UPSTOX_DIRECT_FAILURE:", type(fallback_exc).__name__,
-                          "http_status:", fallback_status, flush=True)
-                    return self.respond(503, {"error": "QUOTE_SOURCES_UNAVAILABLE",
-                                               "upstream_http_status": upstream_status,
-                                               "upstox_http_status": fallback_status, "quotes": []})
+                quotes = direct_upstox_quotes()
+                if self.path == "/api/v2/watchlist-diagnostics":
+                    return self.respond(200, {"source": "upstox_v3_direct",
+                                              "requested": len(SYMBOLS), "valid": len(quotes),
+                                              "missing": [s for s in SYMBOLS if s not in {q["symbol"] for q in quotes}]})
+                return self.respond(200, quotes)
+            except Exception as exc:
+                status = exc.code if isinstance(exc, urllib.error.HTTPError) else None
+                print("WATCHLIST_UPSTOX_FAILURE:", type(exc).__name__, "http_status:", status, flush=True)
+                return self.respond(503, {"error": "UPSTOX_QUOTES_UNAVAILABLE",
+                                           "upstox_http_status": status, "quotes": []})
         if self.path == "/api/v2/investment":
             now = datetime.now(ZoneInfo("Asia/Kolkata"))
             return self.respond(200, cached_snapshot(int(now.timestamp() // 900)))
