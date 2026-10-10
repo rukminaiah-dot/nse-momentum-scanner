@@ -166,6 +166,17 @@ if __name__ == "__main__":
         except Exception as exc:
             print("NSE_SOURCE_PROBE_ERROR:", type(exc).__name__, flush=True)
     threading.Thread(target=startup_probe, daemon=True).start()
-    nse_history_collector.start()
+    import unittest
+    from v2.backend import test_verified_positional_signals
+    test_suite = unittest.defaultTestLoader.loadTestsFromModule(test_verified_positional_signals)
+    test_result = unittest.TestResult()
+    test_suite.run(test_result)
+    print("POSITIONAL_TEST_RESULT:", json.dumps({"run":test_result.testsRun,
+        "failures":len(test_result.failures), "errors":len(test_result.errors),
+        "passed":test_result.wasSuccessful()}), flush=True)
+    if test_result.wasSuccessful():
+        nse_history_collector.start()
+    else:
+        print("NSE_HISTORY_BLOCKED_BY_FAILED_TESTS", flush=True)
     port = int(os.environ.get("PORT", "10000"))
     ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
