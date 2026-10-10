@@ -238,3 +238,43 @@ def top_momentum_setups():
     if output["setups"]:
         output["status"] = "RESEARCH_SHORTLIST"
     return output
+
+
+@app.get("/api/v2/nifty200-stock-board")
+def nifty200_stock_board():
+    """Display the configured NIFTY 200 universe even when market is closed."""
+    from datetime import datetime, timedelta, time as clock_time
+    from zoneinfo import ZoneInfo
+    now = datetime.now(ZoneInfo("Asia/Kolkata"))
+    open_now = now.weekday() < 5 and clock_time(9, 15) <= now.time() < clock_time(15, 30)
+    stored = {}
+    error = None
+    try:
+        with sqlite3.connect(DB_PATH, timeout=5) as db:
+            db.row_factory = sqlite3.Row
+            stored = {r["symbol"]: dict(r) for r in db.execute(
+                "SELECT symbol,updated_at,price,momentum,signal,trend_5m FROM scanner_results")}
+    except sqlite3.Error:
+        error = "STOCK_DATA_UNAVAILABLE"
+    stocks = []
+    for symbol in sorted(NIFTY_200):
+        row = stored.get(symbol) or {}
+        fresh = False
+        try:
+            stamp = datetime.strptime(row["updated_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=ZoneInfo("Asia/Kolkata"))
+            fresh = open_now and stamp.date() == now.date() and timedelta(0) <= now - stamp <= timedelta(minutes=3)
+        except (ValueError, TypeError, KeyError):
+            pass
+        stocks.append({
+            "symbol": symbol, "last_price": row.get("price"),
+            "momentum_pct": row.get("momentum"),
+            "last_candle_ist": row.get("updated_at"),
+            "data_status": "LIVE_FRESH" if fresh else ("HISTORICAL" if row else "AWAITING_DATA"),
+            "signal": row.get("signal") if fresh else None,
+            "historical_signal": row.get("signal") if row and not fresh else None,
+        })
+    return {"status": error or ("MARKET_OPEN" if open_now else "MARKET_CLOSED"),
+            "as_of_ist": now.isoformat(), "universe_size": len(stocks),
+            "stocks_with_stored_data": sum(s["last_price"] is not None for s in stocks),
+            "stocks_with_fresh_data": sum(s["data_status"] == "LIVE_FRESH" for s in stocks),
+            "order_execution_enabled": False, "stocks": stocks}
