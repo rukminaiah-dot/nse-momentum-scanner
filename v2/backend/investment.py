@@ -4,6 +4,7 @@ import json
 import gzip
 import urllib.parse
 import urllib.request
+import urllib.error
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from functools import lru_cache
@@ -135,6 +136,9 @@ def cached_snapshot(bucket):
     def safe_analyze(symbol):
         try:
             return analyze(symbol, end)
+        except urllib.error.HTTPError as exc:
+            return {"symbol": symbol, "status": "DATA_UNAVAILABLE",
+                    "error": "HTTP_" + str(exc.code), "price": None}
         except Exception as exc:
             return {"symbol": symbol, "status": "DATA_UNAVAILABLE",
                     "error": type(exc).__name__, "price": None}
