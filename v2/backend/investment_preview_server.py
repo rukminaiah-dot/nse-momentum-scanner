@@ -151,5 +151,15 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
 if __name__ == "__main__":
+    # One asynchronous startup probe: inspect Render outbound access without
+    # blocking health checks or repeatedly downloading NSE files.
+    import threading
+    def startup_probe():
+        try:
+            result = probe_latest(days_back=3)
+            print("NSE_SOURCE_PROBE_RESULT:", json.dumps(result), flush=True)
+        except Exception as exc:
+            print("NSE_SOURCE_PROBE_ERROR:", type(exc).__name__, flush=True)
+    threading.Thread(target=startup_probe, daemon=True).start()
     port = int(os.environ.get("PORT", "10000"))
     ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
