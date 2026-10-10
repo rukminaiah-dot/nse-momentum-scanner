@@ -16,7 +16,11 @@ def direct_upstox_quotes():
     if not token:
         raise RuntimeError("UPSTOX_ACCESS_TOKEN_NOT_CONFIGURED")
     missing = [symbol for symbol in SYMBOLS if symbol not in NIFTY_200]
-    extra = nse_equity_keys() if missing else {}
+    try:
+        extra = nse_equity_keys() if missing else {}
+    except urllib.error.HTTPError as exc:
+        print("UPSTOX_INSTRUMENT_DOWNLOAD_FAILURE:", exc.code, flush=True)
+        raise
     keys = {symbol: NIFTY_200.get(symbol) or extra.get(symbol) for symbol in SYMBOLS}
     if any(not key for key in keys.values()):
         raise LookupError("WATCHLIST_INSTRUMENT_KEY_MISSING")
@@ -24,8 +28,12 @@ def direct_upstox_quotes():
     request = urllib.request.Request(
         "https://api.upstox.com/v3/market-quote/ltp?" + query,
         headers={"Accept": "application/json", "Authorization": "Bearer " + token})
-    with urllib.request.urlopen(request, timeout=18) as response:
-        payload = json.load(response)
+    try:
+        with urllib.request.urlopen(request, timeout=18) as response:
+            payload = json.load(response)
+    except urllib.error.HTTPError as exc:
+        print("UPSTOX_LTP_HTTP_FAILURE:", exc.code, flush=True)
+        raise
     if payload.get("status") != "success" or not isinstance(payload.get("data"), dict):
         raise ValueError("UNEXPECTED_UPSTOX_RESPONSE")
     data = payload["data"]
