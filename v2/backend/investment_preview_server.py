@@ -19,7 +19,7 @@ class Handler(BaseHTTPRequestHandler):
             payload = {"status": "ok", "mode": "isolated-investment-preview",
                        "upstox_configured": bool(os.getenv("UPSTOX_ACCESS_TOKEN"))}
             return self.respond(200, payload)
-        if self.path == "/api/v2/scanner-quotes":
+        if self.path in ("/api/v2/scanner-quotes", "/api/v2/scanner"):
             # Read-only public scanner endpoint; never forwards the Upstox token.
             url = "https://nse-momentum-scanner-api.onrender.com/api/v2/scanner"
             try:
@@ -43,7 +43,7 @@ class Handler(BaseHTTPRequestHandler):
                         continue
                     selected.append({"symbol": symbol, "price": price,
                                      "updated_at": row.get("updated_at") if isinstance(row.get("updated_at"), str) else None})
-                return self.respond(200, {"source": "existing scanner; not daily close", "quotes": selected})
+                return self.respond(200, selected if self.path == "/api/v2/scanner" else {"source": "existing scanner; not daily close", "quotes": selected})
             except (urllib.error.URLError, TimeoutError, ValueError, TypeError, OSError):
                 return self.respond(503, {"error": "SCANNER_DATA_UNAVAILABLE", "quotes": []})
         if self.path == "/api/v2/investment":
