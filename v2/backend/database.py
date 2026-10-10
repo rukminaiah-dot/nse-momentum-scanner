@@ -55,10 +55,11 @@ if __name__ == "__main__":
 def reset_scanner_results():
     con = sqlite3.connect(DB_PATH, timeout=10)
     con.execute("PRAGMA busy_timeout=10000")
+    # Never relabel a previous-session quote as fresh on restart.
+    # Only clear the signal; preserve the last genuine candle timestamp and price.
     con.execute("""
         UPDATE scanner_results
-        SET updated_at=datetime('now','+5 hours','+30 minutes'),
-            signal='WAITING'
+        SET signal='WAITING'
     """)
     con.commit()
     con.close()
