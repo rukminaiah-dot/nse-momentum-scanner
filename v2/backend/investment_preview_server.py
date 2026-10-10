@@ -7,6 +7,11 @@ from zoneinfo import ZoneInfo
 from v2.backend.investment import cached_snapshot
 
 class Handler(BaseHTTPRequestHandler):
+    def do_HEAD(self):
+        self.send_response(200 if self.path in ('/', '/long-term', '/health') else 404)
+        self.send_header('Content-Length', '0')
+        self.end_headers()
+
     def do_GET(self):
         if self.path == "/health":
             payload = {"status": "ok", "mode": "isolated-investment-preview",
