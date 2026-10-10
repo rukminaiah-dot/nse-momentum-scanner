@@ -39,6 +39,39 @@ class InvestmentTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Insufficient"):
                 inv.analyze("POLYCAB", date(2026, 10, 9))
 
+    def test_excludes_future_dated_candles(self):
+        rows = [
+            ["2026-10-09T00:00:00+05:30", 1, 2, 1, 2, 100, 0],
+            ["2026-10-12T00:00:00+05:30", 1, 2, 1, 999, 100, 0],
+        ]
+        with patch.dict("os.environ", {"UPSTOX_ACCESS_TOKEN": "test"}):
+            with patch.object(inv, "NIFTY_200", {"POLYCAB": "NSE_EQ|TEST"}):
+                from unittest.mock import MagicMock
+                import json
+                from io import BytesIO
+                response = MagicMock()
+                response.__enter__.return_value = BytesIO(json.dumps(
+                    {"data": {"candles": rows}}).encode())
+                with patch.object(inv.urllib.request, "urlopen", return_value=response):
+                    actual = inv.candles_for("POLYCAB", date(2026, 10, 9))
+        self.assertEqual(len(actual), 1)
+        self.assertEqual(actual[0][4], 2)
+
+    def test_weekly_ema_uses_completed_weeks(self):
+        from datetime import timedelta
+        end = date(2026, 10, 8)  # Thursday, incomplete week
+        start = end - timedelta(days=350)
+        rows = []
+        for i in range(351):
+            day = start + timedelta(days=i)
+            if day.weekday() < 5:
+                rows.append([day.isoformat() + "T00:00:00+05:30",
+                             100, 101, 99, 100 if day.isocalendar()[:2] != end.isocalendar()[:2] else 1000,
+                             1000, 0])
+        with patch.object(inv, "candles_for", return_value=rows):
+            result = inv.analyze("POLYCAB", end)
+        self.assertAlmostEqual(result["weekly_ema20"], 100)
+
     def test_daily_candle_screen_never_claims_live(self):
         dates = [date(2026, 10, 9).toordinal() - 299 + i for i in range(300)]
         rows = [[date.fromordinal(day).isoformat() + "T00:00:00+05:30",
