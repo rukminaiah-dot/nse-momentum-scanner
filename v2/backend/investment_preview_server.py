@@ -57,6 +57,32 @@ def direct_upstox_quotes():
         output.append({"symbol": symbol, "price": price, "updated_at": updated_at})
     return output
 
+def yahoo_daily_quotes():
+    """Independent, best-effort Yahoo Finance daily historical closes; not live."""
+    from datetime import timezone
+    output = []
+    for symbol in SYMBOLS:
+        ticker = symbol.replace("&", "%26") + ".NS"
+        url = "https://query1.finance.yahoo.com/v8/finance/chart/" + ticker + "?range=7d&interval=1d"
+        request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
+        try:
+            with urllib.request.urlopen(request, timeout=8) as response:
+                data = json.load(response)
+            result = data["chart"]["result"][0]
+            timestamps = result.get("timestamp") or []
+            closes = result["indicators"]["quote"][0]["close"]
+            valid = [(ts, price) for ts, price in zip(timestamps, closes)
+                     if isinstance(price, (int, float)) and not isinstance(price, bool) and 0 < price < 10000000]
+            if not valid:
+                continue
+            ts, price = valid[-1]
+            output.append({"symbol": symbol, "price": round(price, 2),
+                           "updated_at": datetime.fromtimestamp(ts, tz=timezone.utc).isoformat(),
+                           "source": "Yahoo Finance daily historical close", "quote_type": "DAILY_CLOSE_NOT_LIVE"})
+        except (urllib.error.URLError, TimeoutError, ValueError, TypeError, KeyError, IndexError, OSError) as exc:
+            print("YAHOO_DAILY_UNAVAILABLE:", symbol, type(exc).__name__, flush=True)
+    return output
+
 
 class Handler(BaseHTTPRequestHandler):
     def do_HEAD(self):
@@ -70,18 +96,23 @@ class Handler(BaseHTTPRequestHandler):
                        "upstox_configured": bool(os.getenv("UPSTOX_ACCESS_TOKEN"))}
             return self.respond(200, payload)
         if self.path in ("/api/v2/watchlist-quotes", "/api/v2/watchlist-diagnostics"):
+            upstox_error = None
             try:
                 quotes = direct_upstox_quotes()
-                if self.path == "/api/v2/watchlist-diagnostics":
-                    return self.respond(200, {"source": "upstox_v3_direct",
-                                              "requested": len(SYMBOLS), "valid": len(quotes),
-                                              "missing": [s for s in SYMBOLS if s not in {q["symbol"] for q in quotes}]})
-                return self.respond(200, quotes)
+                for quote in quotes:
+                    quote["source"] = "Upstox V3 LTP"
             except Exception as exc:
-                status = exc.code if isinstance(exc, urllib.error.HTTPError) else None
-                print("WATCHLIST_UPSTOX_FAILURE:", type(exc).__name__, "http_status:", status, flush=True)
-                return self.respond(503, {"error": "UPSTOX_QUOTES_UNAVAILABLE",
-                                           "upstox_http_status": status, "quotes": []})
+                upstox_error = exc.code if isinstance(exc, urllib.error.HTTPError) else type(exc).__name__
+                print("WATCHLIST_UPSTOX_FAILURE:", type(exc).__name__, "http_status:", upstox_error, flush=True)
+                quotes = []
+            missing = set(SYMBOLS) - {q["symbol"] for q in quotes}
+            if missing:
+                quotes.extend(q for q in yahoo_daily_quotes() if q["symbol"] in missing)
+            if self.path == "/api/v2/watchlist-diagnostics":
+                return self.respond(200, {"requested": len(SYMBOLS), "valid": len(quotes),
+                    "missing": [s for s in SYMBOLS if s not in {q["symbol"] for q in quotes}],
+                    "upstox_error": upstox_error, "sources": sorted({q["source"] for q in quotes})})
+            return self.respond(200, quotes)
         if self.path == "/api/v2/investment":
             now = datetime.now(ZoneInfo("Asia/Kolkata"))
             return self.respond(200, cached_snapshot(int(now.timestamp() // 900)))
