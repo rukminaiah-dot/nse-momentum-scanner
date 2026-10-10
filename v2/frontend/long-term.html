@@ -1,0 +1,87 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Long-Term Investment Watchlist</title>
+<style>
+:root{color-scheme:dark;--bg:#0a1020;--surface:#121d31;--border:#263750;--text:#e9f1ff;--muted:#9badc8;--accent:#67d7d0}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 15% 0%,#173452 0%,transparent 42%),var(--bg);color:var(--text);font:15px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}
+.shell{max-width:1260px;margin:auto;padding:24px 22px 56px}.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:8px 0 30px}.brand{font-weight:800;letter-spacing:.3px;font-size:18px}.brand span{color:var(--accent)}a{color:#93dcff;text-decoration:none}a:hover{text-decoration:underline}.back{font-size:13px;color:var(--muted)}
+.hero{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap;margin-bottom:26px}.eyebrow{font-size:12px;text-transform:uppercase;letter-spacing:2px;color:var(--accent);font-weight:800}h1{font-size:clamp(29px,4vw,46px);line-height:1.12;letter-spacing:-1.5px;margin:8px 0 12px}.subtitle{color:var(--muted);max-width:720px;margin:0}.refresh{background:var(--accent);color:#092127;border:0;border-radius:12px;padding:12px 19px;font-weight:800;cursor:pointer}.refresh:hover{filter:brightness(1.1)}.refresh:focus-visible,a:focus-visible{outline:3px solid #fff;outline-offset:3px}
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin:22px 0}.metric,.panel{background:rgba(18,29,49,.94);border:1px solid var(--border);border-radius:16px}.metric{padding:19px}.metric-label{color:var(--muted);font-size:12px;font-weight:700;letter-spacing:.4px;text-transform:uppercase}.metric-value{font-size:27px;font-weight:850;margin-top:5px}.metric-hint{color:var(--muted);font-size:12px}.panel{padding:20px;margin:16px 0}.section-title{font-size:18px;font-weight:800;margin:0 0 5px}.section-subtitle{font-size:13px;color:var(--muted);margin:0 0 16px}.note{border-left:3px solid var(--accent);background:#152b3c;border-radius:10px;padding:13px 16px;margin:16px 0;color:#c7deef}.warn{color:#f5d58d}.error{color:#fba9b2}.good{color:#8ce3ba}
+table{border-collapse:collapse;width:100%;min-width:700px}th,td{padding:15px 12px;border-bottom:1px solid var(--border);text-align:left}th{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);font-weight:800}td:first-child{font-weight:800}tr:last-child td{border-bottom:0}tbody tr:hover{background:#1a2b43}.table-scroll{overflow-x:auto}#source,#coverage,#diagnostics{font-size:13px;color:var(--muted)}#diagnostics{color:#f5d58d}.footnote{font-size:12px;color:var(--muted);margin-top:18px}
+@media(max-width:700px){.shell{padding:15px 14px 35px}.topbar{padding-bottom:18px}.hero{gap:16px}.metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.metric{padding:14px}.metric-value{font-size:24px}.panel{padding:14px}th,td{padding:12px 10px}}
+</style>
+</head><body><div class="shell">
+<nav class="topbar" aria-label="Primary"><div class="brand">NSE <span>Momentum</span> <span style="color:#e9f1ff;font-weight:500">/ Investments</span></div><a class="back" href="https://nse-momentum-scanner-5rls.onrender.com/">← Back to 200-stock scanner</a></nav>
+<header class="hero"><div><div class="eyebrow">Investment research workspace</div><h1>Long-Term Watchlist</h1><p class="subtitle">Track your ten selected companies in one calm, mobile-friendly dashboard. Every displayed price comes from the existing scanner feed, with clear freshness labels.</p></div><button class="refresh" onclick="load()" type="button">↻ Refresh prices</button></header>
+<section class="metrics" aria-label="Watchlist summary"><div class="metric"><div class="metric-label">Watchlist</div><div class="metric-value">10</div><div class="metric-hint">Selected stocks</div></div><div class="metric"><div class="metric-label">Scanner coverage</div><div class="metric-value">8 / 10</div><div class="metric-hint">Two awaiting verified feed</div></div><div class="metric"><div class="metric-label">Investment horizon</div><div class="metric-value">~3 mo</div><div class="metric-hint">Research guideline</div></div><div class="metric"><div class="metric-label">Max planned risk</div><div class="metric-value">₹2,500</div><div class="metric-hint">Per trade, not an order</div></div></section>
+<div class="note">Target guideline: 10–18% · Stop-loss guideline: 4–6%. These are planning assumptions, not guaranteed returns or automatic trading instructions.</div>
+<section class="panel"><h2 class="section-title">Price monitor</h2><p class="section-subtitle">Verified scanner snapshots only. Stale data remains visible as historical information, never as a live quote.</p><p id="source" role="status" aria-live="polite">Loading existing scanner data...</p><div class="table-scroll"><table><thead><tr><th>Symbol</th><th>Last recorded price</th><th>Exchange / scanner time</th><th>Feed status</th></tr></thead><tbody id="stocks"></tbody></table></div><p id="coverage"></p><p id="diagnostics" role="status"></p></section>
+<section class="panel"><h2 class="section-title">Data transparency</h2><p class="section-subtitle">Eight watchlist stocks are included in the current 200-stock scanner universe. COROMANDEL and DALBHARAT remain on the watchlist but are not subscribed to this feed.</p><p class="footnote">This dashboard is read-only. It does not modify scanner subscriptions, place orders, or use unavailable Upstox historical candles. Missing or stale prices must not be used as trade signals.</p></section>
+</div>
+<script>
+const names=['POLYCAB','LT','COROMANDEL','BEL','APLAPOLLO','MAXHEALTH','M&M','CUMMINSIND','DALBHARAT','BDL'];
+const keys={POLYCAB:'NSE_EQ|INE455K01017',LT:'NSE_EQ|INE018A01030',BEL:'NSE_EQ|INE263A01024',APLAPOLLO:'NSE_EQ|INE702C01027',MAXHEALTH:'NSE_EQ|INE027H01010','M&M':'NSE_EQ|INE101A01026',CUMMINSIND:'NSE_EQ|INE298A01020',BDL:'NSE_EQ|INE171Z01026'};
+const byKey=Object.fromEntries(Object.entries(keys).map(([name,key])=>[key,name]));
+const fmt=x=>typeof x==='number'&&Number.isFinite(x)?x.toFixed(2):'—';
+function validTime(raw){
+ if(typeof raw!=='string')return null;
+ const normalized=/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw)?raw.replace(' ','T')+'+05:30':raw;
+ if(!/(?:Z|[+-]\d{2}:?\d{2})$/.test(normalized))return null;
+ const time=Date.parse(normalized);
+ return Number.isFinite(time)?time:null;
+}
+async function load(){
+ const source=document.getElementById('source'),coverage=document.getElementById('coverage'),diagnostics=document.getElementById('diagnostics'),body=document.getElementById('stocks');
+ source.textContent='Loading selected stocks from existing NSE 200-stock scanner...';
+ body.replaceChildren();
+ try{
+  const response=await fetch('/api/v2/scanner',{cache:'no-store'});
+  if(!response.ok)throw Error('Scanner API HTTP '+response.status);
+  const rows=await response.json();
+  if(!Array.isArray(rows))throw Error('Invalid scanner API response');
+  const scanner={};
+  const totalRows=rows.length;
+  let matchingRows=0,validRows=0;
+  for(const item of rows){
+   if(!item||typeof item!=='object')continue;
+   const name=byKey[item.symbol]||item.symbol;
+   if(!names.includes(name))continue;
+   matchingRows++;
+   const price=Number(item.price),time=validTime(item.updated_at);
+   if(!Number.isFinite(price)||price<=0||time===null||time>Date.now()+60000)continue;
+   validRows++;
+   if(!scanner[name]||time>scanner[name].time)scanner[name]={price,time,raw:item.updated_at};
+  }
+  let fresh=0,stale=0;
+  for(const name of names){
+   const item=scanner[name],available=Boolean(item&&Date.now()-item.time<=15*60*1000);
+   if(available)fresh++;else if(item)stale++;
+   const status=!keys[name]?'NOT_IN_SCANNER_UNIVERSE':available?'SCANNER_QUOTE_FRESH':item?'SCANNER_QUOTE_STALE':'SCANNER_QUOTE_UNAVAILABLE';
+   const values=[name,item?'₹'+fmt(item.price)+(available?' (fresh)':' (stale)'):'—',item?item.raw:'—',status];
+   const tr=document.createElement('tr');
+   for(const value of values){const td=document.createElement('td');td.textContent=value;tr.appendChild(td);}
+   body.appendChild(tr);
+  }
+  source.textContent='Existing NSE 200-stock scanner feed (not Upstox historical candles). Checked: '+new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata'});
+  coverage.textContent='Scanner API records: '+totalRows+'; matching watchlist records: '+matchingRows+'; valid price/timestamp records: '+validRows+'. Fresh quotes: '+fresh+'; stale quotes: '+stale+'.';
+  diagnostics.textContent='Preview quote records: '+totalRows+'. Checking production scanner coverage...';
+  try {
+   const diagResponse=await fetch('/api/v2/scanner-diagnostics',{cache:'no-store'});
+   if(diagResponse.ok){
+    const d=await diagResponse.json();
+    diagnostics.textContent='Production scanner rows: '+d.upstream_rows+'; matched watchlist rows: '+d.watchlist_rows+'; invalid/missing watchlist prices: '+d.invalid_price_rows+'; valid watchlist prices: '+d.valid_watchlist_rows+'.';
+   }
+  }catch(_error) { /* Optional diagnostic; no impact on quotes. */ }
+ }catch(error){
+  source.textContent='Scanner data unavailable';
+  coverage.textContent='No verified scanner quotes available.';
+  diagnostics.textContent='The upstream scanner is temporarily unavailable ('+error.message+'). Prices are intentionally hidden until verified. The watchlist remains accessible.';
+  for(const name of names){
+   const tr=document.createElement('tr');
+   const values=[name,'—','—',keys[name]?'FEED_UNAVAILABLE':'NOT_IN_SCANNER_UNIVERSE'];
+   for(const value of values){const td=document.createElement('td');td.textContent=value;tr.appendChild(td);}
+   body.appendChild(tr);
+  }
+ }
+}
+load();
+</script></body></html>

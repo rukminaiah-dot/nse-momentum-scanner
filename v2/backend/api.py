@@ -177,3 +177,17 @@ def nifty200_feed_health():
     if base["market_session"] == "CLOSED" and base["status"] == "STALE_REPORT":
         base["status"] = "MARKET_CLOSED_TICK_REPORT_STALE"
     return base
+
+
+# Read-only, medium-term investment research; isolated from intraday trades.
+@app.get("/api/v2/investment")
+def investment_watchlist():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from .investment import cached_snapshot
+    now = datetime.now(ZoneInfo("Asia/Kolkata"))
+    return cached_snapshot(int(now.timestamp() // 900))
+
+@app.get("/long-term")
+def long_term_page():
+    return FileResponse("v2/frontend/long-term.html")
