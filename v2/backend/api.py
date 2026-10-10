@@ -86,6 +86,11 @@ def get_daily_trade_history():
 def history_page():
     return FileResponse("v2/frontend/history.html")
 
+@app.get("/smart-option-buyer")
+def smart_option_buyer_page():
+    return FileResponse("v2/frontend/smart-option-buyer.html")
+
+
 @app.get("/expiry-momentum")
 def expiry_momentum_page():
     return FileResponse("v2/frontend/expiry-momentum.html")
