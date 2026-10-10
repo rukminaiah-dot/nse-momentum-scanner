@@ -101,6 +101,17 @@ class Handler(BaseHTTPRequestHandler):
                         continue
                     selected.append({"symbol": symbol, "price": price,
                                      "updated_at": row.get("updated_at") if isinstance(row.get("updated_at"), str) else None})
+                # Scanner universe excludes COROMANDEL and DALBHARAT.
+                # Supplement missing symbols from Upstox even when scanner responds 200.
+                missing_symbols = set(SYMBOLS) - {item["symbol"] for item in selected}
+                if missing_symbols:
+                    try:
+                        direct = direct_upstox_quotes()
+                        selected.extend(item for item in direct if item["symbol"] in missing_symbols)
+                    except Exception as exc:
+                        status = exc.code if isinstance(exc, urllib.error.HTTPError) else None
+                        print("UPSTOX_SUPPLEMENT_FAILURE:", type(exc).__name__,
+                              "http_status:", status, flush=True)
                 if self.path == "/api/v2/scanner-diagnostics":
                     return self.respond(200, {"upstream_rows": len(rows), "watchlist_rows": matched, "invalid_price_rows": invalid_price, "valid_watchlist_rows": len(selected)})
                 return self.respond(200, selected if self.path == "/api/v2/scanner" else {"source": "existing scanner; not daily close", "quotes": selected})
