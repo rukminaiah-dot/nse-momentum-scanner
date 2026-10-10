@@ -126,3 +126,44 @@ def get_expiry_signals():
             "updated_at": row.get("updated_at") if row else None,
         })
     return output
+
+
+@app.get("/api/v2/nifty200-feed-health")
+def nifty200_feed_health():
+    """Read-only feed coverage, based on actual scanner-process ticks."""
+    import json
+    import time
+    from pathlib import Path
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    now = time.time()
+    ist = datetime.now(ZoneInfo("Asia/Kolkata"))
+    base = {
+        "universe_size": len(NIFTY_200),
+        "checked_at_ist": ist.isoformat(),
+        "market_session": "OPEN" if ist.weekday() < 5 and (9, 15) <= (ist.hour, ist.minute) <= (15, 30) else "CLOSED",
+        "recent_tick_window_seconds": 120,
+        "order_execution_enabled": False,
+    }
+    try:
+        data = json.loads(Path("/tmp/nse_200_feed_health.json").read_text())
+        observed = float(data["observed_at_epoch"])
+        seen = data["last_tick_epoch"]
+        if not isinstance(seen, dict) or observed > now + 30:
+            raise ValueError("Invalid feed-health snapshot")
+        valid_keys = set(NIFTY_200.values())
+        observed_keys = valid_keys.intersection(seen)
+        recent = sum(1 for k in observed_keys
+                     if isinstance(seen[k], (int, float))
+                     and 0 <= now - seen[k] <= 120)
+        base.update(
+            status="REPORTING" if now - observed <= 30 else "STALE_REPORT",
+            snapshot_age_seconds=round(max(0, now - observed), 1),
+            stocks_ever_observed=len(observed_keys),
+            stocks_with_recent_ticks=recent,
+            stocks_without_recent_ticks=len(valid_keys) - recent,
+        )
+    except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
+        base.update(status="NO_FEED_REPORT", stocks_ever_observed=0,
+                    stocks_with_recent_ticks=0, stocks_without_recent_ticks=len(NIFTY_200))
+    return base
