@@ -9,7 +9,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from v2.backend.investment import cached_snapshot, SYMBOLS, NIFTY_200, nse_equity_keys
-from v2.backend.positional_breakouts import analyze_watchlist
 from functools import lru_cache
 
 def direct_upstox_quotes():
@@ -88,7 +87,7 @@ def yahoo_daily_quotes():
 
 @lru_cache(maxsize=2)
 def cached_breakouts(bucket):
-    return analyze_watchlist(SYMBOLS)
+    return [{"symbol": s, "status": "AWAITING_SCREENER_DATA", "entry": None, "stop": None, "target_2r": None, "target_3r": None} for s in SYMBOLS]
 
 class Handler(BaseHTTPRequestHandler):
     def do_HEAD(self):
@@ -113,7 +112,7 @@ class Handler(BaseHTTPRequestHandler):
                 quotes = []
             missing = set(SYMBOLS) - {q["symbol"] for q in quotes}
             if missing:
-                quotes.extend(q for q in yahoo_daily_quotes() if q["symbol"] in missing)
+                pass  # Yahoo Finance disabled by user request
             if self.path == "/api/v2/watchlist-diagnostics":
                 return self.respond(200, {"requested": len(SYMBOLS), "valid": len(quotes),
                     "missing": [s for s in SYMBOLS if s not in {q["symbol"] for q in quotes}],
