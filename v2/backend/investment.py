@@ -1,6 +1,7 @@
 """Read-only medium-term investment research. No trading or fabricated quotes."""
 import os
 import json
+import gzip
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta
@@ -32,11 +33,21 @@ def rsi(values, n=14):
         down = (down * (n - 1) + l) / n
     return 100 if down == 0 else 100 - 100 / (1 + up / down)
 
+@lru_cache(maxsize=1)
+def nse_equity_keys():
+    url = "https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz"
+    request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(request, timeout=20) as response:
+        instruments = json.loads(gzip.decompress(response.read()))
+    return {row["trading_symbol"]: row["instrument_key"] for row in instruments
+            if row.get("instrument_type") == "EQ"
+            and row.get("segment") == "NSE_EQ"}
+
 def candles_for(symbol, end):
     token = os.getenv("UPSTOX_ACCESS_TOKEN", "").strip()
     if not token:
         raise RuntimeError("Upstox access token not configured")
-    key = NIFTY_200.get(symbol)
+    key = NIFTY_200.get(symbol) or nse_equity_keys().get(symbol)
     if not key:
         raise LookupError("Instrument unavailable in NIFTY_200 universe")
     start = end - timedelta(days=430)
