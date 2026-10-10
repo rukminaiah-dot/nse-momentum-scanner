@@ -26,7 +26,7 @@ class InvestmentTests(unittest.TestCase):
                             for s in result["stocks"]))
 
     def test_daily_candle_screen_never_claims_live(self):
-        dates = [date(2025, 1, 1).toordinal() + i for i in range(300)]
+        dates = [date(2026, 10, 9).toordinal() - 299 + i for i in range(300)]
         rows = [[date.fromordinal(day).isoformat() + "T00:00:00+05:30",
                  100+i, 101+i, 99+i, 100+i, 1000, 0]
                 for i, day in enumerate(dates)]
