@@ -3,7 +3,7 @@
 <style>body{background:#10131a;color:#eef2ff;font:15px Arial;margin:22px}a{color:#7dd3fc}table{border-collapse:collapse;width:100%;min-width:800px}td,th{padding:12px;border-bottom:1px solid #374151;text-align:left}th{color:#93c5fd}main{overflow:auto}.note{background:#1c2230;padding:15px;border-radius:10px;margin:15px 0}.good{color:#86efac}.warn{color:#fcd34d}.error{color:#fca5a5}</style>
 </head><body><a href="/">Back to NSE Momentum Scanner</a><h1>Long-Term Investment Watchlist</h1>
 <div class="note">Research only. Approximately three-month investment horizon. Target guideline 10-18%, stop-loss guideline 4-6%, maximum planned risk ₹2,500 per trade. These are not guaranteed returns or automatic orders.</div>
-<p id="source">Checking Upstox historical daily candles...</p><button onclick="load()">Refresh</button>
+<p id="source" role="status" aria-live="polite">Checking Upstox historical daily candles...</p><button onclick="load()">Refresh</button><p id="coverage"></p>
 <main><table><thead><tr><th>Symbol</th><th>Daily close</th><th>Candle timestamp</th><th>EMA20</th><th>EMA50</th><th>Weekly EMA20</th><th>RSI14</th><th>Relative volume</th><th>MACD</th><th>Screen status</th></tr></thead><tbody id="stocks"></tbody></table></main>
 <p>Daily closes are not live quotes. Technical screens require confirmation of market trend, fundamentals, and entry price. Unavailable data must never be treated as a buy signal.</p>
 <script>
@@ -17,6 +17,8 @@ if(!res.ok)throw Error('HTTP '+res.status);
 const data=await res.json();
 document.getElementById('source').textContent='Upstox historical daily closes (NOT LIVE). Snapshot: '+data.as_of_ist;
 const map=Object.fromEntries(data.stocks.map(x=>[x.symbol,x]));
+const available=data.stocks.filter(x=>x.price!=null&&x.status!=='DATA_UNAVAILABLE').length;
+document.getElementById('coverage').textContent='Verified historical candle responses: '+available+' of '+names.length+'. Missing data is not a trade signal.';
 document.getElementById('stocks').replaceChildren();
 for(const name of names){
 const s=map[name]||{status:'DATA_UNAVAILABLE'};
@@ -25,7 +27,7 @@ const tr=document.createElement('tr');
 for(const value of values){const td=document.createElement('td');td.textContent=value;tr.appendChild(td);}
 document.getElementById('stocks').appendChild(tr);
 }
-}catch(e){document.getElementById('source').textContent='Data unavailable: '+e.message;document.getElementById('stocks').replaceChildren();}
+}catch(e){document.getElementById('source').textContent='Data unavailable: '+e.message;document.getElementById('stocks').replaceChildren();document.getElementById('coverage').textContent='0 of 10 stocks available. No buy signals.';}
 }
 load();
 </script></body></html>
