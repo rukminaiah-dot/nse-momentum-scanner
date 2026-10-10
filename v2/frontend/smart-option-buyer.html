@@ -14,11 +14,11 @@ h1{font-size:24px}.muted{color:#a8b5c9}.card{background:#1e293b;border-radius:14
 <h1>Smart Option Buyer</h1>
 <p class="muted">NIFTY 50 + SENSEX | Research and manual trading only</p>
 <p class="tag">NO AUTOMATIC ORDERS</p>
-<section class="card"><h2>Capital & Risk</h2><div class="grid">
-<div>Capital<div class="value" id="capital">—</div></div>
-<div>Max investment<div class="value" id="investment">—</div></div>
-<div>Max planned loss<div class="value" id="risk">—</div></div>
-<div>Minimum reward:risk<div class="value" id="rr">—</div></div>
+<section class="card"><h2>Flexible Capital & Risk Review</h2><div class="grid">
+<div>Capital<div class="value" id="capital">Flexible</div></div>
+<div>Investment amount<div class="value" id="investment">User selected</div></div>
+<div>Risk budget<div class="value" id="risk">User reviewed</div></div>
+<div>Reward:risk<div class="value" id="rr">Review each setup</div></div>
 </div><p class="muted small">Planned loss is not guaranteed. Slippage and rapid moves can increase actual losses.</p></section>
 <div id="cards">
 <section class="card" data-index="NIFTY 50"><h2>NIFTY 50</h2><p class="tag status">NO TRADE</p><p class="reason muted">Loading…</p><p class="prediction">Prediction: Unavailable</p><p class="confirmation">Confirmation: WAIT</p><p class="candidate">Option: None</p><p class="index-price">Last stored index price: Unavailable</p><p class="candle-time muted">Candle time (IST): Unavailable</p><p class="data-status tag">Data status: UNAVAILABLE</p></section>
@@ -47,10 +47,10 @@ async function refresh(){
   if(!response.ok)throw Error('API unavailable');
   const data=await response.json();
   if(!data||!Array.isArray(data.indices)||data.mode!=='MANUAL_RESEARCH_ONLY'||data.order_execution_enabled!==false)throw Error('Invalid safety status');
-  document.getElementById('capital').textContent=rupees(data.capital_inr);
-  document.getElementById('investment').textContent=rupees(data.maximum_investment_inr);
-  document.getElementById('risk').textContent=rupees(data.maximum_planned_loss_inr);
-  document.getElementById('rr').textContent='1:'+String(data.minimum_reward_risk??'—');
+  document.getElementById('capital').textContent=data.capital_inr==null?'Flexible':rupees(data.capital_inr);
+  document.getElementById('investment').textContent=data.maximum_investment_inr==null?'User selected':rupees(data.maximum_investment_inr);
+  document.getElementById('risk').textContent=data.maximum_planned_loss_inr==null?'Review per trade':rupees(data.maximum_planned_loss_inr);
+  document.getElementById('rr').textContent=data.minimum_reward_risk==null?'Review each setup':'1:'+String(data.minimum_reward_risk);
   for(const name of names){
    const card=document.querySelector('[data-index="'+name+'"]');
    const row=data.indices.find(item=>item&&item.index===name);
