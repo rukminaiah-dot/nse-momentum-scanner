@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 from v2.backend.investment import cached_snapshot, SYMBOLS, NIFTY_200, nse_equity_keys
 from functools import lru_cache
 from v2.backend.investment_watchlist_57 import RESEARCH_UNIVERSE
+from v2.backend.nse_daily_source import probe_latest
 
 def direct_upstox_quotes():
     """Read-only fallback: one Upstox V3 request for the ten watchlist symbols."""
@@ -97,6 +98,8 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        if self.path == "/api/v2/data-source-probe":
+            return self.respond(200, probe_latest(days_back=3))
         if self.path == "/health":
             payload = {"status": "ok", "mode": "isolated-investment-preview",
                        "upstox_configured": bool(os.getenv("UPSTOX_ACCESS_TOKEN"))}
