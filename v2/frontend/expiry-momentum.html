@@ -5,77 +5,80 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Expiry Momentum | NSE Scanner V2</title>
   <style>
-    body {
-      margin: 0; padding: 20px;
-      background: #0f172a; color: #f8fafc;
-      font-family: Arial, sans-serif;
-    }
+    body { margin: 0; padding: 20px; background: #0f172a; color: #f8fafc; font-family: Arial, sans-serif; }
     h1 { font-size: 24px; }
-    .subtitle { color: #94a3b8; }
-    .card {
-      background: #1e293b; border-radius: 14px;
-      padding: 20px; margin: 18px 0;
-    }
+    .subtitle, .muted { color: #94a3b8; }
+    .muted { font-size: 14px; }
+    .card { background: #1e293b; border-radius: 14px; padding: 20px; margin: 18px 0; }
     .status { color: #fbbf24; font-weight: bold; }
-    .muted { color: #94a3b8; font-size: 14px; }
-    a { color: #38bdf8; }
   </style>
 </head>
 <body>
   <h1>Expiry Momentum Scanner</h1>
   <p class="subtitle">NIFTY 50 + SENSEX | Manual Trading</p>
 
-  <div class="card">
+  <div class="card" data-index="NIFTY 50">
     <h2>NIFTY 50</h2>
     <p>Weekly expiry: Tuesday</p>
     <p class="status">NO TRADE</p>
-    <p class="muted">Live expiry signals not connected yet.</p>
+    <p class="reason muted">Reason: Loading safety checks…</p>
+    <p class="live-price muted">Index: Unavailable</p>
+    <p class="candle muted">Candle: Unavailable</p>
   </div>
 
-  <div class="card">
+  <div class="card" data-index="SENSEX">
     <h2>SENSEX</h2>
     <p>Weekly expiry: Thursday</p>
     <p class="status">NO TRADE</p>
-    <p class="muted">Live expiry signals not connected yet.</p>
+    <p class="reason muted">Reason: Loading safety checks…</p>
+    <p class="live-price muted">Index: Unavailable</p>
+    <p class="candle muted">Candle: Unavailable</p>
   </div>
 
   <p class="muted">Observation window: 2:00–3:20 PM IST</p>
   <p class="muted">Research mode only. No automatic orders.</p>
+
+  <script>
+    const indices = ['NIFTY 50', 'SENSEX'];
+
+    function showUnavailable(reason) {
+      for (const name of indices) {
+        const card = document.querySelector('[data-index="' + name + '"]');
+        card.querySelector('.status').textContent = 'NO TRADE';
+        card.querySelector('.reason').textContent = 'Reason: ' + reason;
+        card.querySelector('.live-price').textContent = 'Index: Unavailable';
+        card.querySelector('.candle').textContent = 'Candle: Unavailable';
+      }
+    }
+
+    async function updateExpirySignals() {
+      try {
+        const response = await fetch('/api/v2/expiry-signals', { cache: 'no-store' });
+        if (!response.ok) throw new Error('API unavailable');
+        const data = await response.json();
+        if (!Array.isArray(data)) throw new Error('Invalid API response');
+
+        for (const name of indices) {
+          const card = document.querySelector('[data-index="' + name + '"]');
+          const row = data.find(item => item && item.index === name);
+          card.querySelector('.status').textContent = 'NO TRADE';
+          card.querySelector('.reason').textContent = 'Reason: ' +
+            (row && typeof row.reason === 'string' ? row.reason.replaceAll('_', ' ') : 'DATA UNAVAILABLE');
+          const price = row && row.price != null ? Number(row.price) : NaN;
+          card.querySelector('.live-price').textContent = Number.isFinite(price)
+            ? 'Index: ' + price.toLocaleString('en-IN')
+            : 'Index: Unavailable';
+          card.querySelector('.candle').textContent = 'Candle: ' +
+            (row && row.updated_at ? String(row.updated_at) : 'Unavailable');
+        }
+      } catch (error) {
+        showUnavailable('API UNAVAILABLE');
+        console.warn('Expiry signal update failed:', error);
+      }
+    }
+
+    updateExpirySignals();
+    setInterval(updateExpirySignals, 5000);
+  </script>
 </body>
 </html>
-
-<script>
-async function updateIndexPrices() {
-  try {
-    const response = await fetch('/api/v2/scanner', {cache: 'no-store'});
-    if (!response.ok) throw new Error('API unavailable');
-
-    const data = await response.json();
-
-    for (const name of ['NIFTY 50', 'SENSEX']) {
-      const item = data.find(row => row.symbol === name);
-      const card = [...document.querySelectorAll('.card')]
-        .find(el => el.querySelector('h2')?.textContent.trim() === name);
-
-      if (!card) continue;
-
-      let display = card.querySelector('.live-price');
-      if (!display) {
-        display = document.createElement('p');
-        display.className = 'live-price';
-        card.querySelector('h2').after(display);
-      }
-
-      display.textContent = item && item.price != null
-        ? 'Index: ' + Number(item.price).toLocaleString('en-IN') +
-          ' | Candle: ' + (item.updated_at || 'Unknown')
-        : 'Price unavailable';
-    }
-  } catch (error) {
-    console.warn('Index price update failed:', error);
-  }
-}
-
-updateIndexPrices();
-setInterval(updateIndexPrices, 5000);
-</script>
