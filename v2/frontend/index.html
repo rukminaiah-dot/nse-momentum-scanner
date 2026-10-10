@@ -20,7 +20,7 @@ small{color:#aaa}
 <div id="feed-status" class="card">Checking market and feed freshness…</div>
 <h3>Market Index Signals</h3>
 <div id="indices">Loading live indices...</div>
-<h3>Top 5 BUY Stocks</h3>
+<h3>Top 5 Verified Momentum Setups</h3>
 <div id="scanner">Waiting for live market data...</div>
 <h3>Trades</h3>
 <div id="trades">Loading trades...</div>
@@ -82,9 +82,14 @@ async function loadScanner(){
       Suggestion: <b class="${cls}">${signal}</b><br>
       <small>${x?.updated_at || ""}</small></div>`;
   }).join("");
-  const eligible=closed?[]:liveRows.filter(s=>s.signal==="BUY"&&!["NIFTY 50","BANK NIFTY","SENSEX"].includes(s.symbol));
-  eligible.sort((a,b)=>Number(b.momentum||0)-Number(a.momentum||0));
-  document.getElementById("scanner").innerHTML=eligible.length?eligible.slice(0,5).map(s=>`<div class="card"><b>${s.symbol}</b><br>Last price: ${s.price}<br>Momentum: ${Number(s.momentum).toFixed(2)}%<br>Signal: <b class="buy">BUY (research only)</b><br><small>Updated: ${s.updated_at} IST</small></div>`).join(""):(closed?"Market closed — no live BUY signals.": "No fresh qualifying BUY stocks right now.");
+  const setupResponse=await fetch('/api/v2/top-momentum-setups',{cache:'no-store'});
+  if(!setupResponse.ok)throw Error('Setups API unavailable');
+  const shortlist=await setupResponse.json();
+  if(shortlist.order_execution_enabled!==false||shortlist.mode!=='MANUAL_RESEARCH_ONLY'||!Array.isArray(shortlist.setups))throw Error('Invalid safety status');
+  const setups=closed?[]:shortlist.setups;
+  const safeText=v=>String(v??'—').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  document.getElementById('scanner').innerHTML=setups.length?setups.map((s,i)=>`<div class="card"><b>#${i+1} ${safeText(s.symbol)}</b><br>Direction: BULLISH | Research signal: BUY<br>Indicative entry: ₹${safeText(s.indicative_entry)}<br>Target 1: ${s.target_1==null?'Not verified':safeText(s.target_1)} | Target 2: ${s.target_2==null?'Not verified':safeText(s.target_2)}<br>Stop-loss: ${s.stop_loss==null?'Not verified':safeText(s.stop_loss)}<br>Momentum: ${safeText(s.momentum_pct)}% | EMA9: ${safeText(s.ema9)} | EMA20: ${safeText(s.ema20)}<br>5-minute trend: ${safeText(s.trend_5m)}<br>Why selected: ${(s.reasons||[]).map(safeText).join(', ')}<br><small>Completed candle: ${safeText(s.candle_ist)} IST | Manual research only</small></div>`).join(''):`<div class="card">${closed?'Market closed — no live setups.':'No verified qualifying setups.'}<br><small>API: ${safeText(shortlist.status)} | Fresh stock rows: ${safeText(shortlist.fresh_stock_rows)} | Stale rejected: ${safeText(shortlist.rejected_stale_rows)}</small></div>`;
+
  }catch(e){document.getElementById("feed-status").textContent="Scanner data unavailable — NO LIVE SIGNALS";document.getElementById("indices").textContent="Data unavailable";document.getElementById("scanner").textContent="No verified BUY signals";}
 }
 loadScanner();
