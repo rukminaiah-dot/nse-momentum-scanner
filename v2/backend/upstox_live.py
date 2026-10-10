@@ -28,8 +28,28 @@ class UpstoxLiveV3:
         self.streamer.on("open", self._on_open)
         self.streamer.on("message", self._on_message)
         self.streamer.on("error", self._on_error)
+        self.streamer.on("close", self._on_close)
+
+
+    def _connection_event(self, status):
+        import json
+        from datetime import datetime
+        from pathlib import Path
+        from zoneinfo import ZoneInfo
+        try:
+            path = Path("/tmp/nse_200_connection_health.json")
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps({"status": status, "event_at_ist": datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()}))
+            tmp.replace(path)
+        except OSError as exc:
+            print("CONNECTION_HEALTH_WRITE_ERROR:", type(exc).__name__, flush=True)
+
+    def _on_close(self, *args):
+        self._connection_event("CLOSED")
+        print("V2_UPSTOX_V3_CLOSED", flush=True)
 
     def _on_open(self):
+        self._connection_event("CONNECTED")
         print("V2_UPSTOX_V3_CONNECTED")
 
     def _on_message(self, message):
@@ -68,9 +88,11 @@ class UpstoxLiveV3:
                 self.on_tick(instrument_key, tick)
 
     def _on_error(self, error):
+        self._connection_event("ERROR")
         print("V2_UPSTOX_V3_ERROR:", error)
 
     def connect(self):
+        self._connection_event("CONNECTING")
         self.streamer.connect()
 
 
