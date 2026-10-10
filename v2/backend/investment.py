@@ -7,6 +7,7 @@ import urllib.request
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from functools import lru_cache
+from concurrent.futures import ThreadPoolExecutor
 from .stock_universe import NIFTY_200
 
 SYMBOLS = ("POLYCAB", "LT", "COROMANDEL", "BEL", "APLAPOLLO",
@@ -129,13 +130,15 @@ def cached_snapshot(bucket):
         end -= timedelta(days=1)
     while end.weekday() >= 5:
         end -= timedelta(days=1)
-    output = []
-    for symbol in SYMBOLS:
+    def safe_analyze(symbol):
         try:
-            output.append(analyze(symbol, end))
+            return analyze(symbol, end)
         except Exception as exc:
-            output.append({"symbol": symbol, "status": "DATA_UNAVAILABLE",
-                           "error": type(exc).__name__, "price": None})
+            return {"symbol": symbol, "status": "DATA_UNAVAILABLE",
+                    "error": type(exc).__name__, "price": None}
+    # Limit parallel requests so one slow instrument does not block all others.
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        output = list(pool.map(safe_analyze, SYMBOLS))
     return {"as_of_ist": now.isoformat(), "timeframe": "daily/weekly",
             "data_is_live": False, "risk_per_trade_inr": 2500,
             "stocks": output}
