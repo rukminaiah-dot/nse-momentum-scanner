@@ -60,13 +60,20 @@ def candles_for(symbol, end):
     raw = payload.get("data", {}).get("candles", [])
     if not raw:
         raise ValueError("No Upstox daily candles")
-    return sorted(raw, key=lambda x: x[0])
+    completed = [row for row in raw if datetime.fromisoformat(row[0]).date() <= end]
+    if not completed:
+        raise ValueError("No completed daily candles")
+    return sorted(completed, key=lambda x: x[0])
 
 def analyze(symbol, end):
     rows = candles_for(symbol, end)
     closes = [float(x[4]) for x in rows]
     volumes = [float(x[5]) for x in rows]
     last = rows[-1]
+    if len(rows) < 100:
+        raise ValueError("Insufficient history for weekly trend")
+    if (end - datetime.fromisoformat(last[0]).date()).days > 7:
+        raise ValueError("Stale historical candles")
     price = closes[-1]
     e20, e50 = ema(closes, 20), ema(closes, 50)
     weekly = {}
