@@ -19,7 +19,7 @@ class Handler(BaseHTTPRequestHandler):
             payload = {"status": "ok", "mode": "isolated-investment-preview",
                        "upstox_configured": bool(os.getenv("UPSTOX_ACCESS_TOKEN"))}
             return self.respond(200, payload)
-        if self.path in ("/api/v2/scanner-quotes", "/api/v2/scanner"):
+        if self.path in ("/api/v2/scanner-quotes", "/api/v2/scanner", "/api/v2/scanner-diagnostics"):
             # Read-only public scanner endpoint; never forwards the Upstox token.
             url = "https://nse-momentum-scanner-api.onrender.com/api/v2/scanner"
             try:
@@ -29,6 +29,8 @@ class Handler(BaseHTTPRequestHandler):
                 from v2.backend.investment import SYMBOLS, NIFTY_200
                 by_key = {v: k for k, v in NIFTY_200.items()}
                 selected = []
+                matched = 0
+                invalid_price = 0
                 if not isinstance(rows, list):
                     raise ValueError("Unexpected scanner response")
                 for row in rows:
@@ -38,11 +40,15 @@ class Handler(BaseHTTPRequestHandler):
                     symbol = by_key.get(symbol, symbol)
                     if symbol not in SYMBOLS:
                         continue
+                    matched += 1
                     price = row.get("price")
                     if not isinstance(price, (int, float)) or isinstance(price, bool) or not (0 < price < 10000000):
+                        invalid_price += 1
                         continue
                     selected.append({"symbol": symbol, "price": price,
                                      "updated_at": row.get("updated_at") if isinstance(row.get("updated_at"), str) else None})
+                if self.path == "/api/v2/scanner-diagnostics":
+                    return self.respond(200, {"upstream_rows": len(rows), "watchlist_rows": matched, "invalid_price_rows": invalid_price, "valid_watchlist_rows": len(selected)})
                 return self.respond(200, selected if self.path == "/api/v2/scanner" else {"source": "existing scanner; not daily close", "quotes": selected})
             except (urllib.error.URLError, TimeoutError, ValueError, TypeError, OSError):
                 return self.respond(503, {"error": "SCANNER_DATA_UNAVAILABLE", "quotes": []})
