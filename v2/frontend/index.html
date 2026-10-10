@@ -22,6 +22,9 @@ small{color:#aaa}
 <div id="indices">Loading live indices...</div>
 <h3>Top 5 Verified Momentum Setups</h3>
 <div id="scanner">Waiting for live market data...</div>
+<h3>NIFTY 200 Stock Board</h3>
+<div id="stock-count" class="card">Loading stock coverage…</div>
+<div id="stock-board">Loading stocks…</div>
 <h3>Trades</h3>
 <div id="trades">Loading trades...</div>
 
@@ -92,8 +95,23 @@ async function loadScanner(){
 
  }catch(e){document.getElementById("feed-status").textContent="Scanner data unavailable — NO LIVE SIGNALS";document.getElementById("indices").textContent="Data unavailable";document.getElementById("scanner").textContent="No verified BUY signals";}
 }
+async function loadStockBoard(){
+ const count=document.getElementById('stock-count'),board=document.getElementById('stock-board');
+ try{
+  const r=await fetch('/api/v2/nifty200-stock-board',{cache:'no-store'});
+  if(!r.ok)throw Error('Stock board unavailable');
+  const data=await r.json();
+  if(!Array.isArray(data.stocks))throw Error('Invalid stock board');
+  const esc=v=>String(v??'—').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  count.textContent=`${data.universe_size} NIFTY 200 stocks configured | ${data.stocks_with_stored_data} with stored prices | ${data.stocks_with_fresh_data} fresh | ${data.status}. Historical data is not a live BUY signal.`;
+  const sorted=[...data.stocks].sort((a,b)=>(b.data_status==='LIVE_FRESH')-(a.data_status==='LIVE_FRESH')||(b.last_price!=null)-(a.last_price!=null)||a.symbol.localeCompare(b.symbol));
+  board.innerHTML=sorted.map(s=>`<div class="card"><b>${esc(s.symbol)}</b><br>Last stored price: ${esc(s.last_price)} | Momentum: ${esc(s.momentum_pct)}<br>Data: ${esc(s.data_status)} | Candle: ${esc(s.last_candle_ist)} IST<br>Current signal: ${esc(s.signal||'NO LIVE SIGNAL')}</div>`).join('');
+ }catch(e){count.textContent='NIFTY 200 stock board unavailable';board.textContent='Could not load stock list; retrying.';}
+}
 loadScanner();
-setInterval(loadScanner,3000);
+setInterval(loadScanner,10000);
+loadStockBoard();
+setInterval(loadStockBoard,30000);
 
 loadTrades();
 setInterval(loadTrades, 3000);
