@@ -94,11 +94,13 @@ def cached_breakouts(bucket):
 
 class Handler(BaseHTTPRequestHandler):
     def do_HEAD(self):
-        self.send_response(200 if self.path in ('/', '/long-term', '/health') else 404)
+        path = urllib.parse.urlsplit(self.path).path
+        self.send_response(200 if path in ('/', '/long-term', '/health') else 404)
         self.send_header('Content-Length', '0')
         self.end_headers()
 
     def do_GET(self):
+        self.path = urllib.parse.urlsplit(self.path).path
         if self.path == "/api/v2/historical-data-status":
             return self.respond(200, nse_history_collector.snapshot())
         if self.path == "/api/v2/verified-positional-signals":
