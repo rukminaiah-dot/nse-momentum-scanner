@@ -32,7 +32,9 @@ def rsi(values, n=14):
     for g, l in zip(gains[n:], losses[n:]):
         up = (up * (n - 1) + g) / n
         down = (down * (n - 1) + l) / n
-    return 100 if down == 0 else 100 - 100 / (1 + up / down)
+    if down == 0:
+        return 50 if up == 0 else 100
+    return 100 - 100 / (1 + up / down)
 
 @lru_cache(maxsize=1)
 def nse_equity_keys():
