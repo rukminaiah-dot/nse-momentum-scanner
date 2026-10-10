@@ -18,6 +18,7 @@ def smart_option_buyer():
     now = datetime.now(ZoneInfo("Asia/Kolkata"))
     # Read existing index snapshots only; never initiate broker connections.
     snapshots = {}
+    database_status = "UNAVAILABLE"
     try:
         with sqlite3.connect(DB_PATH, timeout=3) as db:
             db.row_factory = sqlite3.Row
@@ -26,8 +27,9 @@ def smart_option_buyer():
                 "FROM scanner_results WHERE symbol IN ('NIFTY 50','SENSEX')"
             ).fetchall()
             snapshots = {r["symbol"]: dict(r) for r in rows}
+            database_status = "READ_OK"
     except (sqlite3.Error, OSError):
-        pass
+        database_status = "READ_ERROR"
 
     def index_row(name):
         row = snapshots.get(name)
@@ -68,5 +70,7 @@ def smart_option_buyer():
             "live_index_confirmation": "NOT_CONNECTED",
             "live_option_chain": "NOT_CONNECTED",
         },
+        "database_status": database_status,
+        "index_rows_found": len(snapshots),
         "indices": [index_row(name) for name in ("NIFTY 50", "SENSEX")],
     }
