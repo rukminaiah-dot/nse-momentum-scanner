@@ -118,3 +118,36 @@ def upstox_option_chain_check(index: str = "NIFTY 50"):
         return {"index": index, "status": "READ_ERROR", "reason": reason,
                 "contracts_found": 0, "quote_freshness": "UNVERIFIED",
                 "trade_status": "NO_TRADE", "order_execution_enabled": False}
+
+
+@router.get("/api/v2/upstox-auth-check")
+def upstox_auth_check():
+    """Read-only credential diagnostic; exposes only HTTP status categories.
+
+    Profile endpoint tests basic bearer-token access separately from option
+    contract entitlement. Never return the profile, token, or response body.
+    """
+    import os
+    from urllib.error import HTTPError, URLError
+    from urllib.request import Request, urlopen
+
+    token = os.environ.get("UPSTOX_ACCESS_TOKEN")
+    result = {"status": "NOT_CHECKED", "reason": None,
+              "token_configured": bool(token),
+              "trade_status": "NO_TRADE", "order_execution_enabled": False}
+    if not token:
+        result.update(status="NOT_CONNECTED", reason="TOKEN_MISSING")
+        return result
+    request = Request(
+        "https://api.upstox.com/v2/user/profile",
+        headers={"Authorization": "Bearer " + token, "Accept": "application/json"},
+    )
+    try:
+        with urlopen(request, timeout=8) as response:
+            result.update(status="AUTH_HTTP_OK" if response.status == 200 else "AUTH_UNEXPECTED_RESPONSE",
+                          reason="PROFILE_ENDPOINT_HTTP_" + str(response.status))
+    except HTTPError as exc:
+        result.update(status="AUTH_HTTP_ERROR", reason="PROFILE_ENDPOINT_HTTP_" + str(exc.code))
+    except (URLError, TimeoutError, OSError):
+        result.update(status="AUTH_NETWORK_ERROR", reason="PROFILE_ENDPOINT_UNREACHABLE")
+    return result
