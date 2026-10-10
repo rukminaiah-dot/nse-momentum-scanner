@@ -17,6 +17,7 @@ small{color:#aaa}
 </head>
 <body>
 <h2>NSE Momentum Scanner V2</h2>
+<div id="feed-status" class="card">Checking market and feed freshness…</div>
 <h3>Market Index Signals</h3>
 <div id="indices">Loading live indices...</div>
 <h3>Top 5 BUY Stocks</h3>
@@ -26,6 +27,7 @@ small{color:#aaa}
 
 <script>
 async function loadTrades(){
+ try{
   const r=await fetch('/api/v2/trades');
   const trades=await r.json();
 
@@ -45,21 +47,29 @@ async function loadTrades(){
         <small>${t.signal_time}</small>
       </div>
     `).join('') : 'No trades yet';
+ }catch(e){document.getElementById('trades').textContent='Trade history unavailable; retrying.';}
 }
 async function loadScanner(){
+ try{
   const r=await fetch("/api/v2/scanner");
+  if(!r.ok)throw Error("Scanner API HTTP "+r.status);
   const rows=await r.json();
+  if(!Array.isArray(rows))throw Error("Invalid scanner response");
+  const now=new Date();
+  const istParts=new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Kolkata",weekday:"short",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(now);
+  const part=t=>istParts.find(p=>p.type===t)?.value;
+  const mins=Number(part("hour"))*60+Number(part("minute"));
+  const closed=["Sat","Sun"].includes(part("weekday"))||mins<555||mins>=930;
+  const isFresh=x=>{if(!x?.updated_at)return false;const stamp=Date.parse(String(x.updated_at).replace(" ","T")+"+05:30");return Number.isFinite(stamp)&&stamp<=now.getTime()&&now.getTime()-stamp<=180000;};
+  const liveRows=rows.filter(isFresh);
+  document.getElementById("feed-status").textContent=closed?"MARKET CLOSED — Stored prices are historical. No live BUY signals.":`Market open — ${liveRows.length} fresh records of ${rows.length}; stale signals excluded.`;
   const names = ["NIFTY 50", "BANK NIFTY", "SENSEX"];
   document.getElementById("indices").innerHTML = names.map(name => {
     const x = rows.find(r => r.symbol === name);
-    const now = new Date();
-    const ist = new Date(now.toLocaleString("en-US", {timeZone:"Asia/Kolkata"}));
-    const mins = ist.getHours()*60 + ist.getMinutes();
-    const closed = ist.getDay()===0 || ist.getDay()===6 || mins<555 || mins>=930;
-    const signal = closed ? "MARKET CLOSED" : (x?.signal || "WAITING");
+    const signal = closed ? "MARKET CLOSED" : !isFresh(x) ? "STALE DATA — WAIT" : (x?.signal || "WAITING");
     const cls = signal === "BUY" ? "buy" : signal === "SELL" ? "sell" : "";
     return `<div class="card"><b>${name}</b><br>
-      Last Price: ${x?.price == null ? "Waiting..." : Number(x.price).toFixed(2)}<br>
+      Last stored price (not necessarily live): ${x?.price == null ? "Waiting..." : Number(x.price).toFixed(2)}<br>
       ${x?.previous_close > 0 && x?.price != null ? (() => {
         const change = Number(x.price) - Number(x.previous_close);
         const pct = change / Number(x.previous_close) * 100;
@@ -72,7 +82,10 @@ async function loadScanner(){
       Suggestion: <b class="${cls}">${signal}</b><br>
       <small>${x?.updated_at || ""}</small></div>`;
   }).join("");
-  document.getElementById("scanner").innerHTML = rows.some(s=>s.signal==="BUY") ? rows.filter(s=>s.signal==="BUY" && !["NIFTY 50","BANK NIFTY","SENSEX"].includes(s.symbol)).sort((a,b)=>(Number(b.momentum)+100*(b.ema9-b.ema20)/b.price)-(Number(a.momentum)+100*(a.ema9-a.ema20)/a.price)).slice(0,5).sort((a,b)=>(["BUY","SELL","HOLD","WAITING"].indexOf(a.signal)-["BUY","SELL","HOLD","WAITING"].indexOf(b.signal))).map(s=>s.signal==="WAITING"?`<div class="card"><b>${s.symbol}</b><br>Signal: <b>WAITING</b></div>`:`<div class="card"><b>${s.symbol}</b><br>Price: ${s.price}<br>EMA9: ${Number(s.ema9).toFixed(2)} | EMA20: ${Number(s.ema20).toFixed(2)}<br>Momentum: ${Number(s.momentum).toFixed(2)}<br>Market: ${s.market} | 5M: ${s.trend_5m}<br>Signal: <b class="${s.signal==="BUY"?"buy":s.signal==="SELL"?"sell":""}">${s.signal}</b><br><small>${s.updated_at}</small></div>`).join("") : "No qualifying BUY stocks right now";
+  const eligible=closed?[]:liveRows.filter(s=>s.signal==="BUY"&&!["NIFTY 50","BANK NIFTY","SENSEX"].includes(s.symbol));
+  eligible.sort((a,b)=>Number(b.momentum||0)-Number(a.momentum||0));
+  document.getElementById("scanner").innerHTML=eligible.length?eligible.slice(0,5).map(s=>`<div class="card"><b>${s.symbol}</b><br>Last price: ${s.price}<br>Momentum: ${Number(s.momentum).toFixed(2)}%<br>Signal: <b class="buy">BUY (research only)</b><br><small>Updated: ${s.updated_at} IST</small></div>`).join(""):(closed?"Market closed — no live BUY signals.": "No fresh qualifying BUY stocks right now.");
+ }catch(e){document.getElementById("feed-status").textContent="Scanner data unavailable — NO LIVE SIGNALS";document.getElementById("indices").textContent="Data unavailable";document.getElementById("scanner").textContent="No verified BUY signals";}
 }
 loadScanner();
 setInterval(loadScanner,3000);
