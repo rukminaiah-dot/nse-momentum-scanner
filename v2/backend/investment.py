@@ -82,6 +82,10 @@ def analyze(symbol, end):
     for row in rows:
         day = datetime.fromisoformat(row[0]).date()
         weekly[day.isocalendar()[:2]] = float(row[4])
+    # Do not use an unfinished trading week as a completed weekly signal.
+    last_day = datetime.fromisoformat(last[0]).date()
+    if last_day.weekday() < 4:
+        weekly.pop(last_day.isocalendar()[:2], None)
     e20w = ema(list(weekly.values()), 20)
     strength = rsi(closes)
     volume_ratio = (volumes[-1] / (sum(volumes[-21:-1]) / 20)
