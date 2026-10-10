@@ -10,6 +10,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from v2.backend.investment import cached_snapshot, SYMBOLS, NIFTY_200, nse_equity_keys
 from functools import lru_cache
+from v2.backend.investment_watchlist_57 import RESEARCH_UNIVERSE
 
 def direct_upstox_quotes():
     """Read-only fallback: one Upstox V3 request for the ten watchlist symbols."""
@@ -87,7 +88,7 @@ def yahoo_daily_quotes():
 
 @lru_cache(maxsize=2)
 def cached_breakouts(bucket):
-    return [{"symbol": s, "status": "AWAITING_SCREENER_DATA", "entry": None, "stop": None, "target_2r": None, "target_3r": None} for s in SYMBOLS]
+    return [{"symbol": s, "status": "AWAITING_SCREENER_DATA", "entry": None, "stop": None, "target_2r": None, "target_3r": None} for s in RESEARCH_UNIVERSE]
 
 class Handler(BaseHTTPRequestHandler):
     def do_HEAD(self):
@@ -118,6 +119,8 @@ class Handler(BaseHTTPRequestHandler):
                     "missing": [s for s in SYMBOLS if s not in {q["symbol"] for q in quotes}],
                     "upstox_error": upstox_error, "sources": sorted({q["source"] for q in quotes})})
             return self.respond(200, quotes)
+        if self.path == "/api/v2/research-watchlist":
+            return self.respond(200, {"symbols": RESEARCH_UNIVERSE, "count": len(RESEARCH_UNIVERSE), "source": "user watchlist image plus earlier selections"})
         if self.path == "/api/v2/positional-breakouts":
             return self.respond(200, cached_breakouts(int(time.time() // 3600)))
         if self.path == "/api/v2/investment":
