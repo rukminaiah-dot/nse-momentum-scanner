@@ -1,4 +1,5 @@
 from .expiry_signals import expiry_signal, candle_is_fresh
+from .smart_option_api import router as smart_option_router
 from .expiry_momentum import expiry_watch_status
 import sqlite3
 from fastapi import FastAPI
@@ -8,6 +9,7 @@ from .stock_universe import NIFTY_200
 instrument_symbols = {key: symbol for symbol, key in NIFTY_200.items()}
 
 app = FastAPI(title="NSE Momentum Scanner V2")
+app.include_router(smart_option_router)
 
 @app.get("/api/v2/trades")
 def get_trades():
