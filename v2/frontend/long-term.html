@@ -11,11 +11,11 @@ table{border-collapse:collapse;width:100%}th,td{padding:15px 12px;border-bottom:
 </style>
 </head><body><div class="shell">
 <nav class="topbar" aria-label="Primary"><div class="brand">NSE <span>Momentum</span> <span style="color:#e9f1ff;font-weight:500">/ Investments</span></div><a class="back" href="https://nse-momentum-scanner-5rls.onrender.com/">← Back to 200-stock scanner</a></nav>
-<header class="hero"><div><div class="eyebrow">Investment research workspace</div><h1>Long-Term Watchlist</h1><p class="subtitle">Track your ten selected companies in one calm, mobile-friendly dashboard. Prices come from verified scanner snapshots or direct Upstox V3 quotes, with clear freshness labels.</p></div><button class="refresh" onclick="load()" type="button">↻ Refresh prices</button></header>
+<header class="hero"><div><div class="eyebrow">Investment research workspace</div><h1>Long-Term Watchlist</h1><p class="subtitle">Track your ten selected companies in one calm, mobile-friendly dashboard. Prices come from Upstox V3 or Yahoo Finance daily historical closes, with clear freshness labels.</p></div><button class="refresh" onclick="load()" type="button">↻ Refresh prices</button></header>
 <section class="metrics" aria-label="Watchlist summary"><div class="metric"><div class="metric-label">Watchlist</div><div class="metric-value">10</div><div class="metric-hint">Selected stocks</div></div><div class="metric"><div class="metric-label">Verified prices</div><div class="metric-value" id="covered">— / 10</div><div class="metric-hint">Based on available data</div></div><div class="metric"><div class="metric-label">Investment horizon</div><div class="metric-value">~3 mo</div><div class="metric-hint">Research guideline</div></div><div class="metric"><div class="metric-label">Max planned risk</div><div class="metric-value">₹2,500</div><div class="metric-hint">Per trade, not an order</div></div></section>
 <div class="note">Target guideline: 10–18% · Stop-loss guideline: 4–6%. These are planning assumptions, not guaranteed returns or automatic trading instructions.</div>
 <section class="panel"><h2 class="section-title">Price monitor</h2><p class="section-subtitle">Verified price snapshots only. Stale data remains visible as historical information, never as a live quote.</p><p id="source" role="status" aria-live="polite">Loading existing scanner data...</p><div class="table-scroll"><table><thead><tr><th>Symbol</th><th>Last recorded price</th><th>Exchange / scanner time</th><th>Feed status</th></tr></thead><tbody id="stocks"></tbody></table></div><p id="coverage"></p><p id="diagnostics" role="status"></p></section>
-<section class="panel"><h2 class="section-title">Data transparency</h2><p class="section-subtitle">All ten watchlist stocks are requested directly from Upstox V3, independent of the intraday scanner.</p><p class="footnote">This dashboard is read-only. It does not modify scanner subscriptions, place orders, or use unavailable Upstox historical candles. Missing or stale prices must not be used as trade signals.</p></section>
+<section class="panel"><h2 class="section-title">Data transparency</h2><p class="section-subtitle">All ten stocks are requested from Upstox V3; when unavailable, Yahoo Finance daily historical closes are used and explicitly labelled. The intraday scanner is not used.</p><p class="footnote">This dashboard is read-only. It does not modify scanner subscriptions, place orders, or use unavailable Upstox historical candles. Missing or stale prices must not be used as trade signals.</p></section>
 </div>
 <script>
 const names=['POLYCAB','LT','COROMANDEL','BEL','APLAPOLLO','MAXHEALTH','M&M','CUMMINSIND','DALBHARAT','BDL'];
@@ -49,21 +49,22 @@ async function load(){
    const price=Number(item.price),time=validTime(item.updated_at);
    if(!Number.isFinite(price)||price<=0||(time!==null&&time>Date.now()+60000))continue;
    validRows++;
-   if(!scanner[name]||(time!==null&&(scanner[name].time===null||time>scanner[name].time)))scanner[name]={price,time,raw:item.updated_at};
+   if(!scanner[name]||(time!==null&&(scanner[name].time===null||time>scanner[name].time)))scanner[name]={price,time,raw:item.updated_at,source:item.source,quoteType:item.quote_type};
   }
   let fresh=0,stale=0;
   for(const name of names){
-   const item=scanner[name],available=Boolean(item&&item.time!==null&&Date.now()-item.time<=15*60*1000);
+   const item=scanner[name],available=Boolean(item&&item.quoteType!=='DAILY_CLOSE_NOT_LIVE'&&item.time!==null&&Date.now()-item.time<=15*60*1000);
    if(available)fresh++;else if(item)stale++;
-   const status=available?'PRICE_FRESH':item?(item.time===null?'PRICE_TIME_UNAVAILABLE':'PRICE_STALE'):'PRICE_UNAVAILABLE';
-   const values=[name,item?'₹'+fmt(item.price)+(available?' (fresh)':' (stale)'):'—',item?(item.raw||'Trade time unavailable'):'—',status];
+   const daily=Boolean(item&&item.quoteType==='DAILY_CLOSE_NOT_LIVE');
+   const status=daily?'DAILY_CLOSE_NOT_LIVE':available?'PRICE_FRESH':item?(item.time===null?'PRICE_TIME_UNAVAILABLE':'PRICE_STALE'):'PRICE_UNAVAILABLE';
+   const values=[name,item?'₹'+fmt(item.price)+(daily?' (daily close)':available?' (fresh)':' (stale)'):'—',item?(item.quoteType==='DAILY_CLOSE_NOT_LIVE'?'Historical trading day: '+(item.raw||'unavailable').slice(0,10):item.raw||'Trade time unavailable'):'—',status];
    const tr=document.createElement('tr');
    for(const [index,value] of values.entries()){const td=document.createElement('td');td.dataset.label=['Symbol','Price','Quote time','Status'][index];td.textContent=value;tr.appendChild(td);}
    body.appendChild(tr);
   }
   document.getElementById('covered').textContent=Object.keys(scanner).length+' / 10';
-  source.textContent='Direct Upstox V3 quote API (trade time may be unavailable). Checked: '+new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata'});
-  coverage.textContent='Upstox quote records: '+totalRows+'; matching watchlist records: '+matchingRows+'; valid price/timestamp records: '+validRows+'. Fresh quotes: '+fresh+'; stale quotes: '+stale+'.';
+  source.textContent='Upstox V3 prices with Yahoo Finance daily-close fallback; not all prices are live. Checked: '+new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata'});
+  coverage.textContent='Independent price records: '+totalRows+'; matching watchlist records: '+matchingRows+'; valid price/timestamp records: '+validRows+'. Fresh quotes: '+fresh+'; stale quotes: '+stale+'.';
   diagnostics.textContent='Preview quote records: '+totalRows+'. Checking production scanner coverage...';
   try {
    const diagResponse=await fetch('/api/v2/watchlist-diagnostics',{cache:'no-store'});
@@ -73,8 +74,8 @@ async function load(){
    }
   }catch(_error) { /* Optional diagnostic; no impact on quotes. */ }
  }catch(error){
-  source.textContent='Upstox data unavailable';
-  coverage.textContent='No verified Upstox quotes available.';
+  source.textContent='Independent price data unavailable';
+  coverage.textContent='No verified independent quotes available.';
   diagnostics.textContent='The Upstox quote API is unavailable ('+error.message+'). Prices are intentionally hidden until verified. The watchlist remains accessible.';
   for(const name of names){
    const tr=document.createElement('tr');
