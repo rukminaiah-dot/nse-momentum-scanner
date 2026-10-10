@@ -11,13 +11,14 @@ table{border-collapse:collapse;width:100%}th,td{padding:15px 12px;border-bottom:
 </style>
 </head><body><div class="shell">
 <nav class="topbar" aria-label="Primary"><div class="brand">NSE <span>Momentum</span> <span style="color:#e9f1ff;font-weight:500">/ Investments</span></div><a class="back" href="https://nse-momentum-scanner-5rls.onrender.com/">← Back to 200-stock scanner</a></nav>
-<header class="hero"><div><div class="eyebrow">Investment research workspace</div><h1>Long-Term Watchlist</h1><p class="subtitle">Research your 56 selected companies, with the option to add more stocks. Prices come from Upstox V3 quotes or Screener-supported research exports, with clear freshness labels.</p></div><button class="refresh" onclick="load()" type="button">↻ Refresh prices</button></header>
-<section class="metrics" aria-label="Watchlist summary"><div class="metric"><div class="metric-label">Watchlist</div><div class="metric-value" id="watchlist-count">56</div><div class="metric-hint">Research stocks</div></div><div class="metric"><div class="metric-label">Verified prices</div><div class="metric-value" id="covered">— / 10</div><div class="metric-hint">Based on available data</div></div><div class="metric"><div class="metric-label">Investment horizon</div><div class="metric-value">~3 mo</div><div class="metric-hint">Research guideline</div></div><div class="metric"><div class="metric-label">Max planned risk</div><div class="metric-value">₹2,500</div><div class="metric-hint">Per trade, not an order</div></div></section>
+<header class="hero"><div><div class="eyebrow">Investment research workspace</div><h1>Long-Term Watchlist</h1><p class="subtitle">Research your 56 selected companies, with the option to add more stocks. Daily breakout research uses verified NSE official reports. A separate Upstox quote monitor may be unavailable; data freshness is shown explicitly.</p></div><button class="refresh" onclick="load()" type="button">↻ Refresh prices</button></header>
+<section class="metrics" aria-label="Watchlist summary"><div class="metric"><div class="metric-label">Watchlist</div><div class="metric-value" id="watchlist-count">56</div><div class="metric-hint">Research stocks</div></div><div class="metric"><div class="metric-label">NSE history ready</div><div class="metric-value" id="history-covered">Loading…</div><div class="metric-hint">70+ completed sessions per stock</div></div><div class="metric"><div class="metric-label">Investment horizon</div><div class="metric-value">~3 mo</div><div class="metric-hint">Research guideline</div></div><div class="metric"><div class="metric-label">Max planned risk</div><div class="metric-value">₹2,500</div><div class="metric-hint">Per trade, not an order</div></div></section>
 <div class="note">Target guideline: 10–18% · Stop-loss guideline: 4–6%. These are planning assumptions, not guaranteed returns or automatic trading instructions.</div>
 <section class="panel"><h2 class="section-title">56-stock Screener research watchlist</h2><p class="section-subtitle">Open any company on Screener.in to review financial statements and ratios. Added stocks are saved in this browser only; no orders are placed.</p><form id="add-stock-form" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px"><label for="new-stock">NSE ticker</label><input id="new-stock" name="ticker" autocomplete="off" maxlength="20" placeholder="e.g. HAVELLS" required style="background:#0a1020;color:white;border:1px solid #50637d;border-radius:8px;padding:10px"><button class="refresh" type="submit">+ Add stock</button></form><p id="stock-message" role="status"></p><p id="research-count"></p><div class="table-scroll"><table><thead><tr><th>NSE symbol</th><th>Fundamental research</th><th>Action</th></tr></thead><tbody id="research-stocks"></tbody></table></div></section>
-<section class="panel"><h2 class="section-title">Price monitor</h2><p class="section-subtitle">Verified price snapshots only. Stale data remains visible as historical information, never as a live quote.</p><p id="source" role="status" aria-live="polite">Loading independent Upstox quotes...</p><div class="table-scroll"><table><thead><tr><th>Symbol</th><th>Last recorded price</th><th>Exchange / scanner time</th><th>Feed status</th></tr></thead><tbody id="stocks"></tbody></table></div><p id="coverage"></p><p id="diagnostics" role="status"></p></section>
-<section class="panel"><h2 class="section-title">Daily breakout research</h2><p class="section-subtitle">Completed daily candles only. A target and stop are shown only after a confirmed breakout with volume and trend support. Indicative research, not orders.</p><p id="breakout-source" role="status">Awaiting Screener research data and a verified daily OHLCV source...</p><div class="table-scroll"><table><thead><tr><th>Stock</th><th>Setup</th><th>Entry</th><th>Stop</th><th>Target 2R</th><th>Target 3R</th><th>Shares</th></tr></thead><tbody id="breakout-rows"></tbody></table></div></section>
-<section class="panel"><h2 class="section-title">Data transparency</h2><p class="section-subtitle">Screener.in research data will be accepted through supported exports. Yahoo Finance is disabled, and no technical breakout level is estimated without verified historical OHLCV candles.</p><p class="footnote">This dashboard is read-only. It does not modify scanner subscriptions, place orders, or use unavailable Upstox historical candles. Missing or stale prices must not be used as trade signals.</p></section>
+<section class="panel"><h2 class="section-title">Historical NSE data coverage</h2><p class="section-subtitle">Official completed daily sessions, independently downloaded and validated. A missing stock cannot receive a trading signal.</p><p id="history-status" role="status">Checking NSE history collection…</p><p id="history-missing"></p></section>
+<section class="panel"><h2 class="section-title">Separate 10-stock Upstox quote monitor</h2><p class="section-subtitle">Verified price snapshots only. Stale data remains visible as historical information, never as a live quote.</p><p id="source" role="status" aria-live="polite">Loading independent Upstox quotes...</p><div class="table-scroll"><table><thead><tr><th>Symbol</th><th>Last recorded price</th><th>Exchange / scanner time</th><th>Feed status</th></tr></thead><tbody id="stocks"></tbody></table></div><p id="coverage"></p><p id="diagnostics" role="status"></p></section>
+<section class="panel"><h2 class="section-title">Daily breakout research</h2><p class="section-subtitle">Completed daily candles only. A target and stop are shown only after a confirmed breakout with volume and trend support. Indicative research, not orders.</p><p id="breakout-source" role="status">Checking verified NSE daily OHLCV history...</p><div class="table-scroll"><table><thead><tr><th>Stock</th><th>Setup</th><th>Entry</th><th>Stop</th><th>Target 2R</th><th>Target 3R</th><th>Shares</th></tr></thead><tbody id="breakout-rows"></tbody></table></div></section>
+<section class="panel"><h2 class="section-title">Data transparency</h2><p class="section-subtitle">Daily price and volume history comes from official NSE bhavcopy reports. Screener.in is linked for independent fundamental research. Yahoo Finance is disabled; no technical levels are estimated without validated candles.</p><p class="footnote">This dashboard is read-only. It does not modify scanner subscriptions, place orders, or use unavailable Upstox historical candles. Missing or stale prices must not be used as trade signals.</p></section>
 </div>
 <script>
 const names=['POLYCAB','LT','COROMANDEL','BEL','APLAPOLLO','MAXHEALTH','M&M','CUMMINSIND','DALBHARAT','BDL'];
@@ -64,7 +65,7 @@ async function load(){
    for(const [index,value] of values.entries()){const td=document.createElement('td');td.dataset.label=['Symbol','Price','Quote time','Status'][index];td.textContent=value;tr.appendChild(td);}
    body.appendChild(tr);
   }
-  document.getElementById('covered').textContent=Object.keys(scanner).length+' / 10';
+  
   source.textContent='Upstox V3 quote source; Yahoo Finance disabled. Checked: '+new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata'});
   coverage.textContent='Independent price records: '+totalRows+'; matching watchlist records: '+matchingRows+'; valid price/timestamp records: '+validRows+'. Fresh quotes: '+fresh+'; stale quotes: '+stale+'.';
   diagnostics.textContent='Preview quote records: '+totalRows+'. Checking production scanner coverage...';
@@ -89,20 +90,26 @@ async function load(){
 }
 async function loadBreakouts(){
  const body=document.getElementById('breakout-rows'),label=document.getElementById('breakout-source');
+ const coverage=document.getElementById('history-covered'),historyStatus=document.getElementById('history-status'),missing=document.getElementById('history-missing');
  try{
-  const response=await fetch('/api/v2/positional-breakouts',{cache:'no-store'});
-  if(!response.ok)throw Error('Daily history API HTTP '+response.status);
-  const rows=await response.json();
-  if(!Array.isArray(rows))throw Error('Invalid breakout response');
+  const [response,statusResponse]=await Promise.all([fetch('/api/v2/verified-positional-signals',{cache:'no-store'}),fetch('/api/v2/historical-data-status',{cache:'no-store'})]);
+  if(!response.ok||!statusResponse.ok)throw Error('NSE history API unavailable');
+  const data=await response.json(),status=await statusResponse.json();
+  if(!Array.isArray(data.stocks))throw Error('Invalid signal response');
+  coverage.textContent=(status.stocks_with_70_sessions??0)+' / '+(status.watchlist_count??56);
+  historyStatus.textContent='NSE collection: '+status.status+' · '+status.sessions+' sessions · latest '+(status.latest_session||'unknown')+' · '+status.persistence+'.';
+  missing.textContent='Insufficient history: '+((status.insufficient_symbols||[]).map(x=>x.symbol+' ('+x.sessions+' sessions)').join(', ')||'none');
   body.replaceChildren();
-  for(const item of rows){
-   const values=[item.symbol,item.status+(item.candle_date?' · '+item.candle_date:''),item.entry==null?'—':'₹'+fmt(item.entry),item.stop==null?'—':'₹'+fmt(item.stop),item.target_2r==null?'—':'₹'+fmt(item.target_2r),item.target_3r==null?'—':'₹'+fmt(item.target_3r),item.shares_at_risk_budget??'—'];
+  const sorted=data.stocks.slice().sort((a,b)=>{const order={TECHNICAL_SETUP_REQUIRES_REVIEW:0,NO_SIGNAL:1,REJECTED_STOP_DISTANCE:2,REJECTED_POSITION_SIZE:3,DATA_UNVERIFIED:4};return (order[a.status]??5)-(order[b.status]??5);});
+  for(const item of sorted){
+   const values=[item.symbol,item.status+(item.reason?' · '+item.reason:'')+(item.session?' · '+item.session:''),item.entry==null?'—':'₹'+fmt(item.entry),item.stop==null?'—':'₹'+fmt(item.stop),item.target_2r==null?'—':'₹'+fmt(item.target_2r),item.target_3r==null?'—':'₹'+fmt(item.target_3r),item.quantity??0];
    const tr=document.createElement('tr');
    for(const [index,value] of values.entries()){const td=document.createElement('td');td.dataset.label=['Stock','Setup','Entry','Stop','Target 2R','Target 3R','Shares'][index];td.textContent=value;tr.appendChild(td);}
    body.appendChild(tr);
   }
-  label.textContent='Awaiting verified daily OHLCV candles · '+rows.filter(x=>x.status==='BREAKOUT_CONFIRMED').length+' confirmed setups · ₹2,500 maximum planned risk per trade.';
- }catch(error){label.textContent='Breakout research unavailable: '+error.message+'. No targets or stops are assumed.';}
+  const setups=sorted.filter(x=>x.status==='TECHNICAL_SETUP_REQUIRES_REVIEW').length;
+  label.textContent='NSE completed daily OHLCV · '+setups+' technical setups requiring review · no automatic Buy recommendations or orders. Last session: '+(status.latest_session||'unavailable')+'.';
+ }catch(error){label.textContent='Verified NSE signals unavailable: '+error.message+'. No targets or stops are assumed.';historyStatus.textContent='NSE history status unavailable';coverage.textContent='— / 56';}
 }
 
 const initialResearch=["BEL","LT","SBIN","BHARTIARTL","NTPC","M&M","SUNPHARMA","HDFCBANK","TATASTEEL","TITAN","CIPLA","INFY","GODREJPROP","ONGC","JSWSTEEL","EICHERMOT","TATACONSUM","TCS","DIXON","POLYCAB","CUMMINSIND","PERSISTENT","INDHOTEL","ASTRAL","SOLARINDS","AUBANK","MAXHEALTH","CONCOR","KFINTECH","APLAPOLLO","SUZLON","KAYNES","BSOFT","CDSL","APOLLOTYRE","CYIENT","SANGHVIMOV","NCC","VEDL","SJVN","BAJFINANCE","NAUKRI","GODREJAGRO","ONMOBILE","DHANLAXMI","AEGISLOG","AMBER","MAZDOCK","BDL","CHAMBLFERT","CESC","RBLBANK","APTUS","SANSERA","COROMANDEL","DALBHARAT"];
