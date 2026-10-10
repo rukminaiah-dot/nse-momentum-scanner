@@ -31,6 +31,20 @@ def smart_option_buyer():
     except (sqlite3.Error, OSError):
         database_status = "READ_ERROR"
 
+    # PostgreSQL is an optional fallback for lost ephemeral SQLite rows.
+    # Archived candles remain subject to the same timestamp freshness check.
+    archive_status = "NOT_CHECKED"
+    if len(snapshots) < 2:
+        try:
+            from .index_snapshot_archive import read_index_snapshots
+            archived = read_index_snapshots()
+            for symbol, row in archived.items():
+                if symbol not in snapshots or snapshots[symbol].get("price") is None:
+                    snapshots[symbol] = row
+            archive_status = "READ_OK"
+        except Exception:
+            archive_status = "READ_ERROR"
+
     def index_row(name):
         row = snapshots.get(name)
         diagnostic = {"index": name, "prediction": "UNAVAILABLE",
@@ -71,6 +85,7 @@ def smart_option_buyer():
             "live_option_chain": "NOT_CONNECTED",
         },
         "database_status": database_status,
+        "archive_status": archive_status,
         "index_rows_found": len(snapshots),
         "indices": [index_row(name) for name in ("NIFTY 50", "SENSEX")],
     }
