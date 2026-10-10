@@ -3,6 +3,7 @@ import json
 import os
 import urllib.request
 import urllib.error
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -24,8 +25,20 @@ class Handler(BaseHTTPRequestHandler):
             url = "https://nse-momentum-scanner-api.onrender.com/api/v2/scanner"
             try:
                 request = urllib.request.Request(url, headers={"Accept": "application/json"})
-                with urllib.request.urlopen(request, timeout=10) as response:
-                    rows = json.load(response)
+                # Retry transient wake-up/deployment errors; never fabricate prices.
+                rows = None
+                for attempt in range(3):
+                    try:
+                        with urllib.request.urlopen(request, timeout=18) as response:
+                            rows = json.load(response)
+                        break
+                    except urllib.error.HTTPError as exc:
+                        if exc.code not in (502, 503, 504) or attempt == 2:
+                            raise
+                    except (urllib.error.URLError, TimeoutError):
+                        if attempt == 2:
+                            raise
+                    time.sleep(1 + attempt)
                 from v2.backend.investment import SYMBOLS, NIFTY_200
                 by_key = {v: k for k, v in NIFTY_200.items()}
                 selected = []
