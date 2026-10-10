@@ -54,6 +54,8 @@ def collect(reference=None, max_calendar_days=130):
             if _state["latest_session"] is None:
                 _state["latest_session"] = day.isoformat()
         successes += 1
+        if successes % 15 == 0:
+            print("NSE_HISTORY_PROGRESS:", successes, "verified sessions", flush=True)
         if successes >= 78:
             break
         time.sleep(0.12)
@@ -61,6 +63,7 @@ def collect(reference=None, max_calendar_days=130):
         for symbol in _history:
             _history[symbol].sort(key=lambda row: row["date"])
         _state["status"] = "READY" if successes >= 70 else "INSUFFICIENT_HISTORY"
+        print("NSE_HISTORY_RESULT:", dict(_state, stocks_with_70_sessions=sum(len(v)>=70 for v in _history.values())), flush=True)
 
 def start():
     threading.Thread(target=collect, daemon=True, name="nse-history-collector").start()
