@@ -74,7 +74,13 @@ async function load(){
  }catch(error){
   source.textContent='Scanner data unavailable';
   coverage.textContent='No verified scanner quotes available.';
-  diagnostics.textContent='Could not retrieve the existing scanner feed: '+error.message;
+  diagnostics.textContent='The upstream scanner is temporarily unavailable ('+error.message+'). Prices are intentionally hidden until verified. The watchlist remains accessible.';
+  for(const name of names){
+   const tr=document.createElement('tr');
+   const values=[name,'—','—',keys[name]?'FEED_UNAVAILABLE':'NOT_IN_SCANNER_UNIVERSE'];
+   for(const value of values){const td=document.createElement('td');td.textContent=value;tr.appendChild(td);}
+   body.appendChild(tr);
+  }
  }
 }
 load();
