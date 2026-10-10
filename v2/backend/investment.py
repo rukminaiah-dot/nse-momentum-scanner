@@ -143,11 +143,22 @@ def cached_snapshot(bucket):
             code = None
             try:
                 payload = json.loads(exc.read(4096).decode("utf-8"))
-                errors = payload.get("errors", [])
-                if isinstance(errors, list) and errors and isinstance(errors[0], dict):
-                    candidate = errors[0].get("error_code", "")
-                    if isinstance(candidate, str) and re.fullmatch(r"UDAPI[0-9]{3,12}", candidate):
-                        code = candidate
+                # Upstox errors may be nested; inspect identifiers only.
+                pending = [payload]
+                for _ in range(12):
+                    if not pending:
+                        break
+                    node = pending.pop(0)
+                    if isinstance(node, dict):
+                        candidate = node.get("error_code")
+                        if isinstance(candidate, str) and re.fullmatch(r"UDAPI[0-9]{3,12}", candidate):
+                            code = candidate
+                            break
+                        pending.extend(value for value in node.values()
+                                       if isinstance(value, (dict, list)))
+                    elif isinstance(node, list):
+                        pending.extend(value for value in node[:8]
+                                       if isinstance(value, (dict, list)))
             except (ValueError, UnicodeError, OSError, AttributeError, TypeError):
                 pass
             return {"symbol": symbol, "status": "DATA_UNAVAILABLE",
