@@ -91,3 +91,30 @@ def smart_option_buyer():
         "index_rows_found": len(snapshots),
         "indices": [index_row(name) for name in ("NIFTY 50", "SENSEX")],
     }
+
+
+@router.get("/api/v2/upstox-option-chain-check")
+def upstox_option_chain_check(index: str = "NIFTY 50"):
+    """On-demand, read-only diagnostic; never return quotes or credentials."""
+    if index not in ("NIFTY 50", "SENSEX"):
+        return {"status": "INVALID_INDEX", "supported_indices": ["NIFTY 50", "SENSEX"],
+                "order_execution_enabled": False}
+    try:
+        from .upstox_option_chain import fetch_option_chain
+        result = fetch_option_chain(index)
+        return {
+            "index": index,
+            "status": result["status"],
+            "reason": result.get("reason"),
+            "expiry": result.get("expiry"),
+            "contracts_found": len(result.get("contracts", [])),
+            "quote_freshness": "UNVERIFIED",
+            "trade_status": "NO_TRADE",
+            "order_execution_enabled": False,
+        }
+    except Exception as exc:
+        from .upstox_option_chain import OptionDataError
+        reason = str(exc) if isinstance(exc, OptionDataError) else "UPSTOX_DIAGNOSTIC_ERROR"
+        return {"index": index, "status": "READ_ERROR", "reason": reason,
+                "contracts_found": 0, "quote_freshness": "UNVERIFIED",
+                "trade_status": "NO_TRADE", "order_execution_enabled": False}
