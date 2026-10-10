@@ -1,21 +1,21 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Long-Term Investment Watchlist</title>
 <style>body{background:#10131a;color:#eef2ff;font:15px Arial;margin:22px}a{color:#7dd3fc}table{border-collapse:collapse;width:100%;min-width:800px}td,th{padding:12px;border-bottom:1px solid #374151;text-align:left}th{color:#93c5fd}main{overflow:auto}.note{background:#1c2230;padding:15px;border-radius:10px;margin:15px 0}.good{color:#86efac}.warn{color:#fcd34d}.error{color:#fca5a5}</style>
-</head><body><a href="https://nse-momentum-scanner-5rls.onrender.com/">Back to NSE Momentum Scanner</a><h1>Long-Term Investment Watchlist</h1>
+</head><body><a href="https://nse-momentum-scanner-5rls.onrender.com/">Back to NSE Momentum Scanner</a><h1>Long-Term Investment Watchlist</h1><p class="note">Your 10 selected stocks, separated from the 200-stock scanner. Eight are in the configured scanner universe; COROMANDEL and DALBHARAT remain on your watchlist but have no scanner feed until separately added and verified. This page does not change scanner subscriptions.</p>
 <div class="note">Research only. Approximately three-month investment horizon. Target guideline 10-18%, stop-loss guideline 4-6%, maximum planned risk ₹2,500 per trade. These are not guaranteed returns or automatic orders.</div>
 <p id="source" role="status" aria-live="polite">Checking Upstox historical daily candles...</p><button onclick="load()">Refresh</button><p id="coverage"></p><p id="diagnostics" class="warn" role="status"></p>
-<main><table><thead><tr><th>Symbol</th><th>Daily close</th><th>Scanner price (not daily close)</th><th>Candle timestamp</th><th>EMA20</th><th>EMA50</th><th>Weekly EMA20</th><th>RSI14</th><th>Relative volume</th><th>MACD</th><th>Screen status</th></tr></thead><tbody id="stocks"></tbody></table></main>
+<main><table><thead><tr><th>Symbol</th><th>Scanner price (not daily close)</th><th>Daily close (historical API)</th><th>Candle timestamp</th><th>EMA20</th><th>EMA50</th><th>Weekly EMA20</th><th>RSI14</th><th>Relative volume</th><th>MACD</th><th>Screen status</th></tr></thead><tbody id="stocks"></tbody></table></main>
 <p>Scanner prices come from the existing read-only scanner API and are displayed only when timestamps are valid IST/offset timestamps and at most 15 minutes old; they are not daily closes and are never used to compute historical indicators. Daily closes are not live quotes. Technical screens require confirmation of market trend, fundamentals, and entry price. Unavailable data must never be treated as a buy signal.</p>
 <script>
 const names=['POLYCAB','LT','COROMANDEL','BEL','APLAPOLLO','MAXHEALTH','M&M','CUMMINSIND','DALBHARAT','BDL'];
 const fmt=x=>typeof x==='number'?x.toFixed(2):'—';
 async function load(){
-document.getElementById('source').textContent='Checking Upstox historical candles...';
+document.getElementById('source').textContent='Loading the selected stocks from the existing scanner; historical candles are optional...';
 try{
 const res=await fetch('/api/v2/investment',{cache:'no-store'});
 if(!res.ok)throw Error('HTTP '+res.status);
 const data=await res.json();
-document.getElementById('source').textContent='Upstox historical daily closes (NOT LIVE). Snapshot: '+data.as_of_ist;
+document.getElementById('source').textContent='Selected stocks from the existing NSE scanner. Scanner prices are displayed only if fresh; historical closes are separate. Snapshot: '+data.as_of_ist;
 const map=Object.fromEntries(data.stocks.map(x=>[x.symbol,x]));
 let scanner={};
 try{
@@ -34,16 +34,16 @@ try{
  }}
 }catch(_e){}
 const available=data.stocks.filter(x=>x.price!=null&&x.status!=='DATA_UNAVAILABLE').length;
-document.getElementById('coverage').textContent='Historical candle data available: '+available+' of '+names.length+'. Missing data is not a trade signal.';
+document.getElementById('coverage').textContent='Existing scanner universe: 8 of 10 selected stocks. Fresh scanner quotes: '+Object.keys(scanner).length+' of 10. Historical candles: '+available+' of 10. COROMANDEL and DALBHARAT are not in the current scanner universe. Missing data is not a trade signal.';
 const failures=data.stocks.filter(x=>x.status==='DATA_UNAVAILABLE');
 const counts={};for(const s of failures){const type=s.error||'UnknownError';counts[type]=(counts[type]||0)+1;}
 const reasons=Object.entries(counts).map(([type,count])=>type+' ('+count+')').join(', ');
-document.getElementById('diagnostics').textContent=failures.length?'Data unavailable — error types: '+reasons+'. Check the preview service Upstox token and historical API permissions. No credentials are shown here.':'All 10 historical responses received. This is not a buy recommendation.';
+document.getElementById('diagnostics').textContent=failures.length?'Historical API unavailable (scanner list remains separate) — error types: '+reasons+'. Check the preview service Upstox token and historical API permissions. No credentials are shown here.':'All 10 historical responses received. This is not a buy recommendation.';
 document.getElementById('stocks').replaceChildren();
 for(const name of names){
 const s=map[name]||{status:'DATA_UNAVAILABLE'};
 const quote=scanner[name];
-const values=[name,s.price==null?'—':'₹'+fmt(s.price),quote?'₹'+fmt(quote.price)+' (scanner)':'—',s.candle_at||'—',fmt(s.ema20),fmt(s.ema50),fmt(s.weekly_ema20),fmt(s.rsi14),fmt(s.relative_volume),s.macd?(s.macd.bullish?'Bullish':'Not bullish'):'—',s.status||'DATA_UNAVAILABLE'];
+const values=[name,quote?'₹'+fmt(quote.price)+' (scanner)':'—',s.price==null?'—':'₹'+fmt(s.price),s.candle_at||'—',fmt(s.ema20),fmt(s.ema50),fmt(s.weekly_ema20),fmt(s.rsi14),fmt(s.relative_volume),s.macd?(s.macd.bullish?'Bullish':'Not bullish'):'—',s.status||'DATA_UNAVAILABLE'];
 const tr=document.createElement('tr');
 for(const value of values){const td=document.createElement('td');td.textContent=value;tr.appendChild(td);}
 document.getElementById('stocks').appendChild(tr);
