@@ -15,6 +15,7 @@ class InvestmentTests(unittest.TestCase):
         self.assertIsNone(inv.ema([1, 2], 20))
         self.assertAlmostEqual(inv.ema([2] * 30, 20), 2)
         self.assertAlmostEqual(inv.rsi(list(range(1, 50))), 100)
+        self.assertAlmostEqual(inv.rsi([100] * 40), 50)
 
     def test_no_fabricated_prices_on_failure(self):
         inv.cached_snapshot.cache_clear()
