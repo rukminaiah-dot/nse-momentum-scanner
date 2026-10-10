@@ -63,8 +63,11 @@ class Handler(BaseHTTPRequestHandler):
                 if self.path == "/api/v2/scanner-diagnostics":
                     return self.respond(200, {"upstream_rows": len(rows), "watchlist_rows": matched, "invalid_price_rows": invalid_price, "valid_watchlist_rows": len(selected)})
                 return self.respond(200, selected if self.path == "/api/v2/scanner" else {"source": "existing scanner; not daily close", "quotes": selected})
-            except (urllib.error.URLError, TimeoutError, ValueError, TypeError, OSError):
-                return self.respond(503, {"error": "SCANNER_DATA_UNAVAILABLE", "quotes": []})
+            except (urllib.error.URLError, TimeoutError, ValueError, TypeError, OSError) as exc:
+                # Log only the exception class and upstream HTTP status, never credentials.
+                upstream_status = exc.code if isinstance(exc, urllib.error.HTTPError) else None
+                print("SCANNER_UPSTREAM_FAILURE:", type(exc).__name__, "http_status:", upstream_status, flush=True)
+                return self.respond(503, {"error": "SCANNER_DATA_UNAVAILABLE", "upstream_http_status": upstream_status, "quotes": []})
         if self.path == "/api/v2/investment":
             now = datetime.now(ZoneInfo("Asia/Kolkata"))
             return self.respond(200, cached_snapshot(int(now.timestamp() // 900)))
