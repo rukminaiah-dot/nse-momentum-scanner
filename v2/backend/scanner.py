@@ -132,6 +132,12 @@ def save_scan_result(key, price, ema9_value, ema20_value, mom, market, trend_5m,
     con.execute("""INSERT OR REPLACE INTO scanner_results (symbol,updated_at,price,ema9,ema20,momentum,market,trend_5m,signal,previous_close) VALUES (?,?,?,?,?,?,?,?,?,?)""", (key, candle_time, price, ema9_value, ema20_value, mom, market, trend_5m, signal, previous_close))
     con.commit()
     con.close()
+    if key in ("NIFTY 50", "SENSEX") and candle_time is not None:
+        try:
+            from .index_snapshot_archive import save_index_snapshot
+            save_index_snapshot(key, candle_time, price)
+        except Exception as exc:
+            print(f"Index snapshot archive unavailable: {type(exc).__name__}", flush=True)
 
 
 def analyse(key):
