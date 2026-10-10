@@ -21,21 +21,24 @@ h1{font-size:24px}.muted{color:#a8b5c9}.card{background:#1e293b;border-radius:14
 <div>Minimum reward:risk<div class="value" id="rr">—</div></div>
 </div><p class="muted small">Planned loss is not guaranteed. Slippage and rapid moves can increase actual losses.</p></section>
 <div id="cards">
-<section class="card" data-index="NIFTY 50"><h2>NIFTY 50</h2><p class="tag status">NO TRADE</p><p class="reason muted">Loading…</p><p class="prediction">Prediction: Unavailable</p><p class="confirmation">Confirmation: WAIT</p><p class="candidate">Option: None</p></section>
+<section class="card" data-index="NIFTY 50"><h2>NIFTY 50</h2><p class="tag status">NO TRADE</p><p class="reason muted">Loading…</p><p class="prediction">Prediction: Unavailable</p><p class="confirmation">Confirmation: WAIT</p><p class="candidate">Option: None</p><p class="index-price">Last stored index price: Unavailable</p><p class="candle-time muted">Candle time (IST): Unavailable</p><p class="data-status tag">Data status: UNAVAILABLE</p></section>
 <section class="card" data-index="SENSEX"><h2>SENSEX</h2><p class="tag status">NO TRADE</p><p class="reason muted">Loading…</p><p class="prediction">Prediction: Unavailable</p><p class="confirmation">Confirmation: WAIT</p><p class="candidate">Option: None</p></section>
 </div>
 <p class="muted small">New entries before 3:00 PM IST; monitor until 3:15 PM IST. Never trade on unavailable or stale data.</p>
 <p id="updated" class="muted small">Awaiting API…</p>
 <script>
 const names=['NIFTY 50','SENSEX'];
-const rupees=n=>Number.isFinite(Number(n))?'₹'+Number(n).toLocaleString('en-IN'):'Unavailable';
+const rupees=n=>n!==null&&n!==undefined&&n!==''&&Number.isFinite(Number(n))?'₹'+Number(n).toLocaleString('en-IN'):'Unavailable';
 function fail(message){
  for(const name of names){const card=document.querySelector('[data-index="'+name+'"]');
  card.querySelector('.status').textContent='NO TRADE';
  card.querySelector('.reason').textContent='Reason: '+message;
  card.querySelector('.prediction').textContent='Prediction: Unavailable';
  card.querySelector('.confirmation').textContent='Confirmation: WAIT';
- card.querySelector('.candidate').textContent='Option: None';}
+ card.querySelector('.candidate').textContent='Option: None';
+ card.querySelector('.index-price').textContent='Last stored index price: Unavailable';
+ card.querySelector('.candle-time').textContent='Candle time (IST): Unavailable';
+ card.querySelector('.data-status').textContent='Data status: UNAVAILABLE';}
  document.getElementById('updated').textContent='Data status: '+message;
 }
 async function refresh(){
@@ -56,6 +59,11 @@ async function refresh(){
    card.querySelector('.prediction').textContent='Prediction: '+(row&&row.prediction||'UNAVAILABLE');
    card.querySelector('.confirmation').textContent='Confirmation: '+(row&&row.confirmation||'WAIT');
    card.querySelector('.candidate').textContent='Option: '+(row&&row.option_candidate?String(row.option_candidate):'None');
+   card.querySelector('.index-price').textContent='Last stored index price: '+rupees(row&&row.index_price);
+   card.querySelector('.candle-time').textContent='Candle time (IST): '+(row&&row.index_candle_ist?String(row.index_candle_ist):'Unavailable');
+   const state=row&&row.index_data_status;
+   const safeState=state==='FRESH_CANDLE'?'FRESH CANDLE (not trade-ready)':state==='STALE_CANDLE'?'STALE': 'UNAVAILABLE';
+   card.querySelector('.data-status').textContent='Data status: '+safeState;
   }
   document.getElementById('updated').textContent='API checked: '+new Date().toLocaleTimeString('en-IN')+' | No live option chain connected yet';
  }catch(err){fail('API UNAVAILABLE');console.warn(err);}
