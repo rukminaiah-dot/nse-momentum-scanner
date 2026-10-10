@@ -52,7 +52,14 @@ async function load(){
   }
   source.textContent='Existing NSE 200-stock scanner feed (not Upstox historical candles). Checked: '+new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata'});
   coverage.textContent='Scanner API records: '+totalRows+'; matching watchlist records: '+matchingRows+'; valid price/timestamp records: '+validRows+'. Fresh quotes: '+fresh+'; stale quotes: '+stale+'.';
-  diagnostics.textContent=totalRows===0?'The existing scanner database returned zero saved rows. A connected WebSocket does not automatically populate the scanner results table.':matchingRows===0?'The scanner database has rows, but none match your eight subscribed watchlist symbols.':validRows===0?'Watchlist rows exist, but none have a valid price and parseable timestamp.':'COROMANDEL and DALBHARAT are outside the configured scanner universe. Historical API is not used.';
+  diagnostics.textContent='Preview quote records: '+totalRows+'. Checking production scanner coverage...';
+  try {
+   const diagResponse=await fetch('/api/v2/scanner-diagnostics',{cache:'no-store'});
+   if(diagResponse.ok){
+    const d=await diagResponse.json();
+    diagnostics.textContent='Production scanner rows: '+d.upstream_rows+'; matched watchlist rows: '+d.watchlist_rows+'; invalid/missing watchlist prices: '+d.invalid_price_rows+'; valid watchlist prices: '+d.valid_watchlist_rows+'.';
+   }
+  }catch(_error) { /* Optional diagnostic; no impact on quotes. */ }
  }catch(error){
   source.textContent='Scanner data unavailable';
   coverage.textContent='No verified scanner quotes available.';
