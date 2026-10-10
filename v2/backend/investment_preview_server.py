@@ -101,6 +101,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         self.path = urllib.parse.urlsplit(self.path).path
+        if self.path == "/api/v2/nse-daily-closes":
+            return self.respond(200, nse_history_collector.latest_closes())
         if self.path == "/api/v2/historical-data-status":
             return self.respond(200, nse_history_collector.snapshot())
         if self.path == "/api/v2/verified-positional-signals":
