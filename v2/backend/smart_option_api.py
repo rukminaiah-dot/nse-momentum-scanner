@@ -3,7 +3,9 @@
 No live option-chain or news provider is wired yet. Fail closed rather than
 fabricating predictions, quotes, returns, or entry recommendations.
 """
-from datetime import datetime
+from datetime import datetime, timedelta
+import sqlite3
+from .database import DB_PATH
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter
@@ -14,6 +16,43 @@ router = APIRouter()
 @router.get("/api/v2/smart-option-buyer")
 def smart_option_buyer():
     now = datetime.now(ZoneInfo("Asia/Kolkata"))
+    # Read existing index snapshots only; never initiate broker connections.
+    snapshots = {}
+    try:
+        with sqlite3.connect(DB_PATH, timeout=3) as db:
+            db.row_factory = sqlite3.Row
+            rows = db.execute(
+                "SELECT symbol, updated_at, price, ema9, ema20, momentum "
+                "FROM scanner_results WHERE symbol IN ('NIFTY 50','SENSEX')"
+            ).fetchall()
+            snapshots = {r["symbol"]: dict(r) for r in rows}
+    except (sqlite3.Error, OSError):
+        pass
+
+    def index_row(name):
+        row = snapshots.get(name)
+        diagnostic = {"index": name, "prediction": "UNAVAILABLE",
+                      "evidence_score": None, "confirmation": "WAIT",
+                      "option_candidate": None, "investment_inr": None,
+                      "planned_loss_inr": None, "potential_profit_inr": None,
+                      "status": "NO_TRADE", "reason": "LIVE_DATA_INTEGRATION_PENDING",
+                      "index_price": None, "index_candle_ist": None,
+                      "index_data_status": "UNAVAILABLE"}
+        if not row:
+            return diagnostic
+        diagnostic["index_price"] = row.get("price")
+        diagnostic["index_candle_ist"] = row.get("updated_at")
+        try:
+            # Existing scanner persists naive timestamps in IST.
+            stamp = datetime.strptime(row["updated_at"], "%Y-%m-%d %H:%M:%S")
+            stamp = stamp.replace(tzinfo=ZoneInfo("Asia/Kolkata"))
+            age = now - stamp
+            fresh = timedelta(0) <= age <= timedelta(minutes=3) and stamp.date() == now.date()
+            diagnostic["index_data_status"] = "FRESH_CANDLE" if fresh else "STALE_CANDLE"
+        except (ValueError, TypeError):
+            diagnostic["index_data_status"] = "INVALID_TIMESTAMP"
+        return diagnostic
+
     return {
         "mode": "MANUAL_RESEARCH_ONLY",
         "order_execution_enabled": False,
@@ -29,19 +68,5 @@ def smart_option_buyer():
             "live_index_confirmation": "NOT_CONNECTED",
             "live_option_chain": "NOT_CONNECTED",
         },
-        "indices": [
-            {
-                "index": name,
-                "prediction": "UNAVAILABLE",
-                "evidence_score": None,
-                "confirmation": "WAIT",
-                "option_candidate": None,
-                "investment_inr": None,
-                "planned_loss_inr": None,
-                "potential_profit_inr": None,
-                "status": "NO_TRADE",
-                "reason": "LIVE_DATA_INTEGRATION_PENDING",
-            }
-            for name in ("NIFTY 50", "SENSEX")
-        ],
+        "indices": [index_row(name) for name in ("NIFTY 50", "SENSEX")],
     }
