@@ -13,6 +13,7 @@ small{color:#aaa}
 .target{color:orange;font-weight:bold}
 .profit{color:#4ade80;font-weight:bold}
 .loss{color:#fb7185;font-weight:bold}
+.table-wrap{overflow-x:auto;border-radius:10px;background:#1c2230}table{width:100%;border-collapse:collapse;font-size:13px;white-space:nowrap}th,td{padding:10px;border-bottom:1px solid #394150;text-align:left}th{position:sticky;top:0;background:#293244} .status-ok{color:#4ade80}.status-warn{color:#fbbf24}
 </style>
 </head>
 <body>
@@ -24,7 +25,7 @@ small{color:#aaa}
 <div id="scanner">Waiting for live market data...</div>
 <h3>NIFTY 200 Stock Board</h3>
 <div id="stock-count" class="card">Loading stock coverage…</div>
-<div id="stock-board">Loading stocks…</div>
+<div id="stock-board" class="table-wrap">Loading validation table…</div>
 <h3>Trades</h3>
 <div id="trades">Loading trades...</div>
 
@@ -105,7 +106,8 @@ async function loadStockBoard(){
   const esc=v=>String(v??'—').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   count.textContent=`${data.universe_size} NIFTY 200 stocks configured | ${data.stocks_with_stored_data} with stored prices | ${data.stocks_with_fresh_data} fresh | ${data.status}. Historical data is not a live BUY signal.`;
   const sorted=[...data.stocks].sort((a,b)=>(b.data_status==='LIVE_FRESH')-(a.data_status==='LIVE_FRESH')||(b.last_price!=null)-(a.last_price!=null)||a.symbol.localeCompare(b.symbol));
-  board.innerHTML=sorted.map(s=>`<div class="card"><b>${esc(s.symbol)}</b><br>Last stored price: ${esc(s.last_price)} | Momentum: ${esc(s.momentum_pct)}<br>Data: ${esc(s.data_status)} | Candle: ${esc(s.last_candle_ist)} IST<br>Current signal: ${esc(s.signal||'NO LIVE SIGNAL')}</div>`).join('');
+  board.innerHTML='<table><thead><tr><th>#</th><th>Stock</th><th>Last price ₹</th><th>Momentum %</th><th>Candle IST</th><th>Data status</th><th>Live signal</th></tr></thead><tbody>'+sorted.map((s,i)=>`<tr><td>${i+1}</td><td>${esc(s.symbol)}</td><td>${esc(s.last_price)}</td><td>${esc(s.momentum_pct)}</td><td>${esc(s.last_candle_ist)}</td><td class="${s.data_status==='LIVE_FRESH'?'status-ok':'status-warn'}">${esc(s.data_status)}</td><td>${esc(s.signal||'NO LIVE SIGNAL')}</td></tr>`).join('')+'</tbody></table>';
+
  }catch(e){count.textContent='NIFTY 200 stock board unavailable';board.textContent='Could not load stock list; retrying.';}
 }
 loadScanner();
