@@ -5,7 +5,7 @@
 <div class="note">Research only. Approximately three-month investment horizon. Target guideline 10-18%, stop-loss guideline 4-6%, maximum planned risk ₹2,500 per trade. These are not guaranteed returns or automatic orders.</div>
 <p id="source" role="status" aria-live="polite">Checking Upstox historical daily candles...</p><button onclick="load()">Refresh</button><p id="coverage"></p><p id="diagnostics" class="warn" role="status"></p>
 <main><table><thead><tr><th>Symbol</th><th>Daily close</th><th>Scanner price (not daily close)</th><th>Candle timestamp</th><th>EMA20</th><th>EMA50</th><th>Weekly EMA20</th><th>RSI14</th><th>Relative volume</th><th>MACD</th><th>Screen status</th></tr></thead><tbody id="stocks"></tbody></table></main>
-<p>Scanner prices come from the existing read-only scanner API and are displayed only when timestamps are parseable and at most 15 minutes old; they are not daily closes and are never used to compute historical indicators. Daily closes are not live quotes. Technical screens require confirmation of market trend, fundamentals, and entry price. Unavailable data must never be treated as a buy signal.</p>
+<p>Scanner prices come from the existing read-only scanner API and are displayed only when timestamps are valid IST/offset timestamps and at most 15 minutes old; they are not daily closes and are never used to compute historical indicators. Daily closes are not live quotes. Technical screens require confirmation of market trend, fundamentals, and entry price. Unavailable data must never be treated as a buy signal.</p>
 <script>
 const names=['POLYCAB','LT','COROMANDEL','BEL','APLAPOLLO','MAXHEALTH','M&M','CUMMINSIND','DALBHARAT','BDL'];
 const fmt=x=>typeof x==='number'?x.toFixed(2):'—';
@@ -19,12 +19,18 @@ document.getElementById('source').textContent='Upstox historical daily closes (N
 const map=Object.fromEntries(data.stocks.map(x=>[x.symbol,x]));
 let scanner={};
 try{
- const qr=await fetch('/api/v2/scanner-quotes',{cache:'no-store'});
- if(qr.ok){const q=await qr.json();for(const item of q.quotes||[]){
+ const qr=await fetch('/api/v2/scanner',{cache:'no-store'});
+ if(qr.ok){const q=await qr.json();for(const item of (Array.isArray(q)?q:[])){
   const raw=item.updated_at||'';
-  const ts=/(?:Z|[+-]\d{2}:?\d{2})$/.test(raw)?Date.parse(raw):NaN;
+  // The existing scanner stores naive IST timestamps; interpret them as IST explicitly.
+  const normalized=/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw)?raw.replace(' ','T')+'+05:30':raw;
+  const ts=/(?:Z|[+-]\d{2}:?\d{2})$/.test(normalized)?Date.parse(normalized):NaN;
   // Only show time-verified quotes, never old scanner records as current prices.
-  if(Number.isFinite(ts)&&ts<=Date.now()+60000&&Date.now()-ts<=15*60*1000)scanner[item.symbol]=item;
+  if(Number.isFinite(ts)&&ts<=Date.now()+60000&&Date.now()-ts<=15*60*1000){
+   const sym=item.symbol;
+   const normalizedSymbol=Object.entries({POLYCAB:'NSE_EQ|INE455K01017',LT:'NSE_EQ|INE018A01030',BEL:'NSE_EQ|INE263A01024',APLAPOLLO:'NSE_EQ|INE702C01027',MAXHEALTH:'NSE_EQ|INE027H01010','M&M':'NSE_EQ|INE101A01026',CUMMINSIND:'NSE_EQ|INE298A01020',BDL:'NSE_EQ|INE171Z01026'}).find(([name,key])=>key===sym)?.[0]||sym;
+   if(names.includes(normalizedSymbol)&&typeof item.price==='number'&&item.price>0)scanner[normalizedSymbol]=item;
+  }
  }}
 }catch(_e){}
 const available=data.stocks.filter(x=>x.price!=null&&x.status!=='DATA_UNAVAILABLE').length;
