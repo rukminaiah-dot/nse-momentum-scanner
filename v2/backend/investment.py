@@ -111,7 +111,11 @@ def analyze(symbol, end):
 def cached_snapshot(bucket):
     now = datetime.now(IST)
     # Historical API can include today's unfinished candle. Exclude it during the session.
-    end = (now.date() - timedelta(days=1)) if now.weekday() < 5 and (now.hour, now.minute) < (15, 45) else now.date()
+    end = now.date()
+    if now.weekday() < 5 and (now.hour, now.minute) < (15, 45):
+        end -= timedelta(days=1)
+    while end.weekday() >= 5:
+        end -= timedelta(days=1)
     output = []
     for symbol in SYMBOLS:
         try:
