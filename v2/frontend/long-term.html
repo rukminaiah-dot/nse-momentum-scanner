@@ -21,7 +21,8 @@ let scanner={};
 try{
  const qr=await fetch('/api/v2/scanner-quotes',{cache:'no-store'});
  if(qr.ok){const q=await qr.json();for(const item of q.quotes||[]){
-  const ts=Date.parse(item.updated_at||'');
+  const raw=item.updated_at||'';
+  const ts=/(?:Z|[+-]\d{2}:?\d{2})$/.test(raw)?Date.parse(raw):NaN;
   // Only show time-verified quotes, never old scanner records as current prices.
   if(Number.isFinite(ts)&&ts<=Date.now()+60000&&Date.now()-ts<=15*60*1000)scanner[item.symbol]=item;
  }}
