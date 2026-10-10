@@ -31,7 +31,7 @@ def direct_upstox_quotes():
     data = payload["data"]
     output = []
     for symbol, key in keys.items():
-        quote = data.get(key.replace("|", ":"))
+        quote = data.get(key.replace("|", ":")) or data.get(key) or next((v for v in data.values() if isinstance(v, dict) and v.get("instrument_token") == key), None)
         if not isinstance(quote, dict):
             continue
         price = quote.get("last_price")
@@ -80,7 +80,6 @@ class Handler(BaseHTTPRequestHandler):
                         if attempt == 2:
                             raise
                     time.sleep(1 + attempt)
-                from v2.backend.investment import SYMBOLS, NIFTY_200
                 by_key = {v: k for k, v in NIFTY_200.items()}
                 selected = []
                 matched = 0
