@@ -166,4 +166,14 @@ def nifty200_feed_health():
     except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
         base.update(status="NO_FEED_REPORT", stocks_ever_observed=0,
                     stocks_with_recent_ticks=0, stocks_without_recent_ticks=len(NIFTY_200))
+    try:
+        connection = json.loads(Path("/tmp/nse_200_connection_health.json").read_text())
+        base["connection_last_event"] = connection.get("status", "UNKNOWN")
+        base["connection_event_at_ist"] = connection.get("event_at_ist")
+        base["connection_state_note"] = "Last recorded event; not a continuous connection guarantee"
+    except (OSError, ValueError, TypeError):
+        base["connection_last_event"] = "UNKNOWN"
+        base["connection_state_note"] = "No connection event recorded"
+    if base["market_session"] == "CLOSED" and base["status"] == "STALE_REPORT":
+        base["status"] = "MARKET_CLOSED_TICK_REPORT_STALE"
     return base
