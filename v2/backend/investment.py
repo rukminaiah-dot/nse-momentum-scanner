@@ -47,7 +47,9 @@ def candles_for(symbol, end):
     token = os.getenv("UPSTOX_ACCESS_TOKEN", "").strip()
     if not token:
         raise RuntimeError("Upstox access token not configured")
-    key = NIFTY_200.get(symbol) or nse_equity_keys().get(symbol)
+    key = NIFTY_200.get(symbol)
+    if not key:
+        key = nse_equity_keys().get(symbol)
     if not key:
         raise LookupError("Instrument unavailable in NIFTY_200 universe")
     start = end - timedelta(days=430)
