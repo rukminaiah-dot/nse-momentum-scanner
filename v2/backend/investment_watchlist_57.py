@@ -8,3 +8,8 @@ SMALL = ["VEDL","SJVN","BAJFINANCE","NAUKRI","GODREJAGRO","ONMOBILE","DHANLAXMI"
 # Some small-cap tickers in the image may be miscategorized; category is image-provided only.
 # Duplicates span sections (POLYCAB, KFINTECH, KAYNES). Validate NSE symbols before market lookup.
 WATCHLIST = list(dict.fromkeys(LARGE + MID + SMALL))
+
+# Earlier user-selected companies absent from the uploaded image.
+USER_ADDITIONS = ["COROMANDEL", "DALBHARAT"]
+RESEARCH_UNIVERSE = list(dict.fromkeys(WATCHLIST + USER_ADDITIONS))
+# Do not auto-fill to 70: new candidates require research and user-visible rationale.
