@@ -1,6 +1,7 @@
 """Read-only medium-term investment research. No trading or fabricated quotes."""
 import os
 import json
+import re
 import gzip
 import urllib.parse
 import urllib.request
@@ -137,8 +138,20 @@ def cached_snapshot(bucket):
         try:
             return analyze(symbol, end)
         except urllib.error.HTTPError as exc:
+            # Only return a documented-style error identifier, never raw responses,
+            # headers, request URLs or credential-bearing diagnostic text.
+            code = None
+            try:
+                payload = json.loads(exc.read(4096).decode("utf-8"))
+                errors = payload.get("errors", [])
+                if isinstance(errors, list) and errors and isinstance(errors[0], dict):
+                    candidate = errors[0].get("error_code", "")
+                    if isinstance(candidate, str) and re.fullmatch(r"UDAPI[0-9]{3,12}", candidate):
+                        code = candidate
+            except (ValueError, UnicodeError, OSError, AttributeError, TypeError):
+                pass
             return {"symbol": symbol, "status": "DATA_UNAVAILABLE",
-                    "error": "HTTP_" + str(exc.code), "price": None}
+                    "error": "HTTP_" + str(exc.code) + ("/" + code if code else ""), "price": None}
         except Exception as exc:
             return {"symbol": symbol, "status": "DATA_UNAVAILABLE",
                     "error": type(exc).__name__, "price": None}
