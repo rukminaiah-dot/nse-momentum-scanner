@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart Option Buyer | NSE Scanner V2</title>
+<style>
+body{margin:0;padding:18px;background:#0f172a;color:#f8fafc;font:16px Arial,sans-serif;max-width:720px}
+h1{font-size:24px}.muted{color:#a8b5c9}.card{background:#1e293b;border-radius:14px;padding:18px;margin:16px 0}
+.tag{color:#fbbf24;font-weight:700}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.value{font-weight:700;font-size:20px}.small{font-size:13px}.error{color:#fca5a5}
+</style>
+</head>
+<body>
+<h1>Smart Option Buyer</h1>
+<p class="muted">NIFTY 50 + SENSEX | Research and manual trading only</p>
+<p class="tag">NO AUTOMATIC ORDERS</p>
+<section class="card"><h2>Capital & Risk</h2><div class="grid">
+<div>Capital<div class="value" id="capital">—</div></div>
+<div>Max investment<div class="value" id="investment">—</div></div>
+<div>Max planned loss<div class="value" id="risk">—</div></div>
+<div>Minimum reward:risk<div class="value" id="rr">—</div></div>
+</div><p class="muted small">Planned loss is not guaranteed. Slippage and rapid moves can increase actual losses.</p></section>
+<div id="cards">
+<section class="card" data-index="NIFTY 50"><h2>NIFTY 50</h2><p class="tag status">NO TRADE</p><p class="reason muted">Loading…</p><p class="prediction">Prediction: Unavailable</p><p class="confirmation">Confirmation: WAIT</p><p class="candidate">Option: None</p></section>
+<section class="card" data-index="SENSEX"><h2>SENSEX</h2><p class="tag status">NO TRADE</p><p class="reason muted">Loading…</p><p class="prediction">Prediction: Unavailable</p><p class="confirmation">Confirmation: WAIT</p><p class="candidate">Option: None</p></section>
+</div>
+<p class="muted small">New entries before 3:00 PM IST; monitor until 3:15 PM IST. Never trade on unavailable or stale data.</p>
+<p id="updated" class="muted small">Awaiting API…</p>
+<script>
+const names=['NIFTY 50','SENSEX'];
+const rupees=n=>Number.isFinite(Number(n))?'₹'+Number(n).toLocaleString('en-IN'):'Unavailable';
+function fail(message){
+ for(const name of names){const card=document.querySelector('[data-index="'+name+'"]');
+ card.querySelector('.status').textContent='NO TRADE';
+ card.querySelector('.reason').textContent='Reason: '+message;
+ card.querySelector('.prediction').textContent='Prediction: Unavailable';
+ card.querySelector('.confirmation').textContent='Confirmation: WAIT';
+ card.querySelector('.candidate').textContent='Option: None';}
+ document.getElementById('updated').textContent='Data status: '+message;
+}
+async function refresh(){
+ try{
+  const response=await fetch('/api/v2/smart-option-buyer',{cache:'no-store'});
+  if(!response.ok)throw Error('API unavailable');
+  const data=await response.json();
+  if(!data||!Array.isArray(data.indices)||data.mode!=='MANUAL_RESEARCH_ONLY'||data.order_execution_enabled!==false)throw Error('Invalid safety status');
+  document.getElementById('capital').textContent=rupees(data.capital_inr);
+  document.getElementById('investment').textContent=rupees(data.maximum_investment_inr);
+  document.getElementById('risk').textContent=rupees(data.maximum_planned_loss_inr);
+  document.getElementById('rr').textContent='1:'+String(data.minimum_reward_risk??'—');
+  for(const name of names){
+   const card=document.querySelector('[data-index="'+name+'"]');
+   const row=data.indices.find(item=>item&&item.index===name);
+   card.querySelector('.status').textContent='NO TRADE';
+   card.querySelector('.reason').textContent='Reason: '+(row&&row.reason?String(row.reason).replaceAll('_',' '):'DATA UNAVAILABLE');
+   card.querySelector('.prediction').textContent='Prediction: '+(row&&row.prediction||'UNAVAILABLE');
+   card.querySelector('.confirmation').textContent='Confirmation: '+(row&&row.confirmation||'WAIT');
+   card.querySelector('.candidate').textContent='Option: '+(row&&row.option_candidate?String(row.option_candidate):'None');
+  }
+  document.getElementById('updated').textContent='API checked: '+new Date().toLocaleTimeString('en-IN')+' | No live option chain connected yet';
+ }catch(err){fail('API UNAVAILABLE');console.warn(err);}
+}
+refresh();setInterval(refresh,10000);
+</script>
+</body></html>
