@@ -1,3 +1,5 @@
+from .expiry_signals import expiry_signal, candle_is_fresh
+from .expiry_momentum import expiry_watch_status
 import sqlite3
 from fastapi import FastAPI
 from .database import DB_PATH
@@ -85,3 +87,35 @@ def history_page():
 @app.get("/expiry-momentum")
 def expiry_momentum_page():
     return FileResponse("v2/frontend/expiry-momentum.html")
+
+
+@app.get("/api/v2/expiry-signals")
+def get_expiry_signals():
+    """Research-only expiry signals. No automatic orders."""
+    rows = get_scanner_results()
+    output = []
+    for name in ("NIFTY 50", "SENSEX"):
+        row = next((r for r in rows if r["symbol"] == name), None)
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        now = datetime.now(ZoneInfo("Asia/Kolkata"))
+        status = expiry_watch_status(name, now)
+
+        if status != "WATCH":
+            reason = status
+        elif row is None:
+            reason = "DATA_UNAVAILABLE"
+        elif not candle_is_fresh(row.get("updated_at"), now):
+            reason = "STALE_DATA"
+        else:
+            reason = "SAFETY_CHECKS_PASSED"
+
+        output.append({
+            "index": name,
+            "signal": "NO TRADE",
+            "reason": reason,
+            "price": row.get("price") if row else None,
+            "updated_at": row.get("updated_at") if row else None,
+        })
+    return output
