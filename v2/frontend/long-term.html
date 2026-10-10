@@ -15,6 +15,7 @@ table{border-collapse:collapse;width:100%}th,td{padding:15px 12px;border-bottom:
 <section class="metrics" aria-label="Watchlist summary"><div class="metric"><div class="metric-label">Watchlist</div><div class="metric-value">10</div><div class="metric-hint">Selected stocks</div></div><div class="metric"><div class="metric-label">Verified prices</div><div class="metric-value" id="covered">— / 10</div><div class="metric-hint">Based on available data</div></div><div class="metric"><div class="metric-label">Investment horizon</div><div class="metric-value">~3 mo</div><div class="metric-hint">Research guideline</div></div><div class="metric"><div class="metric-label">Max planned risk</div><div class="metric-value">₹2,500</div><div class="metric-hint">Per trade, not an order</div></div></section>
 <div class="note">Target guideline: 10–18% · Stop-loss guideline: 4–6%. These are planning assumptions, not guaranteed returns or automatic trading instructions.</div>
 <section class="panel"><h2 class="section-title">Price monitor</h2><p class="section-subtitle">Verified price snapshots only. Stale data remains visible as historical information, never as a live quote.</p><p id="source" role="status" aria-live="polite">Loading existing scanner data...</p><div class="table-scroll"><table><thead><tr><th>Symbol</th><th>Last recorded price</th><th>Exchange / scanner time</th><th>Feed status</th></tr></thead><tbody id="stocks"></tbody></table></div><p id="coverage"></p><p id="diagnostics" role="status"></p></section>
+<section class="panel"><h2 class="section-title">Daily breakout research</h2><p class="section-subtitle">Completed daily candles only. A target and stop are shown only after a confirmed breakout with volume and trend support. Indicative research, not orders.</p><p id="breakout-source" role="status">Loading daily technical setups...</p><div class="table-scroll"><table><thead><tr><th>Stock</th><th>Setup</th><th>Entry</th><th>Stop</th><th>Target 2R</th><th>Target 3R</th><th>Shares</th></tr></thead><tbody id="breakout-rows"></tbody></table></div></section>
 <section class="panel"><h2 class="section-title">Data transparency</h2><p class="section-subtitle">All ten stocks are requested from Upstox V3; when unavailable, Yahoo Finance daily historical closes are used and explicitly labelled. The intraday scanner is not used.</p><p class="footnote">This dashboard is read-only. It does not modify scanner subscriptions, place orders, or use unavailable Upstox historical candles. Missing or stale prices must not be used as trade signals.</p></section>
 </div>
 <script>
@@ -85,5 +86,22 @@ async function load(){
   }
  }
 }
-load();
+async function loadBreakouts(){
+ const body=document.getElementById('breakout-rows'),label=document.getElementById('breakout-source');
+ try{
+  const response=await fetch('/api/v2/positional-breakouts',{cache:'no-store'});
+  if(!response.ok)throw Error('Daily history API HTTP '+response.status);
+  const rows=await response.json();
+  if(!Array.isArray(rows))throw Error('Invalid breakout response');
+  body.replaceChildren();
+  for(const item of rows){
+   const values=[item.symbol,item.status+(item.candle_date?' · '+item.candle_date:''),item.entry==null?'—':'₹'+fmt(item.entry),item.stop==null?'—':'₹'+fmt(item.stop),item.target_2r==null?'—':'₹'+fmt(item.target_2r),item.target_3r==null?'—':'₹'+fmt(item.target_3r),item.shares_at_risk_budget??'—'];
+   const tr=document.createElement('tr');
+   for(const [index,value] of values.entries()){const td=document.createElement('td');td.dataset.label=['Stock','Setup','Entry','Stop','Target 2R','Target 3R','Shares'][index];td.textContent=value;tr.appendChild(td);}
+   body.appendChild(tr);
+  }
+  label.textContent='Independent Yahoo Finance completed daily candles · '+rows.filter(x=>x.status==='BREAKOUT_CONFIRMED').length+' confirmed setups · ₹2,500 maximum planned risk per trade.';
+ }catch(error){label.textContent='Breakout research unavailable: '+error.message+'. No targets or stops are assumed.';}
+}
+load();loadBreakouts();
 </script></body></html>
