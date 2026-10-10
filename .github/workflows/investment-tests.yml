@@ -1,0 +1,22 @@
+name: Long-term investment checks
+on:
+  pull_request:
+    paths:
+      - 'v2/backend/investment.py'
+      - 'v2/backend/test_investment.py'
+      - '.github/workflows/investment-tests.yml'
+  push:
+    branches:
+      - 'feature/long-term-investment-tab'
+jobs:
+  offline-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile investment module
+        run: python -m py_compile v2/backend/investment.py v2/backend/test_investment.py
+      - name: Run offline tests without Upstox credentials
+        run: python -m unittest v2.backend.test_investment -v
