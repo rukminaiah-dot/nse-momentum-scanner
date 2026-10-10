@@ -64,7 +64,7 @@ def collect(reference=None, max_calendar_days=130):
         for symbol in _history:
             _history[symbol].sort(key=lambda row: row["date"])
         _state["status"] = "READY" if successes >= 70 else "INSUFFICIENT_HISTORY"
-        print("NSE_HISTORY_RESULT:", dict(_state, stocks_with_70_sessions=sum(len(v)>=70 for v in _history.values())), flush=True)
+        print("NSE_HISTORY_RESULT:", dict(_state, stocks_with_70_sessions=sum(len(v)>=70 for v in _history.values()), insufficient_symbols=[{"symbol":s,"sessions":len(v)} for s,v in _history.items() if len(v)<70]), flush=True)
 
 def start():
     threading.Thread(target=collect, daemon=True, name="nse-history-collector").start()
