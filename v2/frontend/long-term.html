@@ -11,12 +11,12 @@ table{border-collapse:collapse;width:100%}th,td{padding:15px 12px;border-bottom:
 </style>
 </head><body><div class="shell">
 <nav class="topbar" aria-label="Primary"><div class="brand">NSE <span>Momentum</span> <span style="color:#e9f1ff;font-weight:500">/ Investments</span></div><a class="back" href="https://nse-momentum-scanner-5rls.onrender.com/">← Back to 200-stock scanner</a></nav>
-<header class="hero"><div><div class="eyebrow">Investment research workspace</div><h1>Long-Term Watchlist</h1><p class="subtitle">Track your ten selected companies in one calm, mobile-friendly dashboard. Prices come from Upstox V3 or Yahoo Finance daily historical closes, with clear freshness labels.</p></div><button class="refresh" onclick="load()" type="button">↻ Refresh prices</button></header>
+<header class="hero"><div><div class="eyebrow">Investment research workspace</div><h1>Long-Term Watchlist</h1><p class="subtitle">Track your ten selected companies in one calm, mobile-friendly dashboard. Prices come from Upstox V3 quotes or Screener-supported research exports, with clear freshness labels.</p></div><button class="refresh" onclick="load()" type="button">↻ Refresh prices</button></header>
 <section class="metrics" aria-label="Watchlist summary"><div class="metric"><div class="metric-label">Watchlist</div><div class="metric-value">10</div><div class="metric-hint">Selected stocks</div></div><div class="metric"><div class="metric-label">Verified prices</div><div class="metric-value" id="covered">— / 10</div><div class="metric-hint">Based on available data</div></div><div class="metric"><div class="metric-label">Investment horizon</div><div class="metric-value">~3 mo</div><div class="metric-hint">Research guideline</div></div><div class="metric"><div class="metric-label">Max planned risk</div><div class="metric-value">₹2,500</div><div class="metric-hint">Per trade, not an order</div></div></section>
 <div class="note">Target guideline: 10–18% · Stop-loss guideline: 4–6%. These are planning assumptions, not guaranteed returns or automatic trading instructions.</div>
 <section class="panel"><h2 class="section-title">Price monitor</h2><p class="section-subtitle">Verified price snapshots only. Stale data remains visible as historical information, never as a live quote.</p><p id="source" role="status" aria-live="polite">Loading existing scanner data...</p><div class="table-scroll"><table><thead><tr><th>Symbol</th><th>Last recorded price</th><th>Exchange / scanner time</th><th>Feed status</th></tr></thead><tbody id="stocks"></tbody></table></div><p id="coverage"></p><p id="diagnostics" role="status"></p></section>
-<section class="panel"><h2 class="section-title">Daily breakout research</h2><p class="section-subtitle">Completed daily candles only. A target and stop are shown only after a confirmed breakout with volume and trend support. Indicative research, not orders.</p><p id="breakout-source" role="status">Loading daily technical setups...</p><div class="table-scroll"><table><thead><tr><th>Stock</th><th>Setup</th><th>Entry</th><th>Stop</th><th>Target 2R</th><th>Target 3R</th><th>Shares</th></tr></thead><tbody id="breakout-rows"></tbody></table></div></section>
-<section class="panel"><h2 class="section-title">Data transparency</h2><p class="section-subtitle">All ten stocks are requested from Upstox V3; when unavailable, Yahoo Finance daily historical closes are used and explicitly labelled. The intraday scanner is not used.</p><p class="footnote">This dashboard is read-only. It does not modify scanner subscriptions, place orders, or use unavailable Upstox historical candles. Missing or stale prices must not be used as trade signals.</p></section>
+<section class="panel"><h2 class="section-title">Daily breakout research</h2><p class="section-subtitle">Completed daily candles only. A target and stop are shown only after a confirmed breakout with volume and trend support. Indicative research, not orders.</p><p id="breakout-source" role="status">Awaiting Screener research data and a verified daily OHLCV source...</p><div class="table-scroll"><table><thead><tr><th>Stock</th><th>Setup</th><th>Entry</th><th>Stop</th><th>Target 2R</th><th>Target 3R</th><th>Shares</th></tr></thead><tbody id="breakout-rows"></tbody></table></div></section>
+<section class="panel"><h2 class="section-title">Data transparency</h2><p class="section-subtitle">Screener.in research data will be accepted through supported exports. Yahoo Finance is disabled, and no technical breakout level is estimated without verified historical OHLCV candles.</p><p class="footnote">This dashboard is read-only. It does not modify scanner subscriptions, place orders, or use unavailable Upstox historical candles. Missing or stale prices must not be used as trade signals.</p></section>
 </div>
 <script>
 const names=['POLYCAB','LT','COROMANDEL','BEL','APLAPOLLO','MAXHEALTH','M&M','CUMMINSIND','DALBHARAT','BDL'];
@@ -64,7 +64,7 @@ async function load(){
    body.appendChild(tr);
   }
   document.getElementById('covered').textContent=Object.keys(scanner).length+' / 10';
-  source.textContent='Upstox V3 prices with Yahoo Finance daily-close fallback; not all prices are live. Checked: '+new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata'});
+  source.textContent='Upstox V3 quote source; Yahoo Finance disabled. Checked: '+new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata'});
   coverage.textContent='Independent price records: '+totalRows+'; matching watchlist records: '+matchingRows+'; valid price/timestamp records: '+validRows+'. Fresh quotes: '+fresh+'; stale quotes: '+stale+'.';
   diagnostics.textContent='Preview quote records: '+totalRows+'. Checking production scanner coverage...';
   try {
@@ -100,7 +100,7 @@ async function loadBreakouts(){
    for(const [index,value] of values.entries()){const td=document.createElement('td');td.dataset.label=['Stock','Setup','Entry','Stop','Target 2R','Target 3R','Shares'][index];td.textContent=value;tr.appendChild(td);}
    body.appendChild(tr);
   }
-  label.textContent='Independent Yahoo Finance completed daily candles · '+rows.filter(x=>x.status==='BREAKOUT_CONFIRMED').length+' confirmed setups · ₹2,500 maximum planned risk per trade.';
+  label.textContent='Awaiting verified daily OHLCV candles · '+rows.filter(x=>x.status==='BREAKOUT_CONFIRMED').length+' confirmed setups · ₹2,500 maximum planned risk per trade.';
  }catch(error){label.textContent='Breakout research unavailable: '+error.message+'. No targets or stops are assumed.';}
 }
 load();loadBreakouts();
