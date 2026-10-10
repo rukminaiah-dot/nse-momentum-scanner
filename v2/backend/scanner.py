@@ -392,6 +392,19 @@ if __name__ == "__main__":
                 market_regimes["NIFTY 50"] = index_signal(closes[-1], ema(closes, 9), ema(closes, 20), None)
                 print("INITIAL NIFTY 50 REGIME:", market_regimes["NIFTY 50"])
 
+            # Preserve actual previous-session stock prices for validation when
+            # the market is closed. Never turn preloaded history into a BUY.
+            if key in NIFTY_200.values() and loaded >= 20:
+                history = candles.completed[key]
+                closes = [item.close for item in history]
+                if hasattr(history[-1], "timestamp"):
+                    save_scan_result(
+                        instrument_symbols.get(key, key), closes[-1],
+                        ema(closes, 9), ema(closes, 20), momentum(closes),
+                        "HISTORICAL_PRELOAD", five_minute_trend(history),
+                        "WAITING", None,
+                    )
+
             if loaded >= 20:
                 print("PRELOAD READY:", key, loaded, "/20 candles")
             else:
