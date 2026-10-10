@@ -25,6 +25,20 @@ class InvestmentTests(unittest.TestCase):
         self.assertTrue(all(s["price"] is None and s["status"] == "DATA_UNAVAILABLE"
                             for s in result["stocks"]))
 
+    def test_rejects_stale_candles(self):
+        rows = [[date(2025, 1, 1).isoformat() + "T00:00:00+05:30",
+                 100, 101, 99, 100, 1000, 0] for _ in range(120)]
+        with patch.object(inv, "candles_for", return_value=rows):
+            with self.assertRaisesRegex(ValueError, "Stale"):
+                inv.analyze("POLYCAB", date(2026, 10, 9))
+
+    def test_rejects_insufficient_history(self):
+        rows = [[date(2026, 10, 9).isoformat() + "T00:00:00+05:30",
+                 100, 101, 99, 100, 1000, 0] for _ in range(20)]
+        with patch.object(inv, "candles_for", return_value=rows):
+            with self.assertRaisesRegex(ValueError, "Insufficient"):
+                inv.analyze("POLYCAB", date(2026, 10, 9))
+
     def test_daily_candle_screen_never_claims_live(self):
         dates = [date(2026, 10, 9).toordinal() - 299 + i for i in range(300)]
         rows = [[date.fromordinal(day).isoformat() + "T00:00:00+05:30",
