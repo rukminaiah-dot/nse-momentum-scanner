@@ -4,6 +4,7 @@ on:
     paths:
       - 'v2/backend/investment.py'
       - 'v2/backend/test_investment.py'
+      - 'v2/backend/smoke_investment_upstox.py'
       - '.github/workflows/investment-tests.yml'
   push:
     branches:
@@ -17,6 +18,6 @@ jobs:
         with:
           python-version: '3.11'
       - name: Compile investment module
-        run: python -m py_compile v2/backend/investment.py v2/backend/test_investment.py
+        run: python -m py_compile v2/backend/investment.py v2/backend/test_investment.py v2/backend/smoke_investment_upstox.py
       - name: Run offline tests without Upstox credentials
         run: python -m unittest v2.backend.test_investment -v
