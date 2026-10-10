@@ -12,6 +12,7 @@ from v2.backend.investment import cached_snapshot, SYMBOLS, NIFTY_200, nse_equit
 from functools import lru_cache
 from v2.backend.investment_watchlist_57 import RESEARCH_UNIVERSE
 from v2.backend.nse_daily_source import probe_latest
+from v2.backend import nse_history_collector
 
 def direct_upstox_quotes():
     """Read-only fallback: one Upstox V3 request for the ten watchlist symbols."""
@@ -98,6 +99,10 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        if self.path == "/api/v2/historical-data-status":
+            return self.respond(200, nse_history_collector.snapshot())
+        if self.path == "/api/v2/verified-positional-signals":
+            return self.respond(200, nse_history_collector.signals())
         if self.path == "/api/v2/data-source-probe":
             return self.respond(200, probe_latest(days_back=3))
         if self.path == "/health":
@@ -161,5 +166,6 @@ if __name__ == "__main__":
         except Exception as exc:
             print("NSE_SOURCE_PROBE_ERROR:", type(exc).__name__, flush=True)
     threading.Thread(target=startup_probe, daemon=True).start()
+    nse_history_collector.start()
     port = int(os.environ.get("PORT", "10000"))
     ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
