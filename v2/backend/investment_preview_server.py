@@ -1,6 +1,8 @@
 """Isolated, read-only preview service. Does not import the trading API."""
 import json
 import os
+import urllib.request
+import urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -17,6 +19,33 @@ class Handler(BaseHTTPRequestHandler):
             payload = {"status": "ok", "mode": "isolated-investment-preview",
                        "upstox_configured": bool(os.getenv("UPSTOX_ACCESS_TOKEN"))}
             return self.respond(200, payload)
+        if self.path == "/api/v2/scanner-quotes":
+            # Read-only public scanner endpoint; never forwards the Upstox token.
+            url = "https://nse-momentum-scanner-api.onrender.com/api/v2/scanner"
+            try:
+                request = urllib.request.Request(url, headers={"Accept": "application/json"})
+                with urllib.request.urlopen(request, timeout=10) as response:
+                    rows = json.load(response)
+                from v2.backend.investment import SYMBOLS, NIFTY_200
+                by_key = {v: k for k, v in NIFTY_200.items()}
+                selected = []
+                if not isinstance(rows, list):
+                    raise ValueError("Unexpected scanner response")
+                for row in rows:
+                    if not isinstance(row, dict):
+                        continue
+                    symbol = row.get("symbol")
+                    symbol = by_key.get(symbol, symbol)
+                    if symbol not in SYMBOLS:
+                        continue
+                    price = row.get("price")
+                    if not isinstance(price, (int, float)) or isinstance(price, bool) or not (0 < price < 10000000):
+                        continue
+                    selected.append({"symbol": symbol, "price": price,
+                                     "updated_at": row.get("updated_at") if isinstance(row.get("updated_at"), str) else None})
+                return self.respond(200, {"source": "existing scanner; not daily close", "quotes": selected})
+            except (urllib.error.URLError, TimeoutError, ValueError, TypeError, OSError):
+                return self.respond(503, {"error": "SCANNER_DATA_UNAVAILABLE", "quotes": []})
         if self.path == "/api/v2/investment":
             now = datetime.now(ZoneInfo("Asia/Kolkata"))
             return self.respond(200, cached_snapshot(int(now.timestamp() // 900)))
