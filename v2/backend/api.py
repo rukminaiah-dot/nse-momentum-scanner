@@ -177,3 +177,64 @@ def nifty200_feed_health():
     if base["market_session"] == "CLOSED" and base["status"] == "STALE_REPORT":
         base["status"] = "MARKET_CLOSED_TICK_REPORT_STALE"
     return base
+
+
+@app.get("/api/v2/top-momentum-setups")
+def top_momentum_setups():
+    """Rank verified fresh scanner candidates; research only, never place orders."""
+    from datetime import datetime, time as clock_time, timedelta
+    from math import isfinite
+    from zoneinfo import ZoneInfo
+    now = datetime.now(ZoneInfo("Asia/Kolkata"))
+    session_open = now.weekday() < 5 and clock_time(9, 15) <= now.time() < clock_time(15, 30)
+    output = {"status": "MARKET_CLOSED" if not session_open else "NO_QUALIFYING_SETUPS",
+              "as_of_ist": now.isoformat(), "universe_size": len(NIFTY_200),
+              "order_execution_enabled": False, "mode": "MANUAL_RESEARCH_ONLY",
+              "setups": [], "fresh_stock_rows": 0, "rejected_stale_rows": 0}
+    if not session_open:
+        return output
+    try:
+        with sqlite3.connect(DB_PATH, timeout=5) as db:
+            db.row_factory = sqlite3.Row
+            rows = [dict(row) for row in db.execute(
+                "SELECT symbol,updated_at,price,ema9,ema20,momentum,market,trend_5m,signal FROM scanner_results")]
+    except sqlite3.Error:
+        output["status"] = "SCANNER_DATABASE_UNAVAILABLE"
+        return output
+    eligible_symbols = set(NIFTY_200)
+    for row in rows:
+        if row["symbol"] not in eligible_symbols:
+            continue
+        try:
+            stamp = datetime.strptime(row["updated_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=ZoneInfo("Asia/Kolkata"))
+            if stamp.date() != now.date() or not timedelta(0) <= now - stamp <= timedelta(minutes=3):
+                output["rejected_stale_rows"] += 1
+                continue
+            output["fresh_stock_rows"] += 1
+            price, e9, e20, mom = (float(row[k]) for k in ("price", "ema9", "ema20", "momentum"))
+            if not all(isfinite(v) for v in (price, e9, e20, mom)) or min(price, e9, e20) <= 0:
+                continue
+            if row["signal"] != "BUY" or row["trend_5m"] != "BULLISH" or not (price > e9 > e20 and mom > 0):
+                continue
+            # These are scanner-derived indicative levels, NOT ATR-validated executable orders.
+            # Without an independently verified ATR, suppress targets and stops.
+            score = round(mom + 100 * (e9 - e20) / price, 4)
+            output["setups"].append({
+                "symbol": row["symbol"], "last_price": round(price, 2),
+                "indicative_entry": round(price, 2),
+                "target_1": None, "target_2": None, "stop_loss": None,
+                "levels_status": "ATR_LEVELS_NOT_VERIFIED",
+                "momentum_pct": round(mom, 3), "ema9": round(e9, 2),
+                "ema20": round(e20, 2), "trend_5m": row["trend_5m"],
+                "candle_ist": row["updated_at"], "rank_score": score,
+                "reasons": ["FRESH_COMPLETED_CANDLE", "BUY_SIGNAL",
+                            "BULLISH_5M_TREND", "EMA9_ABOVE_EMA20", "POSITIVE_MOMENTUM"],
+                "trade_status": "RESEARCH_ONLY",
+            })
+        except (ValueError, TypeError, OverflowError):
+            continue
+    output["setups"].sort(key=lambda item: (-item["rank_score"], item["symbol"]))
+    output["setups"] = output["setups"][:5]
+    if output["setups"]:
+        output["status"] = "RESEARCH_SHORTLIST"
+    return output
