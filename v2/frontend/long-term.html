@@ -28,12 +28,16 @@ async function load(){
   const rows=await response.json();
   if(!Array.isArray(rows))throw Error('Invalid scanner API response');
   const scanner={};
+  const totalRows=rows.length;
+  let matchingRows=0,validRows=0;
   for(const item of rows){
    if(!item||typeof item!=='object')continue;
    const name=byKey[item.symbol]||item.symbol;
    if(!names.includes(name))continue;
+   matchingRows++;
    const price=Number(item.price),time=validTime(item.updated_at);
    if(!Number.isFinite(price)||price<=0||time===null||time>Date.now()+60000)continue;
+   validRows++;
    if(!scanner[name]||time>scanner[name].time)scanner[name]={price,time,raw:item.updated_at};
   }
   let fresh=0,stale=0;
@@ -47,8 +51,8 @@ async function load(){
    body.appendChild(tr);
   }
   source.textContent='Existing NSE 200-stock scanner feed (not Upstox historical candles). Checked: '+new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata'});
-  coverage.textContent='8 of your 10 stocks are in the configured scanner universe. Fresh quotes: '+fresh+'; last recorded stale quotes: '+stale+'.';
-  diagnostics.textContent='COROMANDEL and DALBHARAT are not currently subscribed in the scanner. During weekends or market closures, scanner quotes may be stale or unavailable. No historical API requests are made.';
+  coverage.textContent='Scanner API records: '+totalRows+'; matching watchlist records: '+matchingRows+'; valid price/timestamp records: '+validRows+'. Fresh quotes: '+fresh+'; stale quotes: '+stale+'.';
+  diagnostics.textContent=totalRows===0?'The existing scanner database returned zero saved rows. A connected WebSocket does not automatically populate the scanner results table.':matchingRows===0?'The scanner database has rows, but none match your eight subscribed watchlist symbols.':validRows===0?'Watchlist rows exist, but none have a valid price and parseable timestamp.':'COROMANDEL and DALBHARAT are outside the configured scanner universe. Historical API is not used.';
  }catch(error){
   source.textContent='Scanner data unavailable';
   coverage.textContent='No verified scanner quotes available.';
