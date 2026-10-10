@@ -22,8 +22,9 @@
     <p>Weekly expiry: Tuesday</p>
     <p class="status">NO TRADE</p>
     <p class="reason muted">Reason: Loading safety checks…</p>
-    <p class="live-price muted">Index: Unavailable</p>
+    <p class="live-price muted">Last recorded price: Unavailable</p>
     <p class="candle muted">Candle: Unavailable</p>
+    <p class="freshness muted">Data status: Unavailable</p>
   </div>
 
   <div class="card" data-index="SENSEX">
@@ -31,8 +32,9 @@
     <p>Weekly expiry: Thursday</p>
     <p class="status">NO TRADE</p>
     <p class="reason muted">Reason: Loading safety checks…</p>
-    <p class="live-price muted">Index: Unavailable</p>
+    <p class="live-price muted">Last recorded price: Unavailable</p>
     <p class="candle muted">Candle: Unavailable</p>
+    <p class="freshness muted">Data status: Unavailable</p>
   </div>
 
   <p class="muted">Observation window: 2:00–3:20 PM IST</p>
@@ -46,9 +48,22 @@
         const card = document.querySelector('[data-index="' + name + '"]');
         card.querySelector('.status').textContent = 'NO TRADE';
         card.querySelector('.reason').textContent = 'Reason: ' + reason;
-        card.querySelector('.live-price').textContent = 'Index: Unavailable';
+        card.querySelector('.live-price').textContent = 'Last recorded price: Unavailable';
         card.querySelector('.candle').textContent = 'Candle: Unavailable';
+        card.querySelector('.freshness').textContent = 'Data status: Unavailable';
       }
+    }
+
+    function candleAge(timestamp) {
+      if (typeof timestamp !== 'string') return null;
+      const match = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/.exec(timestamp);
+      if (!match) return null;
+      const [ , year, month, day, hour, minute, second ] = match.map(Number);
+      const utcMillis = Date.UTC(year, month - 1, day, hour, minute, second) - 330 * 60 * 1000;
+      const date = new Date(utcMillis);
+      if (date.getUTCFullYear() !== year && !Number.isFinite(utcMillis)) return null;
+      const age = Date.now() - utcMillis;
+      return age >= 0 ? age : null;
     }
 
     async function updateExpirySignals() {
@@ -66,10 +81,16 @@
             (row && typeof row.reason === 'string' ? row.reason.replaceAll('_', ' ') : 'DATA UNAVAILABLE');
           const price = row && row.price != null ? Number(row.price) : NaN;
           card.querySelector('.live-price').textContent = Number.isFinite(price)
-            ? 'Index: ' + price.toLocaleString('en-IN')
-            : 'Index: Unavailable';
-          card.querySelector('.candle').textContent = 'Candle: ' +
+            ? 'Last recorded price: ' + price.toLocaleString('en-IN')
+            : 'Last recorded price: Unavailable';
+          card.querySelector('.candle').textContent = 'Candle (IST): ' +
             (row && row.updated_at ? String(row.updated_at) : 'Unavailable');
+          const age = candleAge(row && row.updated_at);
+          card.querySelector('.freshness').textContent = age === null
+            ? 'Data status: UNAVAILABLE / UNVERIFIED'
+            : age > 3 * 60 * 1000
+              ? 'Data status: STALE DATA — not live'
+              : 'Data status: Recent candle (not a trading signal)';
         }
       } catch (error) {
         showUnavailable('API UNAVAILABLE');
