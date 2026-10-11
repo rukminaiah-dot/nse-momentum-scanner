@@ -101,6 +101,37 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         self.path = urllib.parse.urlsplit(self.path).path
+        if self.path == "/api/v2/stock-scorecards":
+            # All original watchlist entries and user additions stay in research, even when unranked.
+            close_payload = nse_history_collector.latest_closes()
+            quotes = {q.get("symbol"): q for q in close_payload.get("stocks", [])} if isinstance(close_payload, dict) else {}
+            weights = {"growth": 25, "financial_quality": 20, "valuation": 20,
+                       "sector_opportunity": 15, "chart_entry": 10, "news_ownership": 10}
+            rows = []
+            for symbol in RESEARCH_UNIVERSE:
+                q = quotes.get(symbol, {})
+                rows.append({
+                    "symbol": symbol, "universe": "permanent_research",
+                    "nse_close": q.get("price"), "price_session": q.get("session"),
+                    "price_source": "NSE CM-UDiFF daily bhavcopy" if q.get("price") is not None else None,
+                    "company_pe": None, "sector_average_pe": None, "peer_median_pe": None,
+                    "historical_pe": None, "forward_pe": None, "peg": None,
+                    "revenue_growth": None, "earnings_growth": None,
+                    "roe": None, "roce": None, "debt_equity": None,
+                    "operating_cash_flow": None, "sector_outlook": None,
+                    "technical_entry": None, "ownership_trend": None,
+                    "scores": {category: None for category in weights},
+                    "total_score": None, "rating": "INCOMPLETE_NOT_RATED",
+                    "verification": "Requires dated exchange filings and comparable peer financials",
+                    "research_link": "https://www.screener.in/company/" + urllib.parse.quote(symbol) + "/consolidated/"
+                })
+            return self.respond(200, {
+                "as_of": datetime.now(ZoneInfo("Asia/Kolkata")).date().isoformat(),
+                "status": "57_RESEARCH_CARDS_CREATED_DATA_COLLECTION_INCOMPLETE",
+                "total": len(rows), "score_weights": weights, "stocks": rows,
+                "method": "No fabricated fundamental values, sector P/E, scores or Buy ratings",
+                "note": "NSE closing prices are dated, not live. 57 unique symbols = 54 from image plus 3 prior additions."
+            })
         if self.path == "/api/v2/investment-research-ranking":
             # Editorial discovery order; incomplete evidence must never be represented as a scored Buy.
             candidates = [
