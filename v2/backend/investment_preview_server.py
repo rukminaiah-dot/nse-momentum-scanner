@@ -101,6 +101,29 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         self.path = urllib.parse.urlsplit(self.path).path
+        if self.path == "/api/v2/investment-research-ranking":
+            # Editorial discovery order; incomplete evidence must never be represented as a scored Buy.
+            candidates = [
+                ("BEL", "Defence electronics and domestic procurement", "Order execution, margins and valuation"),
+                ("DIXON", "Electronics manufacturing scale and localisation", "Margins, valuation and customer concentration"),
+                ("NETWEB", "AI computing and data-centre infrastructure", "Valuation, cash conversion and customer concentration"),
+                ("POLYCAB", "Electrification and infrastructure demand", "Earnings, valuation and regulatory disclosures"),
+                ("CUPID", "Rapid earnings growth and international expansion", "High valuation and price volatility"),
+            ]
+            closes = nse_history_collector.latest_closes()
+            quotes = {item.get("symbol"): item for item in closes.get("stocks", [])} if isinstance(closes, dict) else {}
+            rows = []
+            for rank, (symbol, thesis, risk) in enumerate(candidates, 1):
+                q = quotes.get(symbol) or {}
+                rows.append({"rank": rank, "symbol": symbol, "thesis": thesis, "key_risk": risk,
+                             "nse_daily_close": q.get("price"), "session": q.get("session"),
+                             "score": None, "rating": "RESEARCH_NOT_FULLY_VERIFIED",
+                             "fundamentals_verified": False, "valuation_verified": False,
+                             "news_verified": False, "institutional_activity_verified": False})
+            return self.respond(200, {"status": "EDITORIAL_UNSCORED", "source": "editorial research shortlist plus NSE official daily closes",
+                                      "score_weights": {"growth": 25, "financial_strength": 20, "valuation": 20,
+                                                        "sector_policy": 15, "charts": 10, "news_institutions": 10},
+                                      "stocks": rows, "note": "Research order is not a calculated investment score or Buy recommendation."})
         if self.path == "/api/v2/nse-daily-closes":
             return self.respond(200, nse_history_collector.latest_closes())
         if self.path == "/api/v2/historical-data-status":
