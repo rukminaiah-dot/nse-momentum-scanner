@@ -10,6 +10,6 @@ SMALL = ["VEDL","SJVN","BAJFINANCE","NAUKRI","GODREJAGRO","ONMOBILE","DHANLAXMI"
 WATCHLIST = list(dict.fromkeys(LARGE + MID + SMALL))
 
 # Earlier user-selected companies absent from the uploaded image.
-USER_ADDITIONS = ["COROMANDEL", "DALBHARAT"]
+USER_ADDITIONS = ["COROMANDEL", "DALBHARAT", "CUPID"]
 RESEARCH_UNIVERSE = list(dict.fromkeys(WATCHLIST + USER_ADDITIONS))
-# Do not auto-fill to 70: new candidates require research and user-visible rationale.
+# CUPID is a research candidate, not a verified Buy recommendation. New candidates require a documented thesis.
