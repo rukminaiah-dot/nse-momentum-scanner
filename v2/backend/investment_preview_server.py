@@ -157,7 +157,17 @@ class Handler(BaseHTTPRequestHandler):
                     "upstox_error": upstox_error, "sources": sorted({q["source"] for q in quotes})})
             return self.respond(200, quotes)
         if self.path == "/api/v2/research-watchlist":
-            return self.respond(200, {"symbols": RESEARCH_UNIVERSE, "count": len(RESEARCH_UNIVERSE), "source": "user watchlist image plus earlier selections"})
+            discovery = nse_history_collector.market_discovery()
+            new_leads = [row for row in discovery.get("candidates", [])
+                         if row.get("symbol") not in RESEARCH_UNIVERSE]
+            return self.respond(200, {
+                "symbols": RESEARCH_UNIVERSE, "count": len(RESEARCH_UNIVERSE),
+                "policy": "ADD_ONLY_BASE_RESEARCH_UNIVERSE",
+                "source": "user watchlist plus earlier additions; existing symbols are never dropped by shortlist changes",
+                "discovery_session": discovery.get("session"),
+                "new_unverified_discovery_leads": new_leads,
+                "note": "Discovery leads are not automatically promoted to the durable research universe without verified company research."
+            })
         if self.path == "/api/v2/positional-breakouts":
             return self.respond(200, cached_breakouts(int(time.time() // 3600)))
         if self.path == "/api/v2/investment":
