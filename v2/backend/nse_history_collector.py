@@ -4,15 +4,52 @@ The preview's in-memory cache resets on Render restarts. No trades are placed.
 """
 import threading
 import time
+import json
+import os
+from pathlib import Path
 from datetime import date, timedelta
 from v2.backend.nse_daily_source import download_session
 from v2.backend.investment_watchlist_57 import RESEARCH_UNIVERSE
 from v2.backend.verified_positional_signals import evaluate
 
 _lock = threading.Lock()
+_CACHE_PATH = Path(os.environ.get("NSE_HISTORY_CACHE_PATH", "/tmp/nse_investment_history.json"))
+_CACHE_IS_DURABLE = bool(os.environ.get("NSE_HISTORY_CACHE_PATH"))
 _history = {s: [] for s in RESEARCH_UNIVERSE}
 _state = {"status":"NOT_STARTED","sessions":0,"attempted":0,"errors":0,"latest_session":None,
-          "source":"NSE official CM-UDiFF daily bhavcopy", "persistence":"in-memory only"}
+          "source":"NSE official CM-UDiFF daily bhavcopy", "persistence":"configured disk path" if _CACHE_IS_DURABLE else "temporary disk cache (lost on restart)"}
+
+def _save_cache():
+    """Atomic cache write; durable only if configured on a persistent mounted disk."""
+    try:
+        _CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        temp = _CACHE_PATH.with_suffix(".tmp")
+        with _lock:
+            payload = {"history": _history, "state": dict(_state)}
+        temp.write_text(json.dumps(payload), encoding="utf-8")
+        os.replace(temp, _CACHE_PATH)
+    except Exception as exc:
+        print("NSE_CACHE_WRITE_ERROR:", type(exc).__name__, flush=True)
+
+def _restore_cache():
+    try:
+        payload = json.loads(_CACHE_PATH.read_text(encoding="utf-8"))
+        stored = payload["history"]
+        if not isinstance(stored, dict):
+            return
+        with _lock:
+            for symbol in RESEARCH_UNIVERSE:
+                rows = stored.get(symbol, [])
+                if isinstance(rows, list):
+                    _history[symbol] = [row for row in rows if isinstance(row, dict)
+                        and isinstance(row.get("date"), str)
+                        and all(isinstance(row.get(k), (int, float)) for k in ("open","high","low","close","volume"))]
+            _state["status"] = "CACHED_REFRESHING"
+            _state["sessions"] = len(set(row["date"] for rows in _history.values() for row in rows))
+            _state["latest_session"] = max((row["date"] for rows in _history.values() for row in rows), default=None)
+        print("NSE_CACHE_RESTORED:", _state["sessions"], flush=True)
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
 
 def snapshot():
     with _lock:
@@ -63,7 +100,7 @@ def collect(reference=None, max_calendar_days=130):
         with _lock:
             for symbol in RESEARCH_UNIVERSE:
                 row = report.get(symbol)
-                if row is not None:
+                if row is not None and not any(old["date"] == row["date"] for old in _history[symbol]):
                     _history[symbol].append(row)
             _state["sessions"] += 1
             _state["attempted"] += 1
@@ -71,6 +108,7 @@ def collect(reference=None, max_calendar_days=130):
                 _state["latest_session"] = day.isoformat()
         successes += 1
         if successes % 15 == 0:
+            _save_cache()
             print("NSE_HISTORY_PROGRESS:", successes, "verified sessions", flush=True)
         if successes >= 78:
             break
@@ -80,6 +118,8 @@ def collect(reference=None, max_calendar_days=130):
             _history[symbol].sort(key=lambda row: row["date"])
         _state["status"] = "READY" if successes >= 70 else "INSUFFICIENT_HISTORY"
         print("NSE_HISTORY_RESULT:", dict(_state, stocks_with_70_sessions=sum(len(v)>=70 for v in _history.values()), insufficient_symbols=[{"symbol":s,"sessions":len(v)} for s,v in _history.items() if len(v)<70]), flush=True)
+    _save_cache()
 
 def start():
+    _restore_cache()
     threading.Thread(target=collect, daemon=True, name="nse-history-collector").start()
