@@ -104,11 +104,11 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/v2/investment-research-ranking":
             # Editorial discovery order; incomplete evidence must never be represented as a scored Buy.
             candidates = [
-                ("BEL", "Defence electronics and domestic procurement", "Order execution, margins and valuation"),
-                ("DIXON", "Electronics manufacturing scale and localisation", "Margins, valuation and customer concentration"),
-                ("NETWEB", "AI computing and data-centre infrastructure", "Valuation, cash conversion and customer concentration"),
-                ("POLYCAB", "Electrification and infrastructure demand", "Earnings, valuation and regulatory disclosures"),
-                # CUPID excluded from investment shortlist: ~197x FY27 guided profit at 9 Oct close.
+                ("LT", "Infrastructure and industrial orders; strong reported order pipeline", "Execution, international exposure and reconcile NSE/secondary quote"),
+                ("HDFCBANK", "Deposit growth and potential valuation recovery", "CEO transition, margins, deposit costs and asset quality"),
+                ("POLYCAB", "Electrification demand; reported Q1 FY27 revenue growth", "Around 43x trailing earnings; entry valuation and disclosures"),
+                ("SBIN", "Potential banking value with comparatively modest earnings multiple", "Credit costs, asset quality and public-sector-bank risks"),
+                ("BEL", "Defence electronics and domestic procurement", "Around 44x earnings; order conversion and margin of safety"),
             ]
             closes = nse_history_collector.latest_closes()
             quotes = {item.get("symbol"): item for item in closes.get("stocks", [])} if isinstance(closes, dict) else {}
