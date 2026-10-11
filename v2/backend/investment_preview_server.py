@@ -124,6 +124,8 @@ class Handler(BaseHTTPRequestHandler):
                                       "score_weights": {"growth": 25, "financial_strength": 20, "valuation": 20,
                                                         "sector_policy": 15, "charts": 10, "news_institutions": 10},
                                       "stocks": rows, "note": "Research order is not a calculated investment score or Buy recommendation."})
+        if self.path == "/api/v2/market-wide-discovery":
+            return self.respond(200, nse_history_collector.market_discovery())
         if self.path == "/api/v2/nse-daily-closes":
             return self.respond(200, nse_history_collector.latest_closes())
         if self.path == "/api/v2/historical-data-status":
