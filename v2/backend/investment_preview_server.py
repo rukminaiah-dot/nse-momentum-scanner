@@ -108,7 +108,7 @@ class Handler(BaseHTTPRequestHandler):
                 ("DIXON", "Electronics manufacturing scale and localisation", "Margins, valuation and customer concentration"),
                 ("NETWEB", "AI computing and data-centre infrastructure", "Valuation, cash conversion and customer concentration"),
                 ("POLYCAB", "Electrification and infrastructure demand", "Earnings, valuation and regulatory disclosures"),
-                ("CUPID", "Rapid earnings growth and international expansion", "High valuation and price volatility"),
+                # CUPID excluded from investment shortlist: ~197x FY27 guided profit at 9 Oct close.
             ]
             closes = nse_history_collector.latest_closes()
             quotes = {item.get("symbol"): item for item in closes.get("stocks", [])} if isinstance(closes, dict) else {}
@@ -120,7 +120,7 @@ class Handler(BaseHTTPRequestHandler):
                              "score": None, "rating": "RESEARCH_NOT_FULLY_VERIFIED",
                              "fundamentals_verified": False, "valuation_verified": False,
                              "news_verified": False, "institutional_activity_verified": False})
-            return self.respond(200, {"status": "EDITORIAL_UNSCORED", "source": "editorial research shortlist plus NSE official daily closes",
+            return self.respond(200, {"status": "EDITORIAL_UNSCORED_VALUATION_GATED", "source": "editorial research shortlist plus NSE official daily closes",
                                       "score_weights": {"growth": 25, "financial_strength": 20, "valuation": 20,
                                                         "sector_policy": 15, "charts": 10, "news_institutions": 10},
                                       "stocks": rows, "note": "Research order is not a calculated investment score or Buy recommendation."})
