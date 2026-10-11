@@ -16,6 +16,7 @@ _lock = threading.Lock()
 _CACHE_PATH = Path(os.environ.get("NSE_HISTORY_CACHE_PATH", "/tmp/nse_investment_history.json"))
 _CACHE_IS_DURABLE = bool(os.environ.get("NSE_HISTORY_CACHE_PATH"))
 _history = {s: [] for s in RESEARCH_UNIVERSE}
+_market_discovery = {"session": None, "universe_count": 0, "candidates": [], "status": "AWAITING_NSE_SESSION"}
 _state = {"status":"NOT_STARTED","sessions":0,"attempted":0,"errors":0,"latest_session":None,
           "source":"NSE official CM-UDiFF daily bhavcopy", "persistence":"configured disk path" if _CACHE_IS_DURABLE else "temporary disk cache (lost on restart)"}
 
@@ -38,6 +39,24 @@ def _restore_cache():
         if not isinstance(stored, dict):
             return
         with _lock:
+            if _market_discovery["session"] is None:
+                # New symbols are discoverable without manually editing the 57-stock list.
+                # A strong daily candle is only a lead; valuation and filings are still required.
+                candidates = []
+                for symbol, row in report.items():
+                    op, close, volume = row.get("open"), row.get("close"), row.get("volume")
+                    if not (isinstance(op, (int, float)) and isinstance(close, (int, float))
+                            and isinstance(volume, (int, float)) and op > 0 and close > 0
+                            and volume >= 100000 and close >= 20):
+                        continue
+                    daily_move = (close / op - 1) * 100
+                    if 2 <= daily_move <= 12:
+                        candidates.append({"symbol": symbol, "nse_close": close, "daily_open_to_close_pct": round(daily_move, 2),
+                                           "volume": volume, "already_in_research": symbol in RESEARCH_UNIVERSE,
+                                           "rating": "DISCOVERY_ONLY_NOT_SCORED"})
+                candidates.sort(key=lambda item: (-item["daily_open_to_close_pct"], -item["volume"]))
+                _market_discovery.update(session=day.isoformat(), universe_count=len(report),
+                                         candidates=candidates[:50], status="DAILY_PRICE_DISCOVERY_ONLY")
             for symbol in RESEARCH_UNIVERSE:
                 rows = stored.get(symbol, [])
                 if isinstance(rows, list):
@@ -50,6 +69,11 @@ def _restore_cache():
         print("NSE_CACHE_RESTORED:", _state["sessions"], flush=True)
     except (OSError, ValueError, KeyError, TypeError):
         pass
+
+def market_discovery():
+    """Market-wide NSE EQ discovery, NOT a valuation or Buy screen."""
+    with _lock:
+        return dict(_market_discovery)
 
 def snapshot():
     with _lock:
