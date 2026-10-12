@@ -14,6 +14,9 @@ class CandleManager:
         minute = self.minute_key(ts)
         item = self.current.get(key)
 
+        # Never roll the active candle backwards on delayed/out-of-order ticks.
+        if item is not None and minute < item["minute"]:
+            return None
         if item is None or item["minute"] != minute:
             if item:
                 closed = item["candle"]
