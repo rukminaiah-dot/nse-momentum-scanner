@@ -160,6 +160,11 @@ def save_scan_result(key, price, ema9_value, ema20_value, mom, market, trend_5m,
     candle_time = next((items[-1].timestamp.strftime('%Y-%m-%d %H:%M:%S') for instrument, items in candles.completed.items() if instrument_symbols.get(instrument, instrument) == key and items), None)
     con = sqlite3.connect(DB_PATH)
     con.execute("""INSERT OR REPLACE INTO scanner_results (symbol,updated_at,price,ema9,ema20,momentum,market,trend_5m,signal,previous_close) VALUES (?,?,?,?,?,?,?,?,?,?)""", (key, candle_time, price, ema9_value, ema20_value, mom, market, trend_5m, signal, previous_close))
+    if candle_time is not None:
+        con.execute("""INSERT OR REPLACE INTO scanner_signal_history
+            (symbol,candle_time,price,ema9,ema20,momentum,market,trend_5m,signal)
+            VALUES (?,?,?,?,?,?,?,?,?)""",
+            (key,candle_time,price,ema9_value,ema20_value,mom,market,trend_5m,signal))
     con.commit()
     con.close()
     if key in ("NIFTY 50", "SENSEX") and candle_time is not None:
