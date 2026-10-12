@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Expiry Momentum | NSE Scanner V2</title>
+  <title>Daily Momentum | NSE Scanner V2</title>
   <style>
     body { margin: 0; padding: 20px; background: #0f172a; color: #f8fafc; font-family: Arial, sans-serif; }
     h1 { font-size: 24px; }
@@ -14,12 +14,12 @@
   </style>
 </head>
 <body>
-  <h1>Expiry Momentum Scanner</h1>
+  <h1>Daily Momentum Scanner</h1>
   <p class="subtitle">NIFTY 50 + SENSEX | Manual Trading</p>
 
   <div class="card" data-index="NIFTY 50">
     <h2>NIFTY 50</h2>
-    <p>Weekly expiry: Tuesday</p>
+    <p>Monitoring: Every weekday (market holidays excluded)</p>
     <p class="status">NO TRADE</p>
     <p class="reason muted">Reason: Loading safety checks…</p>
     <p class="live-price muted">Last recorded price: Unavailable</p>
@@ -29,7 +29,7 @@
 
   <div class="card" data-index="SENSEX">
     <h2>SENSEX</h2>
-    <p>Weekly expiry: Thursday</p>
+    <p>Monitoring: Every weekday (market holidays excluded)</p>
     <p class="status">NO TRADE</p>
     <p class="reason muted">Reason: Loading safety checks…</p>
     <p class="live-price muted">Last recorded price: Unavailable</p>
@@ -37,7 +37,7 @@
     <p class="freshness muted">Data status: Unavailable</p>
   </div>
 
-  <p class="muted">Observation window: 2:00–3:20 PM IST</p>
+  <p class="muted">Observation window: 9:15 AM–3:20 PM IST, Monday–Friday. Exchange holidays require separate verification.</p>
   <p class="muted">Research mode only. No automatic orders.</p>
 
   <script>
