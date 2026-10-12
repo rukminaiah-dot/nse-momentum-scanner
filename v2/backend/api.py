@@ -278,3 +278,35 @@ def nifty200_stock_board():
             "stocks_with_stored_data": sum(s["last_price"] is not None for s in stocks),
             "stocks_with_fresh_data": sum(s["data_status"] == "LIVE_FRESH" for s in stocks),
             "order_execution_enabled": False, "stocks": stocks}
+
+
+@app.get("/api/v2/scalper-hourly-history")
+def scalper_hourly_history(date: str):
+    """Read-only hourly summary of persisted scanner candles; no inferred signals."""
+    from datetime import date as date_type
+    from fastapi import HTTPException
+    try:
+        day = date_type.fromisoformat(date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Date must be YYYY-MM-DD")
+    try:
+        with sqlite3.connect(DB_PATH, timeout=5) as db:
+            db.row_factory = sqlite3.Row
+            rows = [dict(r) for r in db.execute("""
+                SELECT substr(candle_time, 12, 2) AS hour_ist,
+                       COUNT(*) AS recorded_stock_candles,
+                       COUNT(DISTINCT symbol) AS stocks_seen,
+                       SUM(CASE WHEN signal='BUY' THEN 1 ELSE 0 END) AS buy_readings,
+                       SUM(CASE WHEN signal='SELL' THEN 1 ELSE 0 END) AS sell_readings,
+                       SUM(CASE WHEN signal='HOLD' THEN 1 ELSE 0 END) AS hold_readings
+                FROM scanner_signal_history
+                WHERE candle_time >= ? AND candle_time < ?
+                  AND symbol IN (SELECT symbol FROM scanner_results WHERE symbol NOT IN ('NIFTY 50','SENSEX','BANK NIFTY'))
+                GROUP BY substr(candle_time, 12, 2)
+                ORDER BY hour_ist
+            """, (date + " 00:00:00", date + " 23:59:59"))]
+    except sqlite3.Error:
+        return {"date":date,"status":"HISTORY_UNAVAILABLE","hours":[],"order_execution_enabled":False}
+    return {"date":date,"status":"RECORDED" if rows else "NO_RECORDED_HISTORY",
+            "note":"Counts are per-candle readings, not unique BUY trades. SQLite storage may be lost on Render restarts.",
+            "hours":rows,"order_execution_enabled":False}
