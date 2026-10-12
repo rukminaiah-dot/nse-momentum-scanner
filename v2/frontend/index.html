@@ -23,7 +23,9 @@ small{color:#aaa}
 <div id="indices">Loading live indices...</div>
 <h3>Top 5 Verified Momentum Setups</h3>
 <div id="scanner">Waiting for live market data...</div>
-<h3>NIFTY 200 Stock Board</h3>
+<h3>Top 10 Intraday Momentum Ranking (Watchlist, Not BUY Calls)</h3>
+<div id="ranked-stocks" class="table-wrap">Waiting for fresh candles…</div>
+<h3>NIFTY 200 Stock Board — Ranked by Momentum</h3>
 <div id="stock-count" class="card">Loading stock coverage…</div>
 <div id="stock-board" class="table-wrap">Loading validation table…</div>
 <h3>Trades</h3>
@@ -105,8 +107,13 @@ async function loadStockBoard(){
   if(!Array.isArray(data.stocks))throw Error('Invalid stock board');
   const esc=v=>String(v??'—').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   count.textContent=`${data.universe_size} NIFTY 200 stocks configured | ${data.stocks_with_stored_data} with stored prices | ${data.stocks_with_fresh_data} fresh | ${data.status}. Historical data is not a live BUY signal.`;
-  const sorted=[...data.stocks].sort((a,b)=>(b.data_status==='LIVE_FRESH')-(a.data_status==='LIVE_FRESH')||(b.last_price!=null)-(a.last_price!=null)||a.symbol.localeCompare(b.symbol));
-  board.innerHTML='<table><thead><tr><th>#</th><th>Stock</th><th>Last price ₹</th><th>Momentum %</th><th>Candle IST</th><th>Data status</th><th>Live signal</th></tr></thead><tbody>'+sorted.map((s,i)=>`<tr><td>${i+1}</td><td>${esc(s.symbol)}</td><td>${esc(s.last_price)}</td><td>${esc(s.momentum_pct)}</td><td>${esc(s.last_candle_ist)}</td><td class="${s.data_status==='LIVE_FRESH'?'status-ok':'status-warn'}">${esc(s.data_status)}</td><td>${esc(s.signal||'NO LIVE SIGNAL')}</td></tr>`).join('')+'</tbody></table>';
+  const fresh=data.stocks.filter(s=>s.data_status==='LIVE_FRESH'&&Number.isFinite(Number(s.momentum_pct))&&Number(s.last_price)>0);
+  const sorted=[...data.stocks].sort((a,b)=>(b.data_status==='LIVE_FRESH')-(a.data_status==='LIVE_FRESH')||(Number(b.momentum_pct)||-9999)-(Number(a.momentum_pct)||-9999)||a.symbol.localeCompare(b.symbol));
+  const fmt=v=>Number.isFinite(Number(v))&&v!=null?Number(v).toFixed(2):'—';
+  const ranked=document.getElementById('ranked-stocks');
+  const top=[...fresh].sort((a,b)=>Number(b.momentum_pct)-Number(a.momentum_pct)).slice(0,10);
+  ranked.innerHTML=top.length?'<table><thead><tr><th>Rank</th><th>Stock</th><th>Price ₹</th><th>5-bar momentum %</th><th>Signal</th><th>Candle IST</th></tr></thead><tbody>'+top.map((s,i)=>`<tr><td>${i+1}</td><td>${esc(s.symbol)}</td><td>${fmt(s.last_price)}</td><td>${fmt(s.momentum_pct)}%</td><td>${esc(s.signal==='BUY'?'BUY (verify setup)':s.signal==='SELL'?'HOLD / bearish signal':'WATCH — not confirmed BUY')}</td><td>${esc(s.last_candle_ist)}</td></tr>`).join('')+'</tbody></table><small>Ranked by fresh 5-bar price momentum only; volume, VWAP, breakout and risk are not independently validated. Ranking is NOT a BUY recommendation.</small>':'No fresh stock momentum data — ranking withheld.';
+  board.innerHTML='<table><thead><tr><th>Rank</th><th>Stock</th><th>Last price ₹</th><th>Momentum %</th><th>Candle IST</th><th>Data status</th><th>Live signal</th></tr></thead><tbody>'+sorted.map((s,i)=>`<tr><td>${s.data_status==='LIVE_FRESH'?i+1:'—'}</td><td>${esc(s.symbol)}</td><td>${fmt(s.last_price)}</td><td>${fmt(s.momentum_pct)}</td><td>${esc(s.last_candle_ist)}</td><td class="${s.data_status==='LIVE_FRESH'?'status-ok':'status-warn'}">${esc(s.data_status)}</td><td>${esc(s.signal||'NO LIVE SIGNAL')}</td></tr>`).join('')+'</tbody></table>';
 
  }catch(e){count.textContent='NIFTY 200 stock board unavailable';board.textContent='Could not load stock list; retrying.';}
 }
