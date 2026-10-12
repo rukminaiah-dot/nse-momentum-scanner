@@ -38,7 +38,7 @@
   </div>
 
   <p class="muted">Observation window: 9:15 AM–3:20 PM IST, Monday–Friday. Exchange holidays require separate verification.</p>
-  <p class="muted">Research mode only. No automatic orders.</p>
+  <p class="muted">Research mode only. No automatic orders.</p><div class="card"><h2>Option Chain Connection</h2><p class="muted">Read-only Upstox contract checks. Quote timestamps remain unverified; never a BUY signal.</p><p id="nifty-chain">NIFTY: Checking…</p><p id="sensex-chain">SENSEX: Checking…</p></div>
 
   <script>
     const indices = ['NIFTY 50', 'SENSEX'];
@@ -98,6 +98,18 @@
       }
     }
 
+    async function checkChain(name, id) {
+      const el = document.getElementById(id);
+      try {
+        const res = await fetch('/api/v2/upstox-option-chain-check?index=' + encodeURIComponent(name), {cache:'no-store'});
+        if (!res.ok) throw Error('API error');
+        const x = await res.json();
+        el.textContent = name + ': ' + (x.status || 'UNKNOWN') + ' | Contracts: ' + (x.contracts_found ?? 'Unknown') + ' | Expiry: ' + (x.expiry || 'Unavailable') + ' | Quote freshness UNVERIFIED — NO TRADE' + (x.reason ? ' | ' + x.reason : '');
+      } catch (_) { el.textContent = name + ': CONNECTION UNAVAILABLE — NO TRADE'; }
+    }
+    function checkChains() { checkChain('NIFTY 50','nifty-chain'); checkChain('SENSEX','sensex-chain'); }
+    checkChains();
+    setInterval(checkChains, 60000);
     updateExpirySignals();
     setInterval(updateExpirySignals, 5000);
   </script>
