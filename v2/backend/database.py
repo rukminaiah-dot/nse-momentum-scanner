@@ -44,6 +44,20 @@ def init_db():
     columns = [row[1] for row in con.execute("PRAGMA table_info(scanner_results)")]
     if "previous_close" not in columns:
         con.execute("ALTER TABLE scanner_results ADD COLUMN previous_close REAL")
+    con.execute("""CREATE TABLE IF NOT EXISTS scanner_signal_history (
+        symbol TEXT NOT NULL,
+        candle_time TEXT NOT NULL,
+        price REAL,
+        ema9 REAL,
+        ema20 REAL,
+        momentum REAL,
+        market TEXT,
+        trend_5m TEXT,
+        signal TEXT,
+        recorded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (symbol, candle_time)
+    )""")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_signal_history_time ON scanner_signal_history(candle_time)")
     con.commit()
     con.close()
 
