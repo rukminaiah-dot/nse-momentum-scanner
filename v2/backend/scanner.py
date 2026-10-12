@@ -313,9 +313,20 @@ def analyse(key):
 
 def on_tick(key, data):
     price = data.get("ltp")
-    ts = data.get("ltt") or int(time.time() * 1000)
+    ts = data.get("ltt")
+    if price is None or ts is None:
+        return
 
-    if price is None:
+    # Reject delayed, future-dated and malformed exchange ticks before they
+    # affect scalper candles, volume, trade state or feed-health counters.
+    try:
+        ts = int(float(ts))
+        now_ms = int(time.time() * 1000)
+        if ts < 10**11:
+            ts *= 1000  # Support Unix seconds as well as milliseconds.
+        if ts > now_ms + 5000 or now_ms - ts > 120000:
+            return
+    except (TypeError, ValueError, OverflowError):
         return
 
     record_feed_health(key)
