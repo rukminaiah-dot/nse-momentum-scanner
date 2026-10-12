@@ -22,6 +22,8 @@ class OptionDataError(RuntimeError):
 
 
 def _get(path, params, token):
+    # Identify the rejected endpoint without logging credentials or response bodies.
+    stage = "CONTRACT_METADATA" if path == "/option/contract" else "OPTION_CHAIN"
     url = BASE + path + "?" + urlencode(params)
     request = Request(url, headers={
         "Authorization": "Bearer " + token,
@@ -32,11 +34,11 @@ def _get(path, params, token):
             payload = json.load(response)
     except HTTPError as exc:
         # Do not expose response body; it may contain sensitive details.
-        raise OptionDataError("UPSTOX_HTTP_" + str(exc.code)) from None
+        raise OptionDataError("UPSTOX_" + stage + "_HTTP_" + str(exc.code)) from None
     except (URLError, TimeoutError, ValueError, OSError):
-        raise OptionDataError("UPSTOX_DATA_UNAVAILABLE") from None
+        raise OptionDataError("UPSTOX_" + stage + "_DATA_UNAVAILABLE") from None
     if not isinstance(payload, dict) or payload.get("status") != "success" or not isinstance(payload.get("data"), list):
-        raise OptionDataError("UPSTOX_INVALID_RESPONSE")
+        raise OptionDataError("UPSTOX_" + stage + "_INVALID_RESPONSE")
     return payload["data"]
 
 
