@@ -310,3 +310,72 @@ def scalper_hourly_history(date: str):
     return {"date":date,"status":"RECORDED" if rows else "NO_RECORDED_HISTORY",
             "note":"Counts are per-candle readings, not unique BUY trades. SQLite storage may be lost on Render restarts.",
             "hours":rows,"order_execution_enabled":False}
+
+
+@app.get("/api/v2/quality-ratings")
+def quality_ratings():
+    """Research-only quality scores for 200 stocks and three tracked indices."""
+    from datetime import datetime, timedelta, time as clock_time
+    from math import isfinite
+    from zoneinfo import ZoneInfo
+    from .market_config import INDICES
+    now = datetime.now(ZoneInfo("Asia/Kolkata"))
+    session_open = now.weekday() < 5 and clock_time(9, 15) <= now.time() < clock_time(15, 30)
+    universe = set(NIFTY_200) | set(INDICES)
+    output = {"as_of_ist": now.isoformat(), "universe_size": len(universe),
+              "status": "MARKET_CLOSED" if not session_open else "NO_VERIFIED_SETUPS",
+              "mode": "RESEARCH_ONLY", "order_execution_enabled": False,
+              "ratings": [], "unrated_count": len(universe)}
+    if not session_open:
+        return output
+    try:
+        with sqlite3.connect(DB_PATH, timeout=5) as db:
+            db.row_factory = sqlite3.Row
+            rows = [dict(row) for row in db.execute(
+                "SELECT symbol,updated_at,price,ema9,ema20,momentum,trend_5m,signal FROM scanner_results")]
+    except sqlite3.Error:
+        output["status"] = "SCANNER_DATABASE_UNAVAILABLE"
+        return output
+    for row in rows:
+        symbol = row["symbol"]
+        if symbol not in universe:
+            continue
+        try:
+            stamp = datetime.strptime(row["updated_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=ZoneInfo("Asia/Kolkata"))
+            if stamp.date() != now.date() or not timedelta(0) <= now - stamp <= timedelta(minutes=3):
+                continue
+            price, e9, e20, mom = (float(row[k]) for k in ("price", "ema9", "ema20", "momentum"))
+            if not all(isfinite(v) for v in (price, e9, e20, mom)) or min(price, e9, e20) <= 0:
+                continue
+            direction = row["signal"]
+            if direction not in ("BUY", "SELL"):
+                continue
+            bullish = direction == "BUY"
+            if not ((e9 > e20 and mom > 0) if bullish else (e9 < e20 and mom < 0)):
+                continue
+            index = symbol in INDICES
+            trend = row["trend_5m"]
+            if not index and trend != ("BULLISH" if bullish else "BEARISH"):
+                continue
+            # Heuristic, not a calibrated win probability. Only completed-candle
+            # data available in scanner_results is scored.
+            gap_pct = abs(e9 - e20) / price * 100
+            score = min(100, round(40 + min(25, abs(mom) * 5)
+                                   + min(20, gap_pct * 20)
+                                   + (15 if trend == ("BULLISH" if bullish else "BEARISH") else 0)))
+            output["ratings"].append({
+                "symbol": symbol, "type": "INDEX" if index else "STOCK",
+                "signal": direction, "rating": score,
+                "rating_basis": "CANDLE_ONLY_HEURISTIC",
+                "price": round(price, 2), "momentum": round(mom, 3),
+                "trend_5m": trend, "candle_ist": row["updated_at"],
+                "trade_status": "RESEARCH_ONLY", "volume_verified": False,
+                "reason": "RVOL_AND_LIQUIDITY_NOT_INCLUDED_IN_SCORE",
+            })
+        except (TypeError, ValueError, OverflowError):
+            continue
+    output["ratings"].sort(key=lambda x: (-x["rating"], x["symbol"]))
+    output["unrated_count"] = len(universe) - len(output["ratings"])
+    if output["ratings"]:
+        output["status"] = "CANDLE_RATINGS_AVAILABLE"
+    return output
