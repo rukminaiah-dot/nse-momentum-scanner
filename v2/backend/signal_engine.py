@@ -20,7 +20,8 @@ def generate_signal(price, ema9, ema20, vwap, momentum, rvol=None, market=None):
         and momentum < 0
     )
 
-    if bullish and market != "BEARISH":
+    # NIFTY market regime is informational; stock BUY is decided by stock-specific rules.
+    if bullish:
         return "BUY"
 
     if bearish:
