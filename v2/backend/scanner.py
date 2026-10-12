@@ -236,6 +236,18 @@ def analyse(key):
     vwap_value = None
     rvol = None
     if key in NIFTY_200.values():
+        # Session VWAP must use today's completed candles only, never yesterday's preload.
+        # Missing/zero traded volume means VWAP cannot validate a stock BUY.
+        session_date = history[-1].timestamp.date()
+        session_candles = [c for c in history
+                           if hasattr(c, "timestamp")
+                           and c.timestamp.date() == session_date]
+        total_volume = sum(max(0.0, float(c.volume)) for c in session_candles)
+        if total_volume > 0:
+            vwap_value = sum(
+                ((c.high + c.low + c.close) / 3.0) * max(0.0, float(c.volume))
+                for c in session_candles
+            ) / total_volume
         volumes = [float(c.volume) for c in history[-20:]]
         baseline = volumes[:-1]
         if len(baseline) == 19 and all(v >= 0 for v in volumes):
