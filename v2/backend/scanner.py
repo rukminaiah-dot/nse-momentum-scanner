@@ -248,9 +248,11 @@ def analyse(key):
                 ((c.high + c.low + c.close) / 3.0) * max(0.0, float(c.volume))
                 for c in session_candles
             ) / total_volume
-        volumes = [float(c.volume) for c in history[-20:]]
+        # RVOL baseline must not mix previous-day preload with current-session
+        # tick-derived volumes; require 20 genuine same-day completed candles.
+        volumes = [float(c.volume) for c in session_candles[-20:]]
         baseline = volumes[:-1]
-        if len(baseline) == 19 and all(v >= 0 for v in volumes):
+        if len(volumes) == 20 and len(baseline) == 19 and all(v >= 0 for v in volumes):
             average_volume = sum(baseline) / len(baseline)
             rvol = volumes[-1] / average_volume if average_volume > 0 else 0.0
         if rvol is None:
