@@ -21,6 +21,8 @@ small{color:#aaa}
 <div id="feed-status" class="card">Checking market and feed freshness…</div>
 <h3>Market Index Signals</h3>
 <div id="indices">Loading live indices...</div>
+<h3>NIFTY 50 &amp; SENSEX Options — Manual Research</h3>
+<div id="option-rules" class="card">Loading options research safety status…</div>
 <h3>Top 5 Verified Momentum Setups</h3>
 <div id="scanner">Waiting for live market data...</div>
 <h3>Top 10 Intraday Momentum Ranking (Watchlist, Not BUY Calls)</h3>
@@ -55,6 +57,28 @@ async function loadTrades(){
     `).join('') : 'No trades yet';
  }catch(e){document.getElementById('trades').textContent='Trade history unavailable; retrying.';}
 }
+// Lock watchlist membership per IST five-minute window; never cache order instructions.
+function rankingWindow(){
+ const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
+ const get=k=>parts.find(p=>p.type===k)?.value;
+ return [get('year'),get('month'),get('day'),get('hour'),String(Math.floor(Number(get('minute'))/5)*5).padStart(2,'0')].join('-');
+}
+function lockedRanking(key, candidates){
+ const window=rankingWindow(), storageKey='scanner-v2-ranking-'+key;
+ try {
+  const old=JSON.parse(sessionStorage.getItem(storageKey)||'null');
+  if(old?.window===window && Array.isArray(old.items))return old.items;
+  // Do not freeze an empty/unavailable feed at the beginning of a window.
+  if(!candidates.length)return [];
+  sessionStorage.setItem(storageKey,JSON.stringify({window,items:candidates}));
+ }catch(e){ /* Storage disabled: show current ranking, without claiming a lock. */ }
+ return candidates;
+}
+function rankingLabel(){
+ const p=rankingWindow().split('-');
+ return p[3]+':'+p[4]+' IST (five-minute ranking window)';
+}
+
 async function loadScanner(){
  try{
   const r=await fetch("/api/v2/scanner");
@@ -92,9 +116,10 @@ async function loadScanner(){
   if(!setupResponse.ok)throw Error('Setups API unavailable');
   const shortlist=await setupResponse.json();
   if(shortlist.order_execution_enabled!==false||shortlist.mode!=='MANUAL_RESEARCH_ONLY'||!Array.isArray(shortlist.setups))throw Error('Invalid safety status');
-  const setups=closed?[]:shortlist.setups;
+  const setups=closed?[]:lockedRanking('top5',shortlist.setups);
+  const currentSymbols=new Set(shortlist.setups.map(s=>s.symbol));
   const safeText=v=>String(v??'—').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-  document.getElementById('scanner').innerHTML=setups.length?setups.map((s,i)=>`<div class="card"><b>#${i+1} ${safeText(s.symbol)}</b><br>Direction: BULLISH | Research signal: BUY<br>Indicative entry: ₹${safeText(s.indicative_entry)}<br>Target 1: ${s.target_1==null?'Not verified':safeText(s.target_1)} | Target 2: ${s.target_2==null?'Not verified':safeText(s.target_2)}<br>Stop-loss: ${s.stop_loss==null?'Not verified':safeText(s.stop_loss)}<br>Momentum: ${safeText(s.momentum_pct)}% | EMA9: ${safeText(s.ema9)} | EMA20: ${safeText(s.ema20)}<br>5-minute trend: ${safeText(s.trend_5m)}<br>Why selected: ${(s.reasons||[]).map(safeText).join(', ')}<br><small>Completed candle: ${safeText(s.candle_ist)} IST | Manual research only</small></div>`).join(''):`<div class="card">${closed?'Market closed — no live setups.':'No verified qualifying setups.'}<br><small>API: ${safeText(shortlist.status)} | Fresh stock rows: ${safeText(shortlist.fresh_stock_rows)} | Stale rejected: ${safeText(shortlist.rejected_stale_rows)}</small></div>`;
+  document.getElementById('scanner').innerHTML=setups.length?setups.map((s,i)=>`<div class="card"><b>#${i+1} ${safeText(s.symbol)}</b><br>Direction: BULLISH | Research shortlist (not a trade signal): ${currentSymbols.has(s.symbol)?'WATCH':'WAIT — no longer qualified'}<br>Indicative entry at snapshot: ₹${safeText(s.indicative_entry)}<br>Target 1: ${s.target_1==null?'Not verified':safeText(s.target_1)} | Target 2: ${s.target_2==null?'Not verified':safeText(s.target_2)}<br>Stop-loss: ${s.stop_loss==null?'Not verified':safeText(s.stop_loss)}<br>Momentum: ${safeText(s.momentum_pct)}% | EMA9: ${safeText(s.ema9)} | EMA20: ${safeText(s.ema20)}<br>5-minute trend: ${safeText(s.trend_5m)}<br>Why selected: ${(s.reasons||[]).map(safeText).join(', ')}<br><small>Snapshot candle: ${safeText(s.candle_ist)} IST | ${safeText(rankingLabel())} | Manual research only</small></div>`).join(''):`<div class="card">${closed?'Market closed — no live setups.':'No verified qualifying setups.'}<br><small>API: ${safeText(shortlist.status)} | Fresh stock rows: ${safeText(shortlist.fresh_stock_rows)} | Stale rejected: ${safeText(shortlist.rejected_stale_rows)}</small></div>`;
 
  }catch(e){document.getElementById("feed-status").textContent="Scanner data unavailable — NO LIVE SIGNALS";document.getElementById("indices").textContent="Data unavailable";document.getElementById("scanner").textContent="No verified BUY signals";}
 }
@@ -111,12 +136,28 @@ async function loadStockBoard(){
   const sorted=[...data.stocks].sort((a,b)=>(b.data_status==='LIVE_FRESH')-(a.data_status==='LIVE_FRESH')||(Number(b.momentum_pct)||-9999)-(Number(a.momentum_pct)||-9999)||a.symbol.localeCompare(b.symbol));
   const fmt=v=>Number.isFinite(Number(v))&&v!=null?Number(v).toFixed(2):'—';
   const ranked=document.getElementById('ranked-stocks');
-  const top=[...fresh].sort((a,b)=>Number(b.momentum_pct)-Number(a.momentum_pct)).slice(0,10);
-  ranked.innerHTML=top.length?'<table><thead><tr><th>Rank</th><th>Stock</th><th>Price ₹</th><th>5-bar momentum %</th><th>Signal</th><th>Candle IST</th></tr></thead><tbody>'+top.map((s,i)=>`<tr><td>${i+1}</td><td>${esc(s.symbol)}</td><td>${fmt(s.last_price)}</td><td>${fmt(s.momentum_pct)}%</td><td>${esc(s.signal==='BUY'?'BUY (verify setup)':s.signal==='SELL'?'HOLD / bearish signal':'WATCH — not confirmed BUY')}</td><td>${esc(s.last_candle_ist)}</td></tr>`).join('')+'</tbody></table><small>Ranked by fresh 5-bar price momentum only; volume, VWAP, breakout and risk are not independently validated. Ranking is NOT a BUY recommendation.</small>':'No fresh stock momentum data — ranking withheld.';
+  const top=lockedRanking('top10',[...fresh].sort((a,b)=>Number(b.momentum_pct)-Number(a.momentum_pct)).slice(0,10));
+  const freshSymbols=new Set(fresh.map(s=>s.symbol));
+  ranked.innerHTML=top.length?'<table><thead><tr><th>Rank</th><th>Stock</th><th>Price ₹</th><th>5-bar momentum %</th><th>Signal</th><th>Candle IST</th></tr></thead><tbody>'+top.map((s,i)=>`<tr><td>${i+1}</td><td>${esc(s.symbol)}</td><td>${fmt(s.last_price)}</td><td>${fmt(s.momentum_pct)}%</td><td>${esc(!freshSymbols.has(s.symbol)?'WAIT — stale data':'WATCH — not a trade signal')}</td><td>${esc(s.last_candle_ist)}</td></tr>`).join('')+'</tbody></table><small>Ranked by fresh 5-bar price momentum only; volume, VWAP, breakout and risk are not independently validated. Ranking is NOT a BUY recommendation. Snapshot: '+esc(rankingLabel())+'. Prices shown in this table are snapshot values, not live quotes.</small>':'No fresh stock momentum data — ranking withheld.';
   board.innerHTML='<table><thead><tr><th>Rank</th><th>Stock</th><th>Last price ₹</th><th>Momentum %</th><th>Candle IST</th><th>Data status</th><th>Live signal</th></tr></thead><tbody>'+sorted.map((s,i)=>`<tr><td>${s.data_status==='LIVE_FRESH'?i+1:'—'}</td><td>${esc(s.symbol)}</td><td>${fmt(s.last_price)}</td><td>${fmt(s.momentum_pct)}</td><td>${esc(s.last_candle_ist)}</td><td class="${s.data_status==='LIVE_FRESH'?'status-ok':'status-warn'}">${esc(s.data_status)}</td><td>${esc(s.signal||'NO LIVE SIGNAL')}</td></tr>`).join('')+'</tbody></table>';
 
  }catch(e){count.textContent='NIFTY 200 stock board unavailable';board.textContent='Could not load stock list; retrying.';}
 }
+async function loadOptionRules(){
+ const el=document.getElementById('option-rules');
+ try{
+  const r=await fetch('/api/v2/smart-option-buyer',{cache:'no-store'});
+  if(!r.ok)throw Error('Unavailable');
+  const data=await r.json();
+  if(data.mode!=='MANUAL_RESEARCH_ONLY'||data.order_execution_enabled!==false||!Array.isArray(data.indices))throw Error('Invalid safety state');
+  const esc=v=>String(v??'—').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  el.innerHTML='<b>OPTIONS: NO TRADE until independently verified</b><p>Rules: confirmed index direction + fresh index candle + verified live CE/PE bid/ask, expiry, lot size, volume and open interest + independently validated stop/target + investment and loss limits. Never infer an option BUY from the stock Top 10 or index EMA alone.</p>'+
+    data.indices.map(x=>'<p><b>'+esc(x.index)+'</b>: '+esc(x.status)+' | Index candle: '+esc(x.index_data_status)+' | Reason: '+esc(x.reason).replaceAll('_',' ')+'</p>').join('')+
+    '<small>New entries cutoff: '+esc(data.new_entry_cutoff_ist)+' IST | Monitor until '+esc(data.monitor_until_ist)+' IST | Research only, no automatic orders. <a style="color:#93c5fd" href="/smart-option-buyer">Detailed options research page</a></small>';
+ }catch(e){el.textContent='Options data unavailable — NO TRADE. No automatic orders.';}
+}
+loadOptionRules();
+setInterval(loadOptionRules,10000);
 loadScanner();
 setInterval(loadScanner,10000);
 loadStockBoard();

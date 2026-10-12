@@ -116,7 +116,7 @@ def get_expiry_signals():
         elif not candle_is_fresh(row.get("updated_at"), now):
             reason = "STALE_DATA"
         else:
-            reason = "SAFETY_CHECKS_PASSED"
+            reason = "WATCH_ONLY_NO_CONFIRMED_TRADE"
 
         output.append({
             "index": name,
