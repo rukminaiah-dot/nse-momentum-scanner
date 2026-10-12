@@ -21,6 +21,8 @@ small{color:#aaa}
 <div id="feed-status" class="card">Checking market and feed freshness…</div>
 <h3>Market Index Signals</h3>
 <div id="indices">Loading live indices...</div>
+<h3>NIFTY 50 &amp; SENSEX Options — Manual Research</h3>
+<div id="option-rules" class="card">Loading options research safety status…</div>
 <h3>Top 5 Verified Momentum Setups</h3>
 <div id="scanner">Waiting for live market data...</div>
 <h3>Top 10 Intraday Momentum Ranking (Watchlist, Not BUY Calls)</h3>
@@ -141,6 +143,21 @@ async function loadStockBoard(){
 
  }catch(e){count.textContent='NIFTY 200 stock board unavailable';board.textContent='Could not load stock list; retrying.';}
 }
+async function loadOptionRules(){
+ const el=document.getElementById('option-rules');
+ try{
+  const r=await fetch('/api/v2/smart-option-buyer',{cache:'no-store'});
+  if(!r.ok)throw Error('Unavailable');
+  const data=await r.json();
+  if(data.mode!=='MANUAL_RESEARCH_ONLY'||data.order_execution_enabled!==false||!Array.isArray(data.indices))throw Error('Invalid safety state');
+  const esc=v=>String(v??'—').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  el.innerHTML='<b>OPTIONS: NO TRADE until independently verified</b><p>Rules: confirmed index direction + fresh index candle + verified live CE/PE bid/ask, expiry, lot size, volume and open interest + independently validated stop/target + investment and loss limits. Never infer an option BUY from the stock Top 10 or index EMA alone.</p>'+
+    data.indices.map(x=>'<p><b>'+esc(x.index)+'</b>: '+esc(x.status)+' | Index candle: '+esc(x.index_data_status)+' | Reason: '+esc(x.reason).replaceAll('_',' ')+'</p>').join('')+
+    '<small>New entries cutoff: '+esc(data.new_entry_cutoff_ist)+' IST | Monitor until '+esc(data.monitor_until_ist)+' IST | Research only, no automatic orders. <a style="color:#93c5fd" href="/smart-option-buyer">Detailed options research page</a></small>';
+ }catch(e){el.textContent='Options data unavailable — NO TRADE. No automatic orders.';}
+}
+loadOptionRules();
+setInterval(loadOptionRules,10000);
 loadScanner();
 setInterval(loadScanner,10000);
 loadStockBoard();
