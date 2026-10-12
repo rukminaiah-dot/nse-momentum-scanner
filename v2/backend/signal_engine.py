@@ -3,12 +3,13 @@ def generate_signal(price, ema9, ema20, vwap, momentum, rvol=None, market=None):
     if None in (price, ema9, ema20, momentum):
         return "WATCH"
 
-    # Volume is optional.
-    # Index feeds such as Nifty/Sensex may not provide traded volume.
-    volume_ok = True if rvol is None else rvol >= 1
+    # Stock callers must provide verified VWAP and RVOL to qualify for BUY.
+    # Index callers may lack volume and use their separate index signal logic.
+    volume_ok = rvol is not None and rvol >= 1
 
     bullish = (
-        (vwap is None or price > vwap)
+        vwap is not None
+        and price > vwap
         and ema9 > ema20
         and momentum > 0
         and volume_ok
