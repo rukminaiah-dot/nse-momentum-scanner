@@ -5,9 +5,9 @@ Requires explicit nonproduction acknowledgement and an authorized instrument.
 Prints only connection/tick counters, never raw messages or credentials.
 """
 import os
-import math
 import sys
 import threading
+import time
 
 from preflight_upstox_websocket import check
 from isolated_live_tick_candles import extract_tick, IsolatedTickCandles
@@ -45,7 +45,8 @@ def main():
     ready = threading.Event()
     seen = threading.Event()
     errored = threading.Event()
-    counts = {"messages": 0}
+    counts = {"messages": 0, "stale": 0}
+    state_lock = threading.Lock()
     isolated = IsolatedTickCandles(instrument)
 
     def on_open(*_args):
@@ -56,7 +57,14 @@ def main():
         # An open socket, heartbeat, or subscription acknowledgement is NOT
         # evidence of market ticks. Require an instrument feed with LTPC.
         payload = args[0] if args else None
-        if not has_instrument_tick(payload, instrument):
+        tick = extract_tick(payload, instrument)
+        if tick is None:
+            return
+        # A replayed/cached tick is not evidence of a LIVE market feed.
+        # Upstox ltt is exchange epoch milliseconds.
+        if abs(int(time.time() * 1000) - tick[1]) > 120_000:
+            with state_lock:
+                counts["stale"] += 1
             return
         try:
             if not isolated.on_message(payload):
@@ -66,7 +74,8 @@ def main():
             errored.set()
             ready.set()
             return
-        counts["messages"] += 1
+        with state_lock:
+            counts["messages"] += 1
         seen.set()
 
     def on_error(*_args):
@@ -100,7 +109,7 @@ def main():
             if errored.is_set():
                 print("INCONCLUSIVE: websocket reported an error")
                 return 3
-            print("INCONCLUSIVE: no live message observed within timeout")
+            print("INCONCLUSIVE: no fresh live tick observed within timeout")
             return 3
         if errored.is_set():
             print("INCONCLUSIVE: websocket reported an error")
@@ -110,7 +119,9 @@ def main():
             print("INCONCLUSIVE: tick did not enter isolated candle manager")
             return 3
         print("PASS: websocket tick entered isolated candle manager")
-        print("message_count:", counts["messages"])
+        with state_lock:
+            print("message_count:", counts["messages"])
+            print("stale_ticks_ignored:", counts["stale"])
         print("completed_candles:", len(history))
         print("NOTE: recovery worker was not invoked; integration gate remains pending")
         return 0
