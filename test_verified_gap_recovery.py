@@ -58,6 +58,7 @@ class GapRecoveryTests(unittest.TestCase):
     def test_merge_drops_previous_session(self):
         candle = next(iter(validated_completed_rows([row(41)], NOW).values()))
         prior = datetime(2026, 10, 12, 11, 41)
+        candle.timestamp = prior
         merged, added = merge_verified_missing([], {prior: candle},
             active_minute=datetime(2026, 10, 13, 11, 44))
         self.assertEqual(merged, [])
