@@ -59,6 +59,7 @@ def controlled_gap_acceptance(bridge):
             return False, "live completed candles already present; controlled setup skipped"
         # Seed only broker-verified anchors; the omitted minute is the gap.
         manager.completed.setdefault(key, []).extend(anchors)
+    recovered_for_cleanup = None
     try:
         if not bridge.worker.request(key):
             return False, "recovery request rate-limited or pending"
@@ -81,6 +82,7 @@ def controlled_gap_acceptance(bridge):
         # fetch. Verify its OHLCV against the initial broker observation even
         # when objects happen to share identity (e.g. a test double).
         recovered = by_minute[missing]
+        recovered_for_cleanup = recovered
         expected = validated[missing]
         if recovered is expected:
             return False, "recovery reused initial broker candle instead of fresh fetch"
@@ -103,4 +105,5 @@ def controlled_gap_acceptance(bridge):
         if not bridge.worker.status()["pending"]:
             with manager.lock:
                 seeded = manager.completed.get(key, [])
-                manager.completed[key] = [c for c in seeded if all(c is not a for a in anchors)]
+                controlled_objects = anchors + ([recovered_for_cleanup] if recovered_for_cleanup is not None else [])
+                manager.completed[key] = [c for c in seeded if all(c is not a for a in controlled_objects)]
