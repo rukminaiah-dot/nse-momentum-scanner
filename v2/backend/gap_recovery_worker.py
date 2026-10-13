@@ -30,7 +30,6 @@ class GapRecoveryWorker:
         self._last_attempt = {}
         self._pending = set()
         self._threads = set()
-        self._threads = set()
         self._lock = threading.Lock()
 
     def request(self, key):
@@ -45,7 +44,14 @@ class GapRecoveryWorker:
         thread = threading.Thread(target=self._run, args=(key,), daemon=True)
         with self._lock:
             self._threads.add(thread)
-        thread.start()
+        try:
+            thread.start()
+        except Exception:
+            with self._lock:
+                self._pending.discard(key)
+                self._threads.discard(thread)
+                self._last_attempt.pop(key, None)
+            raise
         return True
 
     def _run(self, key):
@@ -72,16 +78,6 @@ class GapRecoveryWorker:
             with self._lock:
                 self._pending.discard(key)
                 self._threads.discard(threading.current_thread())
-
-    def join(self, timeout=None):
-        """Wait for current worker threads, especially before test shutdown."""
-        with self._lock:
-            threads = list(self._threads)
-        for thread in threads:
-            if thread.ident is not None:
-                thread.join(timeout)
-        with self._lock:
-            self._threads.difference_update(t for t in threads if not t.is_alive())
 
     def join(self, timeout=5):
         """Wait for in-flight workers during tests or graceful shutdown."""
