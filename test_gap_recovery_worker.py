@@ -19,6 +19,10 @@ class WorkerTests(unittest.TestCase):
             self.assertTrue(entered.wait(2))
             self.assertFalse(worker.request("A"))
             self.assertFalse(worker.request("B"))
+            stats = worker.status()
+            self.assertEqual(stats["requested"], 1)
+            self.assertEqual(stats["rejected_pending"], 2)
+            self.assertEqual(stats["pending"], 1)
         finally:
             release.set()
             worker.join(timeout=5)
@@ -50,6 +54,8 @@ class WorkerTests(unittest.TestCase):
             time.sleep(0.01)
         self.assertTrue(worker.request("B"))
         worker.join(timeout=5)
+        self.assertEqual(worker.status()["failed"], 2)
+        self.assertEqual(worker.status()["pending"], 0)
 
 if __name__ == "__main__":
     unittest.main()
