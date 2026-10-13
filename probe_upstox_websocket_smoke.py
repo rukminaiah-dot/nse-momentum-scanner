@@ -149,7 +149,10 @@ def main():
         print("completed_candles:", len(history))
         if recovery_mode:
             if controlled_ack == "BROKER_BACKED_MEMORY_ONLY":
-                passed, reason = controlled_gap_acceptance(bridge)
+                try:
+                    passed, reason = controlled_gap_acceptance(bridge)
+                except Exception as exc:
+                    passed, reason = False, "controlled acceptance raised " + type(exc).__name__
                 print(("PASS: " if passed else "INCONCLUSIVE: ") + reason)
                 print("NOTE: natural websocket minute-gap recovery is separately unverified")
                 return 0 if passed and not errored.is_set() else 3
