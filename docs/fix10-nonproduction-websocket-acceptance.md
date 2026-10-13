@@ -1,6 +1,6 @@
 # Fix 10: isolated Upstox websocket acceptance gate
 
-Status: **NOT YET RUN**. This is a release checklist, not evidence of passing integration.
+Status: **LIVE ACCEPTANCE NOT YET VERIFIED**. This is a release checklist, not evidence of passing integration. Offline feature CI has not been confirmed passing at the latest commit.
 
 ## Preconditions
 - Run only in a disposable **nonproduction** service/process; do not change the production Render service or its environment.
