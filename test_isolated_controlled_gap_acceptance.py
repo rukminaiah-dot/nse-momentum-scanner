@@ -111,6 +111,31 @@ class ControlledGapTests(unittest.TestCase):
             release.set()
             original_join(timeout=3)
 
+    def test_second_broker_fetch_failure_is_inconclusive_and_cleans_anchors(self):
+        now = datetime.now(IST).replace(second=0, microsecond=0)
+        minutes = [now - timedelta(minutes=n) for n in (3, 2, 1)]
+        if minutes[0].date() != now.date():
+            self.skipTest("IST day boundary")
+        calls = []
+        def fetch(key):
+            calls.append(key)
+            if len(calls) == 2:
+                raise RuntimeError("broker request failed")
+            return [[minute.isoformat(), 100, 101, 99, 100, 5]
+                    for minute in minutes]
+        bridge = IsolatedStreamRecovery(KEY, fetch, min_request_spacing=0.001)
+        tick = {"feeds": {KEY: {"ltpc": {
+            "ltp": 105, "ltt": str(int(now.timestamp() * 1000))}}}}
+        self.assertTrue(bridge.on_message(tick))
+        passed, reason = controlled_gap_acceptance(bridge)
+        self.assertFalse(passed)
+        self.assertEqual(reason, "historical recovery not verified")
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(bridge.worker.status()["failed"], 1)
+        history, active = bridge.candles.manager.recovery_snapshot(KEY)
+        self.assertEqual(history, [])
+        self.assertEqual(active, now.replace(tzinfo=None))
+
     def test_no_tick_never_fetches_broker(self):
         calls = []
         bridge = IsolatedStreamRecovery(KEY, lambda key: calls.append(key) or [])
