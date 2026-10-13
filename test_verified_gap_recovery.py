@@ -25,6 +25,15 @@ class GapRecoveryTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     validated_completed_rows(bad, NOW)
 
+    def test_reject_naive_current_clock(self):
+        with self.assertRaises(ValueError):
+            validated_completed_rows([row(42)], datetime(2026, 10, 13, 11, 45))
+
+    def test_utc_current_clock_normalizes_to_ist(self):
+        from datetime import timezone
+        got = validated_completed_rows([row(42)], NOW.astimezone(timezone.utc))
+        self.assertEqual([t.minute for t in got], [42])
+
     def test_reject_naive_timestamp(self):
         with self.assertRaises(ValueError):
             validated_completed_rows([["2026-10-13T11:42:00", 100, 103, 99, 102, 10]], NOW)
