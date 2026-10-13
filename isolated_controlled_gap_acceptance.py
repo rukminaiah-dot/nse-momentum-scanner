@@ -77,6 +77,8 @@ def controlled_gap_acceptance(bridge):
         # when objects happen to share identity (e.g. a test double).
         recovered = by_minute[missing]
         expected = validated[missing]
+        if recovered is expected:
+            return False, "recovery reused initial broker candle instead of fresh fetch"
         if any(getattr(recovered, field) != getattr(expected, field)
                for field in ("open", "high", "low", "close", "volume")):
             return False, "broker candle values differ"
