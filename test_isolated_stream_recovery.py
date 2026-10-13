@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from isolated_live_tick_candles import IsolatedTickCandles
+from isolated_stream_recovery import IsolatedStreamRecovery
 from v2.backend.gap_recovery_worker import GapRecoveryWorker
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -21,6 +22,45 @@ def message(minute, price):
 
 
 class LiveTickRecoveryTests(unittest.TestCase):
+    def test_gap_detected_from_ticks_and_fetch_runs_off_feed_thread(self):
+        now = datetime.now(IST).replace(second=0, microsecond=0)
+        first, missing, third = (now - timedelta(minutes=3),
+                                 now - timedelta(minutes=2),
+                                 now - timedelta(minutes=1))
+        if first.date() != now.date():
+            self.skipTest("IST day boundary")
+        caller_thread = threading.current_thread()
+        fetched = threading.Event()
+        fetch_threads = []
+        def fetch(_):
+            fetch_threads.append(threading.current_thread())
+            fetched.set()
+            return [[missing.isoformat(), 101, 102, 100, 101, 10]]
+        bridge = IsolatedStreamRecovery(KEY, fetch, cooldown=0.001,
+                                        min_request_spacing=0.001)
+        self.assertTrue(bridge.on_message(message(first, 100)))
+        self.assertTrue(bridge.on_message(message(third, 103)))
+        self.assertEqual(bridge.gap_requests, 1)
+        self.assertTrue(fetched.wait(2))
+        bridge.worker.join(timeout=5)
+        self.assertEqual(bridge.worker.status()["verified_insertions"], 1)
+        self.assertIsNot(fetch_threads[0], caller_thread)
+        history, active = bridge.candles.manager.recovery_snapshot(KEY)
+        self.assertEqual([c.timestamp for c in history],
+                         [first.replace(tzinfo=None), missing.replace(tzinfo=None)])
+        self.assertEqual(active, third.replace(tzinfo=None))
+
+    def test_contiguous_ticks_do_not_schedule_recovery(self):
+        now = datetime.now(IST).replace(second=0, microsecond=0)
+        a, b = now - timedelta(minutes=2), now - timedelta(minutes=1)
+        called = []
+        bridge = IsolatedStreamRecovery(KEY, lambda _: called.append(True) or [])
+        bridge.on_message(message(a, 100))
+        bridge.on_message(message(b, 101))
+        self.assertEqual(bridge.gap_requests, 0)
+        self.assertEqual(called, [])
+
+
     def test_ticks_continue_during_delayed_recovery_and_gap_is_idempotent(self):
         now = datetime.now(IST).replace(second=0, microsecond=0)
         first = now - timedelta(minutes=5)
