@@ -24,6 +24,8 @@ class WorkerTests(unittest.TestCase):
 
     def test_invalid_limits_fail_closed(self):
         with self.assertRaises(ValueError):
+            GapRecoveryWorker(None, None, None, min_request_spacing=0)
+        with self.assertRaises(ValueError):
             GapRecoveryWorker(None, None, None, max_pending=0)
         with self.assertRaises(ValueError):
             GapRecoveryWorker(None, None, None, cooldown=0)
