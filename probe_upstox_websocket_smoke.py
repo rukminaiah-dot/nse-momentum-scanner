@@ -34,6 +34,10 @@ def main():
     if os.environ.get("FIX10_LIVE_STREAM_ACK") != "READ_ONLY_STREAM_TEST":
         print("BLOCKED: live stream acknowledgement missing", file=sys.stderr)
         return 2
+    recovery_ack = os.environ.get("FIX10_ISOLATED_RECOVERY_ACK")
+    if recovery_ack not in (None, "", "READ_ONLY_HISTORY"):
+        print("BLOCKED: unrecognized recovery acknowledgement", file=sys.stderr)
+        return 2
 
     try:
         import upstox_client
@@ -42,7 +46,7 @@ def main():
         api_client = upstox_client.ApiClient(config)
         instrument = os.environ["FIX10_TEST_INSTRUMENT_KEY"]
         streamer = upstox_client.MarketDataStreamerV3(api_client, [instrument], "ltpc")
-        recovery_mode = os.environ.get("FIX10_ISOLATED_RECOVERY_ACK") == "READ_ONLY_HISTORY"
+        recovery_mode = recovery_ack == "READ_ONLY_HISTORY"
         if recovery_mode:
             historical = upstox_client.HistoryV3Api(api_client)
             bridge = IsolatedStreamRecovery(instrument, make_historical_fetch(historical, instrument))
@@ -130,7 +134,7 @@ def main():
         if active is None:
             print("INCONCLUSIVE: tick did not enter isolated candle manager")
             return 3
-        print("PASS: websocket tick entered isolated candle manager")
+        print("PASS: fresh websocket tick entered isolated candle manager")
         with state_lock:
             print("message_count:", counts["messages"])
             print("stale_ticks_ignored:", counts["stale"])
