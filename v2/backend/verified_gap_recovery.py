@@ -44,6 +44,8 @@ def merge_verified_missing(existing, recovered, active_minute=None, limit=60):
     by_minute = {c.timestamp: c for c in existing}
     added = []
     for minute, candle in sorted(recovered.items()):
+        if getattr(candle, "timestamp", None) != minute:
+            raise ValueError("recovered candle timestamp mismatch")
         if (active_minute is not None and
                 (minute.date() != active_minute.date() or minute >= active_minute)):
             continue
