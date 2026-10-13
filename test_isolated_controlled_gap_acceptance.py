@@ -185,7 +185,7 @@ class ControlledGapTests(unittest.TestCase):
         passed, reason = controlled_gap_acceptance(bridge)
         self.assertFalse(passed)
         self.assertEqual(reason, "prior recovery activity; controlled setup skipped")
-        self.assertEqual(len(calls), 1)
+        self.assertEqual(len(calls), 0)
         self.assertEqual(bridge.candles.manager.recovery_snapshot(KEY)[0], [])
 
     def test_live_minute_advancement_during_fetch_is_inconclusive(self):
