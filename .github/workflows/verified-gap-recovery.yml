@@ -10,6 +10,8 @@ on:
       - 'test_recovery_trigger.py'
       - 'test_recovery_integration.py'
       - 'test_preload_control_flow.py'
+      - 'test_upstox_probe.py'
+      - 'probe_upstox_recovery.py'
   workflow_dispatch:
 
 jobs:
@@ -22,4 +24,4 @@ jobs:
         with:
           python-version: '3.11'
       - name: Offline regression suite
-        run: python -m unittest -v test_verified_gap_recovery test_gap_recovery_worker test_recovery_trigger test_recovery_integration test_preload_control_flow
+        run: python -m unittest -v test_verified_gap_recovery test_gap_recovery_worker test_recovery_trigger test_recovery_integration test_preload_control_flow test_upstox_probe
