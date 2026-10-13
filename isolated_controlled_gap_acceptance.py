@@ -75,6 +75,13 @@ def controlled_gap_acceptance(bridge):
             if any(getattr(recovered, field) != getattr(expected, field)
                    for field in ("open", "high", "low", "close", "volume")):
                 return False, "broker candle values differ"
+        # Replaying the same verified candle must not insert a duplicate or
+        # replace the first recovered candle.
+        if manager.merge_recovered(key, {missing: by_minute[missing]}, active) != 0:
+            return False, "recovered candle merge is not idempotent"
+        with manager.lock:
+            if sum(c.timestamp == missing for c in manager.completed.get(key, [])) != 1:
+                return False, "duplicate recovered candle detected"
         return True, "controlled isolated broker-backed gap recovered"
     finally:
         # Never leave synthetic test setup in the live-feed manager.
