@@ -170,7 +170,6 @@ def preload_history(key):
 
     if not rows:
         print("PRELOAD: no historical candles for", key)
-        return
 
     loaded = []
     for row in reversed(rows[:20]):
