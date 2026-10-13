@@ -11,6 +11,8 @@ import time
 
 from preflight_upstox_websocket import check
 from isolated_live_tick_candles import extract_tick, IsolatedTickCandles
+from isolated_stream_recovery import IsolatedStreamRecovery
+from isolated_upstox_history import make_historical_fetch
 
 
 def has_instrument_tick(payload, instrument):
@@ -37,6 +39,10 @@ def main():
         api_client = upstox_client.ApiClient(config)
         instrument = os.environ["FIX10_TEST_INSTRUMENT_KEY"]
         streamer = upstox_client.MarketDataStreamerV3(api_client, [instrument], "ltpc")
+        recovery_mode = os.environ.get("FIX10_ISOLATED_RECOVERY_ACK") == "READ_ONLY_HISTORY"
+        if recovery_mode:
+            historical = upstox_client.HistoryV3Api(api_client)
+            bridge = IsolatedStreamRecovery(instrument, make_historical_fetch(historical, instrument))
     except Exception as exc:
         print("BLOCKED: SDK initialization:", type(exc).__name__, file=sys.stderr)
         return 2
@@ -47,7 +53,7 @@ def main():
     errored = threading.Event()
     counts = {"messages": 0, "stale": 0}
     state_lock = threading.Lock()
-    isolated = IsolatedTickCandles(instrument)
+    isolated = bridge.candles if recovery_mode else IsolatedTickCandles(instrument)
 
     def on_open(*_args):
         opened.set()
@@ -67,7 +73,7 @@ def main():
                 counts["stale"] += 1
             return
         try:
-            if not isolated.on_message(payload):
+            if not (bridge.on_message(payload) if recovery_mode else isolated.on_message(payload)):
                 return
         except Exception:
             # Callback errors must not be mistaken for successful integration.
@@ -123,7 +129,17 @@ def main():
             print("message_count:", counts["messages"])
             print("stale_ticks_ignored:", counts["stale"])
         print("completed_candles:", len(history))
-        print("NOTE: recovery worker was not invoked; integration gate remains pending")
+        if recovery_mode:
+            # Do not claim historical recovery succeeded merely because ticks
+            # arrived: a naturally occurring minute gap may never occur.
+            stats = bridge.worker.status()
+            print("gap_requests:", bridge.gap_requests)
+            print("recovery_completed:", stats["completed"])
+            print("verified_insertions:", stats["verified_insertions"])
+            print("recovery_failed:", stats["failed"])
+            print("NOTE: live recovery remains unverified unless a real gap is observed")
+        else:
+            print("NOTE: recovery worker was not invoked; integration gate remains pending")
         return 0
     finally:
         try:
