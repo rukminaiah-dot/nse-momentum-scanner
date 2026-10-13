@@ -12,15 +12,16 @@ Status: **LIVE ACCEPTANCE NOT YET VERIFIED**. This is a release checklist, not e
 
 ## Isolated live harness result semantics
 - The tick-only smoke mode uses `FIX10_LIVE_STREAM_ACK=READ_ONLY_STREAM_TEST` and verifies a fresh instrument tick entered `CandleManager`; it does **not** verify recovery.
-- Recovery mode additionally requires `FIX10_ISOLATED_RECOVERY_ACK=READ_ONLY_HISTORY`; this enables an instrument-scoped, read-only Upstox historical request **only if a same-session minute jump is detected**.
-- Exit code `0` in recovery mode requires at least one verified historical insertion. Exit code `3` means inconclusive (including no natural gap, pending worker, broker failure, or zero verified insertions). Exit code `2` means blocked preflight/initialization.
+- Recovery mode additionally requires `FIX10_ISOLATED_RECOVERY_ACK=READ_ONLY_HISTORY`. Without controlled-gap acknowledgement, a historical request is scheduled only after a same-session live minute jump.
+- Explicit `FIX10_CONTROLLED_GAP_ACK=BROKER_BACKED_MEMORY_ONLY` runs a **separately labelled controlled acceptance** after a genuine fresh websocket tick. It reads actual broker historical candles, seeds all available eligible completed minutes except one in isolated memory, then uses the off-feed worker to fetch and insert exactly the omitted broker minute. No synthetic websocket ticks or broker candles are generated.
+- Exit code `0` in natural-gap recovery mode requires at least one verified historical insertion. In explicitly controlled-gap mode, it requires **exactly one** verified insertion and an intact active minute. These are different evidence categories: controlled acceptance is **not** proof of a naturally occurring websocket gap. Exit code `3` means inconclusive; exit code `2` means blocked preflight/initialization.
 - Do not force a fabricated market tick into the live websocket to obtain a green result. The deterministic synthetic-gap scenario belongs in offline integration tests; real-market evidence must be labelled separately.
 
 ## One-run manual workflow (feature branch only)
 - The feature-branch `.github/workflows/manual-upstox-probe.yml` combines offline tests, authenticated read-only historical validation and isolated websocket recovery in that order. **Do not trigger it until final review and authorization.**
 - Supply an authorized `instrument_key` and a short-lived repository Actions secret `UPSTOX_ACCESS_TOKEN`; never paste credentials into workflow inputs.
 - The job explicitly sets `ENABLE_VERIFIED_GAP_RECOVERY=false` and runs only on `feature/verified-gap-recovery`. No orders, scanner process, or production deploy is invoked.
-- A real live gap is not guaranteed during a short market session; exit code 3 is inconclusive, not success. A single manual run may therefore establish connectivity but not complete recovery acceptance.
+- The consolidated workflow now selects the controlled broker-backed gap mode to make a single run useful even when no natural gap occurs. It still requires fresh live websocket data and authenticated history. A naturally occurring live gap remains a separate acceptance item, and a controlled pass must not be described as proof of it.
 - GitHub may require a manual-dispatch workflow file to exist on the default branch before it appears in the Actions UI. **Do not change `main` merely to expose this workflow**; resolve visibility and deployment implications separately before asking for the one manual trigger.
 
 ## Nonproduction acceptance sequence
