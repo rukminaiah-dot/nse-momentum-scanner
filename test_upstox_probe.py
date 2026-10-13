@@ -100,5 +100,24 @@ class ProbeTests(unittest.TestCase):
         ), patch.object(sys, "argv", ["probe", "--instrument-key", "TEST"]):
             self.assertEqual(probe.main(), 3)
 
+    def test_empty_response_never_prints_pass(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        class Api:
+            def __init__(self, client):
+                pass
+            def get_intra_day_candle_data(self, *args):
+                return SimpleNamespace(data=SimpleNamespace(candles=[]))
+        fake_sdk = SimpleNamespace(
+            Configuration=lambda: SimpleNamespace(access_token=None),
+            ApiClient=lambda config: config, HistoryV3Api=Api)
+        output = StringIO()
+        with patch.dict(sys.modules, {"upstox_client": fake_sdk}), patch.dict(
+            "os.environ", {"UPSTOX_ACCESS_TOKEN": "offline-token"}
+        ), patch.object(sys, "argv", ["probe", "--instrument-key", "TEST"]), redirect_stdout(output):
+            self.assertEqual(probe.main(), 3)
+        self.assertIn("INCONCLUSIVE", output.getvalue())
+        self.assertNotIn("PASS", output.getvalue())
+
 if __name__ == "__main__":
     unittest.main()
