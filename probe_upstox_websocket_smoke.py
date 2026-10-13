@@ -53,6 +53,7 @@ def main():
     opened = threading.Event()
     ready = threading.Event()
     seen = threading.Event()
+    gap_seen = threading.Event()
     errored = threading.Event()
     counts = {"messages": 0, "stale": 0}
     state_lock = threading.Lock()
@@ -78,6 +79,8 @@ def main():
         try:
             if not (bridge.on_message(payload) if recovery_mode else isolated.on_message(payload)):
                 return
+            if recovery_mode and bridge.gap_requests:
+                gap_seen.set()
         except Exception:
             # Callback errors must not be mistaken for successful integration.
             errored.set()
@@ -136,9 +139,9 @@ def main():
             # The first live tick alone cannot establish a minute gap. Keep
             # the subscription active for a bounded observation window.
             deadline = time.monotonic() + RECOVERY_OBSERVE_SECONDS
-            while (bridge.gap_requests == 0 and not errored.is_set()
+            while (not gap_seen.is_set() and not errored.is_set()
                    and time.monotonic() < deadline):
-                errored.wait(timeout=min(1, max(0, deadline - time.monotonic())))
+                gap_seen.wait(timeout=min(1, max(0, deadline - time.monotonic())))
             if errored.is_set():
                 print("INCONCLUSIVE: websocket error during recovery observation")
                 return 3
