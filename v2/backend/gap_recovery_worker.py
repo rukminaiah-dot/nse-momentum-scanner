@@ -3,6 +3,7 @@
 This worker is deliberately opt-in; scanner integration must protect the
 completed/current candle state with a shared lock before enabling it.
 """
+import math
 import threading
 import time
 from datetime import datetime
@@ -20,9 +21,10 @@ class GapRecoveryWorker:
         self.snapshot = snapshot
         self.merge = merge
         self.cooldown = cooldown
-        if max_pending < 1 or cooldown <= 0:
+        if (not isinstance(max_pending, int) or isinstance(max_pending, bool)
+                or max_pending < 1 or not math.isfinite(cooldown) or cooldown <= 0):
             raise ValueError("invalid recovery limits")
-        if min_request_spacing <= 0:
+        if not math.isfinite(min_request_spacing) or min_request_spacing <= 0:
             raise ValueError('invalid request spacing')
         self.min_request_spacing = min_request_spacing
         self._next_request_at = 0.0
