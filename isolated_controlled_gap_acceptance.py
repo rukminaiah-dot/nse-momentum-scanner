@@ -38,16 +38,16 @@ def controlled_gap_acceptance(bridge):
         return False, "insufficient same-day completed broker minutes"
     # Use only already authenticated broker candles, strictly before live minute.
     missing = candidates[-2]
-    anchor = candidates[-1]
+    anchors = [validated[m] for m in candidates if m != missing]
     with manager.lock:
         item = manager.current.get(key)
         if item is None or item["minute"] != active or item["candle"] is not active_candle:
             return False, "live minute advanced during setup"
-        if any(c.timestamp in (missing, anchor) for c in manager.completed.get(key, [])):
+        if any(c.timestamp in candidates for c in manager.completed.get(key, [])):
             return False, "candidate minutes already exist in live history"
         # Preserve all existing live history. Seed only an anchor that really
         # exists at the broker; the omitted minute is the controlled gap.
-        manager.completed.setdefault(key, []).append(validated[anchor])
+        manager.completed.setdefault(key, []).extend(anchors)
     try:
         if not bridge.worker.request(key):
             return False, "recovery request rate-limited or pending"
@@ -57,7 +57,7 @@ def controlled_gap_acceptance(bridge):
             completed = list(manager.completed.get(key, []))
             current = manager.current.get(key)
         by_minute = {c.timestamp: c for c in completed}
-        if status["pending"] or status["failed"] or status["verified_insertions"] < 1:
+        if status["pending"] or status["failed"] or status["verified_insertions"] != 1:
             return False, "historical recovery not verified"
         if (missing not in by_minute or current is None
                 or current["minute"] < active
@@ -76,5 +76,4 @@ def controlled_gap_acceptance(bridge):
         # The probe terminates after acceptance; retain any real feed updates.
         with manager.lock:
             seeded = manager.completed.get(key, [])
-            manager.completed[key] = [c for c in seeded
-                                      if c.timestamp != anchor or c is not validated[anchor]]
+            manager.completed[key] = [c for c in seeded if all(c is not a for a in anchors)]
