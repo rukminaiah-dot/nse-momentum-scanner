@@ -104,6 +104,11 @@ class GapRecoveryWorker:
         with self._lock:
             threads = list(self._threads)
         # One total deadline, not a fresh timeout for every worker.
-        deadline = time.monotonic() + max(0, timeout)
+        if timeout is not None and (not isinstance(timeout, (int, float))
+                                    or isinstance(timeout, bool)
+                                    or not math.isfinite(timeout) or timeout < 0):
+            raise ValueError("invalid worker join timeout")
+        deadline = None if timeout is None else time.monotonic() + timeout
         for thread in threads:
-            thread.join(timeout=max(0, deadline - time.monotonic()))
+            thread.join(timeout=None if deadline is None else
+                        max(0, deadline - time.monotonic()))
