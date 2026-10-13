@@ -103,5 +103,7 @@ class GapRecoveryWorker:
         """Wait for in-flight workers during tests or graceful shutdown."""
         with self._lock:
             threads = list(self._threads)
+        # One total deadline, not a fresh timeout for every worker.
+        deadline = time.monotonic() + max(0, timeout)
         for thread in threads:
-            thread.join(timeout=timeout)
+            thread.join(timeout=max(0, deadline - time.monotonic()))
