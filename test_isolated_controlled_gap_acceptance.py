@@ -136,6 +136,30 @@ class ControlledGapTests(unittest.TestCase):
         self.assertEqual(history, [])
         self.assertEqual(active, now.replace(tzinfo=None))
 
+    def test_reused_initial_broker_object_cannot_pass(self):
+        now = datetime.now(IST).replace(second=0, microsecond=0)
+        minutes = [now - timedelta(minutes=n) for n in (3, 2, 1)]
+        if minutes[0].date() != now.date():
+            self.skipTest("IST day boundary")
+        from v2.backend.verified_gap_recovery import validated_completed_rows
+        initial = validated_completed_rows(
+            [[minute.isoformat(), 100, 101, 99, 100, 5] for minute in minutes], now)
+        bridge = IsolatedStreamRecovery(KEY, lambda key: [
+            [minute.isoformat(), 100, 101, 99, 100, 5] for minute in minutes],
+            min_request_spacing=0.001)
+        tick = {"feeds": {KEY: {"ltpc": {
+            "ltp": 105, "ltt": str(int(now.timestamp() * 1000))}}}}
+        self.assertTrue(bridge.on_message(tick))
+        # A pathological validator that returns cached candle objects must
+        # not be mistaken for independent broker recovery evidence.
+        with patch("isolated_controlled_gap_acceptance.validated_completed_rows",
+                   return_value=initial):
+            with patch("v2.backend.gap_recovery_worker.validated_completed_rows",
+                       return_value=initial):
+                passed, reason = controlled_gap_acceptance(bridge)
+        self.assertFalse(passed)
+        self.assertEqual(reason, "recovery reused initial broker candle instead of fresh fetch")
+
     def test_no_tick_never_fetches_broker(self):
         calls = []
         bridge = IsolatedStreamRecovery(KEY, lambda key: calls.append(key) or [])
