@@ -5,6 +5,38 @@ from unittest.mock import patch
 from v2.backend.gap_recovery_worker import GapRecoveryWorker
 
 class WorkerTests(unittest.TestCase):
+    def test_join_during_thread_registration_does_not_raise(self):
+        registered = threading.Event()
+        allow_start = threading.Event()
+        original_start = threading.Thread.start
+        def delayed_start(thread):
+            registered.set()
+            if not allow_start.wait(2):
+                raise TimeoutError("offline start barrier")
+            return original_start(thread)
+        worker = GapRecoveryWorker(
+            lambda key: [], lambda key: ([], None), lambda *args: 0)
+        errors = []
+        def request_worker():
+            try:
+                worker.request("A")
+            except Exception as exc:
+                errors.append(exc)
+        with patch.object(threading.Thread, "start", delayed_start):
+            # Start the request driver with the original start method to
+            # avoid intercepting the test's own coordination thread.
+            driver = threading.Thread(target=request_worker)
+            original_start(driver)
+            try:
+                self.assertTrue(registered.wait(1))
+                worker.join(timeout=0.01)
+            finally:
+                allow_start.set()
+                driver.join(timeout=2)
+        worker.join(timeout=2)
+        self.assertEqual(errors, [])
+        self.assertEqual(worker.status()["pending"], 0)
+
     def test_join_rejects_invalid_timeouts(self):
         worker = GapRecoveryWorker(lambda key: [], lambda key: ([], None),
                                    lambda *args: 0)
