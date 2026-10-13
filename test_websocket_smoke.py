@@ -96,7 +96,8 @@ class WebsocketSmokeTests(unittest.TestCase):
                                       "FIX10_ISOLATED_RECOVERY_ACK": "READ_ONLY_HISTORY"},
                         clear=True):
             with patch.dict(sys.modules, {"upstox_client": self.sdk}):
-                self.assertEqual(probe.main(), 3)
+                with patch.object(probe, "RECOVERY_OBSERVE_SECONDS", 0):
+                    self.assertEqual(probe.main(), 3)
         self.assertTrue(FakeStreamer.last.disconnected)
 
     def test_recovery_is_not_initialized_without_separate_ack(self):
