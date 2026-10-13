@@ -137,7 +137,16 @@ def main():
             print("recovery_completed:", stats["completed"])
             print("verified_insertions:", stats["verified_insertions"])
             print("recovery_failed:", stats["failed"])
-            print("NOTE: live recovery remains unverified unless a real gap is observed")
+            if bridge.gap_requests == 0:
+                print("INCONCLUSIVE: no live minute gap observed; recovery unverified")
+            elif stats["pending"]:
+                print("INCONCLUSIVE: historical recovery still pending")
+            elif stats["failed"]:
+                print("INCONCLUSIVE: historical recovery failed")
+            elif stats["verified_insertions"] == 0:
+                print("INCONCLUSIVE: no missing broker candle verified")
+            else:
+                print("PASS: live gap scheduled and verified historical candle inserted")
         else:
             print("NOTE: recovery worker was not invoked; integration gate remains pending")
         return 0
