@@ -81,8 +81,17 @@ def write_candle_quality():
             for i in range(1, 6)
         )
         last = history[-1] if history else None
+        if len(recent) < 6:
+            reason = "WARMUP"
+        elif not same_day:
+            reason = "OVERNIGHT_GAP"
+        elif not consecutive:
+            reason = "MISSING_MINUTE"
+        else:
+            reason = None
         rows[instrument_symbols.get(key, key)] = {
             "six_consecutive_today": consecutive,
+            "continuity_reason": reason,
             "last_closed_candle_ist": last.timestamp.isoformat() if last else None,
             "last_closed_volume": float(last.volume) if last else None,
             "last_tick_epoch": _tick_seen.get(key),
