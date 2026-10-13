@@ -33,9 +33,11 @@ class IsolatedStreamRecovery:
             accepted = self.candles.on_message(payload)
             after = manager.current.get(self.instrument)
             current = after["minute"] if after else None
-        if (accepted and previous is not None and current is not None
-                and current.date() == previous.date()
-                and current - previous > timedelta(minutes=1)):
-            if self.worker.request(self.instrument):
-                self.gap_requests += 1
+            if (accepted and previous is not None and current is not None
+                    and current.date() == previous.date()
+                    and current - previous > timedelta(minutes=1)):
+                # Schedule before releasing manager lock so concurrent callbacks
+                # cannot race and silently skip a detected minute jump.
+                if self.worker.request(self.instrument):
+                    self.gap_requests += 1
         return accepted
