@@ -30,7 +30,7 @@ class GapRecoveryWorker:
         self._last_attempt = {}
         self._pending = set()
         self._stats = {"requested": 0, "rejected_pending": 0, "rejected_cooldown": 0,
-                       "completed": 0, "failed": 0, "verified_insertions": 0}
+                       "completed": 0, "failed": 0, "skipped": 0, "verified_insertions": 0}
         self._threads = set()
         self._lock = threading.Lock()
 
@@ -64,6 +64,8 @@ class GapRecoveryWorker:
         try:
             history, active_minute = self.snapshot(key)
             if not history or not active_minute:
+                with self._lock:
+                    self._stats["skipped"] += 1
                 return
             # Reserve a global API slot; never sleep on the websocket thread.
             with self._lock:
