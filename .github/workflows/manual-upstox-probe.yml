@@ -28,6 +28,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Confirm feature branch checkout is isolated
+        run: |
+          test "$GITHUB_REF" = 'refs/heads/feature/verified-gap-recovery'
+          test "$(git branch --show-current)" = 'feature/verified-gap-recovery' || test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
       - name: Record isolated acceptance revision
         run: |
           echo "Acceptance commit: $GITHUB_SHA"
