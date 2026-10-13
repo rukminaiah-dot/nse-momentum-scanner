@@ -5,6 +5,34 @@ from unittest.mock import patch
 from v2.backend.gap_recovery_worker import GapRecoveryWorker
 
 class WorkerTests(unittest.TestCase):
+    def test_join_uses_single_deadline_across_multiple_threads(self):
+        import time
+        release = threading.Event()
+        entered = threading.Event()
+        count_lock = threading.Lock()
+        started = [0]
+        def fetch(_key):
+            with count_lock:
+                started[0] += 1
+                if started[0] == 2:
+                    entered.set()
+            release.wait(timeout=3)
+            return []
+        worker = GapRecoveryWorker(
+            fetch, lambda key: ([object()], object()),
+            lambda *args: 0, max_pending=2, min_request_spacing=0.001)
+        try:
+            self.assertTrue(worker.request("A"))
+            self.assertTrue(worker.request("B"))
+            self.assertTrue(entered.wait(2))
+            start = time.monotonic()
+            worker.join(timeout=0.1)
+            self.assertLess(time.monotonic() - start, 0.18)
+            self.assertEqual(worker.status()["pending"], 2)
+        finally:
+            release.set()
+            worker.join(timeout=3)
+
     def test_rate_limit_and_pending_cap(self):
         entered = threading.Event()
         release = threading.Event()
