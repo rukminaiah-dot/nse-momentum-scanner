@@ -153,5 +153,67 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(worker.status()["completed"], 0)
         self.assertEqual(worker.status()["pending"], 0)
 
+
+    def test_concurrent_feed_update_preserved_during_recovery(self):
+        """Feed wins races: delayed recovery must not overwrite a live candle."""
+        from datetime import datetime, timedelta
+        from zoneinfo import ZoneInfo
+        from v2.backend.verified_gap_recovery import merge_verified_missing
+        from v2.backend.candles import Candle
+        now = datetime.now(ZoneInfo("Asia/Kolkata"))
+        base = (now - timedelta(minutes=4)).replace(
+            second=0, microsecond=0, tzinfo=None)
+        if base.date() != now.date():
+            self.skipTest("IST midnight boundary")
+        active = base + timedelta(minutes=3)
+        state_lock = threading.Lock()
+        def candle(minute, price):
+            c = Candle(price, 10)
+            c.open = c.high = c.low = c.close = price
+            c.timestamp = minute
+            return c
+        first = candle(base, 100)
+        live = candle(base + timedelta(minutes=1), 101)
+        broker_row = [(base + timedelta(minutes=1)).replace(
+            tzinfo=ZoneInfo("Asia/Kolkata")).isoformat(), 99, 99, 99, 99, 10]
+        history = [first]
+        fetch_started = threading.Event()
+        release_fetch = threading.Event()
+        def snapshot(_):
+            with state_lock:
+                return list(history), active
+        def fetch(_):
+            fetch_started.set()
+            if not release_fetch.wait(3):
+                raise TimeoutError("test fetch barrier")
+            return [broker_row]
+        def merge(_, recovered, expected_active):
+            nonlocal history
+            with state_lock:
+                if expected_active != active:
+                    return 0
+                history, inserted = merge_verified_missing(
+                    history, recovered, active_minute=active)
+                return len(inserted)
+        worker = GapRecoveryWorker(
+            fetch, snapshot, merge, cooldown=120,
+            max_pending=1, min_request_spacing=0.001)
+        try:
+            self.assertTrue(worker.request("STOCK"))
+            self.assertTrue(fetch_started.wait(2))
+            with state_lock:
+                history.append(live)
+            release_fetch.set()
+            worker.join(timeout=5)
+            with state_lock:
+                self.assertEqual(len(history), 2)
+                self.assertIs(history[1], live)
+            self.assertEqual(worker.status()["verified_insertions"], 0)
+            self.assertEqual(worker.status()["failed"], 0)
+            self.assertEqual(worker.status()["pending"], 0)
+        finally:
+            release_fetch.set()
+            worker.join(timeout=5)
+
 if __name__ == "__main__":
     unittest.main()
