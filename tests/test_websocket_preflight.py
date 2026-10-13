@@ -27,8 +27,13 @@ class PreflightTests(unittest.TestCase):
     def test_missing_instrument_blocks(self):
         self.assertTrue(check({**BASE, "FIX10_TEST_INSTRUMENT_KEY": ""}))
 
+    def test_explicit_disabled_recovery_values_allowed(self):
+        for value in ("", "0", "false", "FALSE", "no", "off"):
+            with self.subTest(value=value):
+                self.assertEqual(check({**BASE, "ENABLE_VERIFIED_GAP_RECOVERY": value}), [])
+
     def test_enabled_recovery_flag_blocks(self):
-        for value in ("ON", "true", "1", "yes"):
+        for value in ("ON", "true", "1", "yes", "enabled", "unknown", "2"):
             with self.subTest(value=value):
                 self.assertTrue(check({**BASE, "ENABLE_VERIFIED_GAP_RECOVERY": value}))
 
