@@ -48,6 +48,13 @@ class GapRecoveryTests(unittest.TestCase):
         self.assertEqual([c.timestamp.minute for c in merged], [40, 41, 42])
         self.assertEqual(merged[0].volume, 10)
 
+    def test_merge_rejects_mismatched_candle_timestamp(self):
+        candle = next(iter(validated_completed_rows([row(41)], NOW).values()))
+        incorrect_key = datetime(2026, 10, 13, 11, 42)
+        with self.assertRaises(ValueError):
+            merge_verified_missing([], {incorrect_key: candle},
+                active_minute=datetime(2026, 10, 13, 11, 44))
+
     def test_merge_drops_previous_session(self):
         candle = next(iter(validated_completed_rows([row(41)], NOW).values()))
         prior = datetime(2026, 10, 12, 11, 41)
