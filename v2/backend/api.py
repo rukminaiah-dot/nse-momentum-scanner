@@ -205,6 +205,9 @@ def candle_feed_quality():
         result["status"] = "REPORTING"
         result["snapshot_age_seconds"] = round(age, 1)
         result["stocks"] = rows
+        recovery = data.get("gap_recovery")
+        if isinstance(recovery, dict):
+            result["gap_recovery"] = recovery
         result["stocks_six_consecutive_today"] = sum(
             v.get("six_consecutive_today") is True for v in rows.values()
         )
