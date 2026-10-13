@@ -15,7 +15,7 @@ def controlled_gap_acceptance(bridge):
     """Return (passed, reason) after a bounded, isolated broker-backed test.
 
     Requires a genuine websocket tick already ingested by bridge. Seeds one
-    historical completed candle as a missing minute in isolated memory, then
+    set of broker-verified completed candles with one minute omitted, then
     asks the normal off-feed worker to recover it from a SECOND broker fetch.
     A natural websocket gap is a separate, unverified condition.
     """
@@ -33,7 +33,9 @@ def controlled_gap_acceptance(bridge):
         validated = validated_completed_rows(rows, datetime.now(IST))
     except Exception:
         return False, "initial authenticated historical fetch failed"
-    candidates = sorted(m for m in validated if m.date() == active.date() and m < active)
+    # The merge retains at most 60 completed bars. Seed its newest window
+    # so older broker history cannot count as additional insertions.
+    candidates = sorted(m for m in validated if m.date() == active.date() and m < active)[-60:]
     if len(candidates) < 2:
         return False, "insufficient same-day completed broker minutes"
     # Use only already authenticated broker candles, strictly before live minute.
@@ -45,8 +47,7 @@ def controlled_gap_acceptance(bridge):
             return False, "live minute advanced during setup"
         if any(c.timestamp in candidates for c in manager.completed.get(key, [])):
             return False, "candidate minutes already exist in live history"
-        # Preserve all existing live history. Seed only an anchor that really
-        # exists at the broker; the omitted minute is the controlled gap.
+        # Seed only broker-verified anchors; the omitted minute is the gap.
         manager.completed.setdefault(key, []).extend(anchors)
     try:
         if not bridge.worker.request(key):
@@ -61,6 +62,7 @@ def controlled_gap_acceptance(bridge):
             return False, "historical recovery not verified"
         if (missing not in by_minute or current is None
                 or current["minute"] < active
+                or (current["minute"] == active and current["candle"] is not active_candle)
                 or any(c.timestamp not in by_minute for c in original)):
             return False, "isolated candle integrity check failed"
         if by_minute[missing] is not validated[missing]:
