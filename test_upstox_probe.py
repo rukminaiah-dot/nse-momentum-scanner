@@ -52,5 +52,39 @@ class ProbeTests(unittest.TestCase):
             self.assertEqual(probe.main(), 1)
 
 
+    def test_broker_exception_returns_failure_without_disclosing_details(self):
+        """A broker exception must be handled without exposing SDK exception text."""
+        from contextlib import redirect_stderr
+        from io import StringIO
+        class Api:
+            def __init__(self, client):
+                pass
+            def get_intra_day_candle_data(self, *args):
+                raise RuntimeError("SENSITIVE_TOKEN_SHOULD_NOT_APPEAR")
+        fake_sdk = SimpleNamespace(
+            Configuration=lambda: SimpleNamespace(access_token=None),
+            ApiClient=lambda config: config, HistoryV3Api=Api)
+        output = StringIO()
+        with patch.dict(sys.modules, {"upstox_client": fake_sdk}), patch.dict(
+            "os.environ", {"UPSTOX_ACCESS_TOKEN": "offline-token"}
+        ), patch.object(sys, "argv", ["probe", "--instrument-key", "TEST"]), redirect_stderr(output):
+            self.assertEqual(probe.main(), 1)
+        self.assertNotIn("SENSITIVE_TOKEN_SHOULD_NOT_APPEAR", output.getvalue())
+        self.assertIn("RuntimeError", output.getvalue())
+
+    def test_missing_candle_collection_is_not_a_success(self):
+        class Api:
+            def __init__(self, client):
+                pass
+            def get_intra_day_candle_data(self, *args):
+                return SimpleNamespace(data=SimpleNamespace(candles=None))
+        fake_sdk = SimpleNamespace(
+            Configuration=lambda: SimpleNamespace(access_token=None),
+            ApiClient=lambda config: config, HistoryV3Api=Api)
+        with patch.dict(sys.modules, {"upstox_client": fake_sdk}), patch.dict(
+            "os.environ", {"UPSTOX_ACCESS_TOKEN": "offline-token"}
+        ), patch.object(sys, "argv", ["probe", "--instrument-key", "TEST"]):
+            self.assertEqual(probe.main(), 1)
+
 if __name__ == "__main__":
     unittest.main()
