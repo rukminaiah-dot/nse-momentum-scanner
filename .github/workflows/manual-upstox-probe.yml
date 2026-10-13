@@ -28,6 +28,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Record isolated acceptance revision
+        run: |
+          echo "Acceptance commit: $GITHUB_SHA"
+          echo "Acceptance ref: $GITHUB_REF"
       - name: Run offline recovery and websocket regression tests
         run: |
           python -m compileall -q preflight_upstox_websocket.py probe_upstox_websocket_smoke.py isolated_live_tick_candles.py isolated_stream_recovery.py isolated_upstox_history.py v2/backend
