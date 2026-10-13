@@ -34,6 +34,28 @@ class ControlledGapTests(unittest.TestCase):
         self.assertEqual(len(history), 1)
         self.assertEqual(bridge.candles.manager.current[KEY]["candle"].close, 105)
 
+    def test_long_broker_history_recovers_only_one_minute(self):
+        now = datetime.now(IST).replace(second=0, microsecond=0)
+        if (now - timedelta(minutes=70)).date() != now.date():
+            self.skipTest("IST day boundary")
+        minutes = [now - timedelta(minutes=n) for n in range(70, 0, -1)]
+        calls = []
+        def fetch(key):
+            calls.append(key)
+            return [[minute.isoformat(), 100, 101, 99, 100, 5]
+                    for minute in minutes]
+        bridge = IsolatedStreamRecovery(KEY, fetch, min_request_spacing=0.001)
+        tick = {"feeds": {KEY: {"ltpc": {
+            "ltp": 105, "ltt": str(int(now.timestamp() * 1000))}}}}
+        self.assertTrue(bridge.on_message(tick))
+        passed, reason = controlled_gap_acceptance(bridge)
+        self.assertTrue(passed, reason)
+        self.assertEqual(bridge.worker.status()["verified_insertions"], 1)
+        self.assertEqual(len(calls), 2)
+        history, active = bridge.candles.manager.recovery_snapshot(KEY)
+        self.assertEqual(active, now.replace(tzinfo=None))
+        self.assertEqual(len(history), 1)
+
     def test_no_tick_never_fetches_broker(self):
         calls = []
         bridge = IsolatedStreamRecovery(KEY, lambda key: calls.append(key) or [])
