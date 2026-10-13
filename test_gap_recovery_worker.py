@@ -21,6 +21,7 @@ class WorkerTests(unittest.TestCase):
             self.assertFalse(worker.request("B"))
         finally:
             release.set()
+            worker.join(timeout=5)
 
     def test_invalid_limits_fail_closed(self):
         with self.assertRaises(ValueError):
@@ -48,6 +49,7 @@ class WorkerTests(unittest.TestCase):
                     break
             time.sleep(0.01)
         self.assertTrue(worker.request("B"))
+        worker.join(timeout=5)
 
 if __name__ == "__main__":
     unittest.main()
