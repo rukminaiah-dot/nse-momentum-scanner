@@ -1,0 +1,22 @@
+name: Verified Gap Recovery Tests
+on:
+  push:
+    branches: [feature/verified-gap-recovery]
+  pull_request:
+    paths:
+      - 'v2/backend/**'
+      - 'test_verified_gap_recovery.py'
+      - 'test_gap_recovery_worker.py'
+  workflow_dispatch:
+
+jobs:
+  offline-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Offline regression suite
+        run: python -m unittest -v test_verified_gap_recovery test_gap_recovery_worker
