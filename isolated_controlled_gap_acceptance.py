@@ -72,13 +72,14 @@ def controlled_gap_acceptance(bridge):
                 or (current["minute"] == active and current["candle"] is not active_candle)
                 or any(c.timestamp not in by_minute for c in original)):
             return False, "isolated candle integrity check failed"
-        if by_minute[missing] is not validated[missing]:
-            # The second API fetch builds new candle instances: verify OHLCV.
-            recovered = by_minute[missing]
-            expected = validated[missing]
-            if any(getattr(recovered, field) != getattr(expected, field)
-                   for field in ("open", "high", "low", "close", "volume")):
-                return False, "broker candle values differ"
+        # The worker must insert a candle obtained from its second authenticated
+        # fetch. Verify its OHLCV against the initial broker observation even
+        # when objects happen to share identity (e.g. a test double).
+        recovered = by_minute[missing]
+        expected = validated[missing]
+        if any(getattr(recovered, field) != getattr(expected, field)
+               for field in ("open", "high", "low", "close", "volume")):
+            return False, "broker candle values differ"
         # Replaying the same verified candle must not insert a duplicate or
         # replace the first recovered candle.
         if manager.merge_recovered(key, {missing: by_minute[missing]}, active) != 0:
