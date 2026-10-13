@@ -27,7 +27,10 @@ class IsolatedTickTests(unittest.TestCase):
         stamp = int(now.timestamp() * 1000)
         for ltpc in ({"ltp": True, "ltt": stamp},
                      {"ltp": 100, "ltt": True},
-                     {"ltp": 100, "ltt": 1234.5}):
+                     {"ltp": 100, "ltt": 1234.5},
+                     {"ltp": 100, "ltt": "1234.0"},
+                     {"ltp": 100, "ltt": "+1234"},
+                     {"ltp": 100, "ltt": "1e12"}):
             self.assertIsNone(extract_tick({"feeds": {KEY: {"ltpc": ltpc}}}, KEY))
 
     def test_nested_upstox_v3_ltpc_feed_shapes(self):
