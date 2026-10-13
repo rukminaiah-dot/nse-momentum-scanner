@@ -3,6 +3,7 @@ import unittest
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from v2.backend.verified_gap_recovery import validated_completed_rows, merge_verified_missing
+from v2.backend.candle_manager import CandleManager
 
 IST = ZoneInfo("Asia/Kolkata")
 NOW = datetime(2026, 10, 13, 11, 45, tzinfo=IST)
@@ -54,6 +55,32 @@ class GapRecoveryTests(unittest.TestCase):
         merged, added = merge_verified_missing([], recovered, limit=6)
         self.assertEqual(len(added), 10)
         self.assertEqual([c.timestamp.minute for c in merged], list(range(39, 45)))
+
+    def test_merge_rejected_after_active_minute_advances(self):
+        manager = CandleManager()
+        key = "TEST"
+        def tick(minute):
+            stamp = datetime(2026, 10, 13, 11, minute, tzinfo=IST)
+            manager.update(key, 100, int(stamp.timestamp() * 1000), 10)
+        tick(40)
+        tick(42)
+        _, expected_active = manager.recovery_snapshot(key)
+        tick(43)
+        recovered = validated_completed_rows([row(41)], NOW)
+        self.assertEqual(manager.merge_recovered(key, recovered, expected_active), 0)
+        self.assertEqual([c.timestamp.minute for c in manager.completed[key]], [40, 42])
+
+    def test_merge_inserts_gap_without_overwriting_live(self):
+        manager = CandleManager()
+        key = "TEST"
+        for minute in (40, 42):
+            stamp = datetime(2026, 10, 13, 11, minute, tzinfo=IST)
+            manager.update(key, 100, int(stamp.timestamp() * 1000), 10)
+        _, expected_active = manager.recovery_snapshot(key)
+        recovered = validated_completed_rows([row(40, 900), row(41)], NOW)
+        self.assertEqual(manager.merge_recovered(key, recovered, expected_active), 1)
+        self.assertEqual([c.timestamp.minute for c in manager.completed[key]], [40, 41])
+        self.assertEqual(manager.completed[key][0].volume, 10)
 
 if __name__ == "__main__":
     unittest.main()
