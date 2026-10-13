@@ -36,12 +36,14 @@ def main():
         return 2
 
     opened = threading.Event()
+    ready = threading.Event()
     seen = threading.Event()
     errored = threading.Event()
     counts = {"messages": 0}
 
     def on_open(*_args):
         opened.set()
+        ready.set()
 
     def on_message(*_args):
         counts["messages"] += 1
@@ -49,6 +51,7 @@ def main():
 
     def on_error(*_args):
         errored.set()
+        ready.set()
 
     streamer.on("open", on_open)
     streamer.on("message", on_message)
@@ -65,7 +68,8 @@ def main():
     connector = threading.Thread(target=connect_safely, daemon=True)
     connector.start()
     try:
-        if not opened.wait(timeout=15):
+        ready.wait(timeout=15)
+        if not opened.is_set():
             if errored.is_set():
                 print("INCONCLUSIVE: websocket connection failed")
                 return 3
