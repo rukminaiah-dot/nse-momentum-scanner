@@ -21,6 +21,8 @@ small{color:#aaa}
 <div id="feed-status" class="card">Checking market and feed freshness…</div>
 <h3>Market Index Signals</h3>
 <div id="indices">Loading live indices...</div>
+<h3>203-Instrument Candle Quality Ratings (Research Only)</h3>
+<div id="quality-ratings" class="card">Loading quality ratings…</div>
 <h3>Top 5 Verified Momentum Setups</h3>
 <div id="scanner">Waiting for live market data...</div>
 <h3>Top 10 Intraday Momentum Ranking (Watchlist, Not BUY Calls)</h3>
@@ -98,6 +100,20 @@ async function loadScanner(){
 
  }catch(e){document.getElementById("feed-status").textContent="Scanner data unavailable — NO LIVE SIGNALS";document.getElementById("indices").textContent="Data unavailable";document.getElementById("scanner").textContent="No verified BUY signals";}
 }
+async function loadQualityRatings(){
+ const panel=document.getElementById('quality-ratings');
+ const esc=v=>String(v??'—').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+ try{
+  const r=await fetch('/api/v2/quality-ratings',{cache:'no-store'});
+  if(!r.ok)throw Error('HTTP '+r.status);
+  const d=await r.json();
+  if(d.order_execution_enabled!==false||d.mode!=='RESEARCH_ONLY'||!Array.isArray(d.ratings)||d.universe_size!==203)throw Error('Unverified ratings response');
+  const top=d.ratings.slice(0,10);
+  panel.innerHTML='<b>'+esc(d.status)+'</b> | '+top.length+' displayed of '+d.ratings.length+' rated / 203 configured | '+esc(d.unrated_count)+' unrated<br><small>Heuristic candle score, NOT win probability. RVOL and liquidity are not included in the score; manual research only.</small>'+
+   (top.length?'<div class="table-wrap"><table><thead><tr><th>Rank</th><th>Instrument</th><th>Type</th><th>Signal</th><th>Score / 100</th><th>Momentum %</th><th>Candle IST</th></tr></thead><tbody>'+
+    top.map((x,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(x.symbol)+'</td><td>'+esc(x.type)+'</td><td class="'+(x.signal==='BUY'?'buy':'sell')+'">'+esc(x.signal)+'</td><td>'+esc(x.rating)+'</td><td>'+esc(x.momentum)+'</td><td>'+esc(x.candle_ist)+'</td></tr>').join('')+'</tbody></table></div>':'<p>No qualifying fresh candle ratings. No trade signal inferred.</p>');
+ }catch(e){panel.textContent='Quality ratings unavailable or unverified — no rated setups displayed.';}
+}
 async function loadStockBoard(){
  const count=document.getElementById('stock-count'),board=document.getElementById('stock-board');
  try{
@@ -119,6 +135,8 @@ async function loadStockBoard(){
 }
 loadScanner();
 setInterval(loadScanner,10000);
+loadQualityRatings();
+setInterval(loadQualityRatings,10000);
 loadStockBoard();
 setInterval(loadStockBoard,30000);
 
