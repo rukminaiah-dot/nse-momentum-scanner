@@ -105,5 +105,11 @@ def controlled_gap_acceptance(bridge):
         if not bridge.worker.status()["pending"]:
             with manager.lock:
                 seeded = manager.completed.get(key, [])
+                # The worker may have inserted the omitted broker minute even
+                # when a later integrity check rejects acceptance. Remove it
+                # only if it was absent from the original live history.
+                original_ids = {id(c) for c in original}
                 controlled_objects = anchors + ([recovered_for_cleanup] if recovered_for_cleanup is not None else [])
-                manager.completed[key] = [c for c in seeded if all(c is not a for a in controlled_objects)]
+                manager.completed[key] = [c for c in seeded
+                                          if all(c is not a for a in controlled_objects)
+                                          and not (c.timestamp == missing and id(c) not in original_ids)]
