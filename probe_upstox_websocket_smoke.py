@@ -1,6 +1,6 @@
 """Manual, isolated, read-only Upstox websocket smoke test.
 
-NOT a gap-recovery integration test. No scanner imports, persistence, or orders.
+Optionally exercises read-only gap recovery. No scanner imports, persistence, or orders.
 Requires explicit nonproduction acknowledgement and an authorized instrument.
 Prints only connection/tick counters, never raw messages or credentials.
 """
@@ -132,6 +132,9 @@ def main():
         if recovery_mode:
             # Do not claim historical recovery succeeded merely because ticks
             # arrived: a naturally occurring minute gap may never occur.
+            # Give an already scheduled off-feed worker a bounded chance to
+            # finish before reporting acceptance. Never wait on feed callbacks.
+            bridge.worker.join(timeout=5)
             stats = bridge.worker.status()
             print("gap_requests:", bridge.gap_requests)
             print("recovery_completed:", stats["completed"])
@@ -147,6 +150,8 @@ def main():
                 print("INCONCLUSIVE: no missing broker candle verified")
             else:
                 print("PASS: live gap scheduled and verified historical candle inserted")
+                return 0
+            return 3
         else:
             print("NOTE: recovery worker was not invoked; integration gate remains pending")
         return 0
