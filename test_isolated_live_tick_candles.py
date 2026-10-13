@@ -1,5 +1,7 @@
 """Offline checks for isolated real CandleManager tick ingestion."""
 import unittest
+import io
+from contextlib import redirect_stdout
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -55,6 +57,16 @@ class IsolatedTickTests(unittest.TestCase):
         self.assertEqual(adapter.manager.current[KEY]["candle"].close, 102)
         self.assertEqual(adapter.accepted, 3)
         self.assertEqual(adapter.rejected, 0)
+
+    def test_isolated_minute_rollover_never_logs_market_values(self):
+        now = datetime.now(IST).replace(second=0, microsecond=0)
+        adapter = IsolatedTickCandles(KEY)
+        output = io.StringIO()
+        with redirect_stdout(output):
+            self.assertTrue(adapter.on_message(event(now - timedelta(minutes=2), 123.45)))
+            self.assertTrue(adapter.on_message(event(now - timedelta(minutes=1), 234.56)))
+        self.assertEqual(output.getvalue(), "")
+        self.assertEqual(len(adapter.manager.recovery_snapshot(KEY)[0]), 1)
 
     def test_rejected_payload_does_not_mutate_state(self):
         adapter = IsolatedTickCandles(KEY)
