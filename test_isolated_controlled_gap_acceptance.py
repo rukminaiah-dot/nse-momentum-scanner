@@ -60,6 +60,7 @@ class ControlledGapTests(unittest.TestCase):
         history, active = bridge.candles.manager.recovery_snapshot(KEY)
         self.assertEqual(active, now.replace(tzinfo=None))
         self.assertEqual(len(history), 0)
+        self.assertEqual(bridge.candles.manager.current[KEY]["candle"].close, 105)
 
     def test_changed_broker_candle_does_not_pass(self):
         now = datetime.now(IST).replace(second=0, microsecond=0)
