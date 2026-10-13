@@ -53,6 +53,17 @@ class WebsocketSmokeTests(unittest.TestCase):
             MarketDataStreamerV3=FakeStreamer,
         )
 
+    def test_heartbeat_and_other_instruments_are_not_ticks(self):
+        for payload in (None, {}, {"type": "heartbeat"},
+                        {"feeds": {}},
+                        {"feeds": {"OTHER": {"ltpc": {"ltp": 100, "ltt": "1"}}}},
+                        {"feeds": {"MOCK_INSTRUMENT": {"ltpc": {"ltp": 100}}}}):
+            with self.subTest(payload=repr(payload)):
+                self.assertFalse(probe.has_instrument_tick(payload, "MOCK_INSTRUMENT"))
+        self.assertTrue(probe.has_instrument_tick(
+            {"feeds": {"MOCK_INSTRUMENT": {"ltpc": {"ltp": 100, "ltt": "1"}}}},
+            "MOCK_INSTRUMENT"))
+
     def test_missing_acknowledgement_blocks_before_sdk(self):
         with patch.dict(os.environ, {**ENV, "FIX10_LIVE_STREAM_ACK": ""}, clear=True):
             with patch.dict(sys.modules, {"upstox_client": None}):
