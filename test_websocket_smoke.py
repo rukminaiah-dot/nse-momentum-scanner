@@ -120,6 +120,20 @@ class WebsocketSmokeTests(unittest.TestCase):
                     self.assertEqual(probe.main(), 3)
         self.assertTrue(FakeStreamer.last.disconnected)
 
+    def test_disconnect_exception_is_safely_ignored(self):
+        original = FakeStreamer.disconnect
+        def broken_disconnect(streamer):
+            streamer.disconnected = True
+            raise RuntimeError("do not print SDK teardown secrets")
+        try:
+            FakeStreamer.disconnect = broken_disconnect
+            with patch.dict(os.environ, ENV, clear=True):
+                with patch.dict(sys.modules, {"upstox_client": self.sdk}):
+                    self.assertEqual(probe.main(), 0)
+            self.assertTrue(FakeStreamer.last.disconnected)
+        finally:
+            FakeStreamer.disconnect = original
+
     def test_connector_exception_is_inconclusive(self):
         FakeStreamer.mode = "raise"
         with patch.dict(os.environ, ENV, clear=True):
