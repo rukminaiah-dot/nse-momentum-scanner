@@ -11,6 +11,20 @@ import threading
 from preflight_upstox_websocket import check
 
 
+def has_instrument_tick(payload, instrument):
+    """Reject heartbeats, acks and unrelated instrument messages."""
+    if not isinstance(payload, dict):
+        return False
+    feeds = payload.get("feeds")
+    if not isinstance(feeds, dict):
+        return False
+    feed = feeds.get(instrument)
+    if not isinstance(feed, dict):
+        return False
+    ltpc = feed.get("ltpc")
+    return isinstance(ltpc, dict) and ltpc.get("ltp") is not None and ltpc.get("ltt") is not None
+
+
 def main():
     failures = check()
     if failures:
@@ -49,18 +63,7 @@ def main():
         # An open socket, heartbeat, or subscription acknowledgement is NOT
         # evidence of market ticks. Require an instrument feed with LTPC.
         payload = args[0] if args else None
-        if not isinstance(payload, dict):
-            return
-        feeds = payload.get("feeds")
-        if not isinstance(feeds, dict):
-            return
-        feed = feeds.get(instrument)
-        if not isinstance(feed, dict):
-            return
-        ltpc = feed.get("ltpc")
-        if not isinstance(ltpc, dict):
-            return
-        if ltpc.get("ltp") is None or ltpc.get("ltt") is None:
+        if not has_instrument_tick(payload, instrument):
             return
         counts["messages"] += 1
         seen.set()
