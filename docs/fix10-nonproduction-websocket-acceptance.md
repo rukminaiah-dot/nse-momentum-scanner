@@ -10,6 +10,12 @@ Status: **NOT YET RUN**. This is a release checklist, not evidence of passing in
 - Select one authorized liquid instrument and conduct the check during an NSE trading session.
 - Stop if the token lacks required market-data access, if market is closed, or if websocket authorization fails. A read-only historical API success is not a websocket success.
 
+## Isolated live harness result semantics
+- The tick-only smoke mode uses `FIX10_LIVE_STREAM_ACK=READ_ONLY_STREAM_TEST` and verifies a fresh instrument tick entered `CandleManager`; it does **not** verify recovery.
+- Recovery mode additionally requires `FIX10_ISOLATED_RECOVERY_ACK=READ_ONLY_HISTORY`; this enables an instrument-scoped, read-only Upstox historical request **only if a same-session minute jump is detected**.
+- Exit code `0` in recovery mode requires at least one verified historical insertion. Exit code `3` means inconclusive (including no natural gap, pending worker, broker failure, or zero verified insertions). Exit code `2` means blocked preflight/initialization.
+- Do not force a fabricated market tick into the live websocket to obtain a green result. The deterministic synthetic-gap scenario belongs in offline integration tests; real-market evidence must be labelled separately.
+
 ## Nonproduction acceptance sequence
 1. Start an isolated process subscribing to the Upstox market-data websocket with a **read-only** instrument subscription. Confirm live ticks arrive with exchange timestamps.
 2. Record only redacted diagnostics: tick count, candle-minute count, connection state, recovery attempt count, insertion count, errors. Do not log token, raw ticks, OHLCV, or order data.
