@@ -92,6 +92,27 @@ class LiveTickRecoveryTests(unittest.TestCase):
             release_fetch.set()
             bridge.worker.join(timeout=5)
 
+    def test_broker_failure_keeps_live_candles_and_releases_worker(self):
+        now = datetime.now(IST).replace(second=0, microsecond=0)
+        first, third = now - timedelta(minutes=3), now - timedelta(minutes=1)
+        if first.date() != now.date():
+            self.skipTest("IST day boundary")
+        def failed_fetch(_):
+            raise ConnectionError("simulated broker failure")
+        bridge = IsolatedStreamRecovery(KEY, failed_fetch,
+                                        min_request_spacing=0.001)
+        self.assertTrue(bridge.on_message(message(first, 100)))
+        self.assertTrue(bridge.on_message(message(third, 103)))
+        bridge.worker.join(timeout=5)
+        status = bridge.worker.status()
+        self.assertEqual(status["failed"], 1)
+        self.assertEqual(status["pending"], 0)
+        self.assertEqual(status["verified_insertions"], 0)
+        history, active = bridge.candles.manager.recovery_snapshot(KEY)
+        self.assertEqual([bar.timestamp for bar in history],
+                         [first.replace(tzinfo=None)])
+        self.assertEqual(active, third.replace(tzinfo=None))
+
     def test_stale_and_cross_session_ticks_do_not_schedule(self):
         now = datetime.now(IST).replace(second=0, microsecond=0)
         yesterday = now - timedelta(days=1)
