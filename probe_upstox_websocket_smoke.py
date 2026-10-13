@@ -10,7 +10,7 @@ import sys
 import threading
 
 from preflight_upstox_websocket import check
-from isolated_live_tick_candles import extract_tick
+from isolated_live_tick_candles import extract_tick, IsolatedTickCandles
 
 
 def has_instrument_tick(payload, instrument):
@@ -46,6 +46,7 @@ def main():
     seen = threading.Event()
     errored = threading.Event()
     counts = {"messages": 0}
+    isolated = IsolatedTickCandles(instrument)
 
     def on_open(*_args):
         opened.set()
@@ -56,6 +57,14 @@ def main():
         # evidence of market ticks. Require an instrument feed with LTPC.
         payload = args[0] if args else None
         if not has_instrument_tick(payload, instrument):
+            return
+        try:
+            if not isolated.on_message(payload):
+                return
+        except Exception:
+            # Callback errors must not be mistaken for successful integration.
+            errored.set()
+            ready.set()
             return
         counts["messages"] += 1
         seen.set()
@@ -96,8 +105,13 @@ def main():
         if errored.is_set():
             print("INCONCLUSIVE: websocket reported an error")
             return 3
-        print("PASS: websocket opened and received live message(s)")
+        history, active = isolated.manager.recovery_snapshot(instrument)
+        if active is None:
+            print("INCONCLUSIVE: tick did not enter isolated candle manager")
+            return 3
+        print("PASS: websocket tick entered isolated candle manager")
         print("message_count:", counts["messages"])
+        print("completed_candles:", len(history))
         print("NOTE: recovery worker was not invoked; integration gate remains pending")
         return 0
     finally:
