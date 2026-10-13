@@ -86,11 +86,16 @@ class WebsocketSmokeTests(unittest.TestCase):
 
     def test_stale_tick_does_not_count_as_live_evidence(self):
         FakeStreamer.mode = "stale"
-        # Avoid waiting the full live timeout in a deterministic offline test.
+        # Patch the single event wait on the main thread only; the connector
+        # still runs normally and can emit its stale mock message.
+        original_wait = probe.threading.Event.wait
+        def short_wait(event, timeout=None):
+            if timeout == 45:
+                return event.is_set()
+            return original_wait(event, timeout)
         with patch.dict(os.environ, ENV, clear=True):
             with patch.dict(sys.modules, {"upstox_client": self.sdk}):
-                with patch.object(probe.threading.Event, "wait", autospec=True,
-                                  side_effect=lambda event, timeout=None: event.is_set()):
+                with patch.object(probe.threading.Event, "wait", short_wait):
                     self.assertEqual(probe.main(), 3)
         self.assertTrue(FakeStreamer.last.disconnected)
 
