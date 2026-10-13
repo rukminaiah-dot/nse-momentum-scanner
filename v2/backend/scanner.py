@@ -212,7 +212,8 @@ def preload_history(key):
         except Exception as exc:
             print("INTRADAY PRELOAD FAILED:", key, type(exc).__name__, flush=True)
 
-    candles.completed[key] = loaded
+    with candles.lock:
+        candles.completed[key] = loaded
     print("PRELOAD:", key, len(loaded), "historical candles")
 
 def five_minute_trend(history):
