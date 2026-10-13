@@ -40,6 +40,7 @@ class ProbeTests(unittest.TestCase):
         ), patch.object(sys, "argv", ["probe", "--instrument-key", "TEST"]), redirect_stdout(output):
             self.assertEqual(probe.main(), 0)
         self.assertIn("PASS: real-candle in-memory gap insertion and idempotence verified", output.getvalue())
+        self.assertIn("PASS: real-candle asynchronous recovery worker verified", output.getvalue())
         self.assertEqual(calls, [("TEST", "minutes", "1")])
 
     def test_invalid_response_fails_closed(self):
