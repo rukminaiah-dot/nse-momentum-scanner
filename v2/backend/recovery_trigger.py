@@ -19,7 +19,9 @@ def should_request_recovery(history, active_minute, *, enabled, stock, candle_cl
     previous = None
     for candle in history:
         minute = getattr(candle, "timestamp", None)
-        if minute is None or minute.date() != active_minute.date():
+        if minute is None:
+            return False
+        if minute.date() != active_minute.date():
             previous = None
             continue
         if minute > active_minute or (previous is not None and minute <= previous):
