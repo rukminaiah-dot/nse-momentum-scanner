@@ -90,7 +90,8 @@ def write_candle_quality():
     today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
     rows = {}
     for key in NIFTY_200.values():
-        history = candles.completed.get(key, [])
+        with candles.lock:
+            history = list(candles.completed.get(key, []))
         recent = history[-6:]
         same_day = len(recent) == 6 and all(
             getattr(c, "timestamp", None) is not None
@@ -505,13 +506,13 @@ def on_tick(key, data):
         except (ValueError, TypeError):
             pass
 
-    before = len(candles.completed.get(key, []))
-    candles.update(key, price, ts, minute_volume)
-    after = len(candles.completed.get(key, []))
+    # The candle manager returns a closed candle atomically under its lock.
+    # Never infer closure from history length: recovery may replace that list.
+    candle_closed = candles.update(key, price, ts, minute_volume) is not None
 
     # Only request recovery after a genuine live closure of a same-session gap.
     # Never request for indices, disabled mode or overnight discontinuities.
-    if after > before and GAP_RECOVERY_ENABLED and key in NIFTY_200.values():
+    if candle_closed and GAP_RECOVERY_ENABLED and key in NIFTY_200.values():
         from .recovery_trigger import should_request_recovery
         history, active_minute = candles.recovery_snapshot(key)
         if should_request_recovery(
@@ -521,7 +522,7 @@ def on_tick(key, data):
             gap_recovery.request(key)
 
     # Analyse only when a minute candle has actually closed.
-    if after > before:
+    if candle_closed:
         write_candle_quality()
         analyse(key)
 
