@@ -213,6 +213,15 @@ def candle_feed_quality():
             and 0 <= now - v["last_tick_epoch"] <= 120
             for v in rows.values()
         )
+        result["stocks_missing_minute"] = sum(
+            v.get("continuity_reason") == "MISSING_MINUTE" for v in rows.values()
+        )
+        result["stocks_overnight_gap"] = sum(
+            v.get("continuity_reason") == "OVERNIGHT_GAP" for v in rows.values()
+        )
+        result["stocks_warmup"] = sum(
+            v.get("continuity_reason") == "WARMUP" for v in rows.values()
+        )
         result["stocks_with_positive_last_candle_volume"] = sum(
             isinstance(v.get("last_closed_volume"), (int, float))
             and v["last_closed_volume"] > 0
