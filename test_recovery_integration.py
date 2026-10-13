@@ -92,5 +92,30 @@ class WorkerIntegrationTests(unittest.TestCase):
             release_fetch.set()
             worker.join(timeout=5)
 
+
+    def test_session_rollover_rejects_delayed_previous_day_recovery(self):
+        """Never insert previous-session candles after live feed rolls to next day."""
+        import threading
+        manager = CandleManager()
+        key = "SESSION_ROLLOVER"
+        yesterday = (datetime.now(IST) - timedelta(days=1)).replace(
+            hour=15, minute=28, second=0, microsecond=0)
+        missing = yesterday + timedelta(minutes=1)
+        today = yesterday + timedelta(days=1)
+        def tick(stamp, price):
+            manager.update(key, price, int(stamp.timestamp() * 1000), 10)
+        tick(yesterday, 100)
+        tick(today, 105)
+        old_history, _ = manager.recovery_snapshot(key)
+        self.assertEqual(len(old_history), 1)
+        # Recovery snapshot taken before session rollover must not commit later.
+        recovered = {missing.replace(tzinfo=None): old_history[0]}
+        self.assertEqual(
+            manager.merge_recovered(
+                key, recovered, yesterday.replace(tzinfo=None)), 0)
+        history, active = manager.recovery_snapshot(key)
+        self.assertEqual(len(history), 1)
+        self.assertEqual(active, today.replace(tzinfo=None))
+
 if __name__ == "__main__":
     unittest.main()
