@@ -59,6 +59,37 @@ def main():
             restored, recovered, active_minute=missing + timedelta(minutes=1))
         if inserted_again or len(repeated) != 2 or repeated[0] is not original:
             raise ValueError("in-memory merge not idempotent")
+        rows_by_minute = {}
+        for raw in rows:
+            stamp = datetime.fromisoformat(str(raw[0]))
+            if stamp.tzinfo is not None:
+                minute = stamp.astimezone(ZoneInfo("Asia/Kolkata")).replace(tzinfo=None)
+                rows_by_minute[minute] = raw
+        # Exercise the actual asynchronous worker with the already fetched
+        # broker response. No second API request and no shared scanner state.
+        from v2.backend.gap_recovery_worker import GapRecoveryWorker
+        state = [original]
+        active = missing + timedelta(minutes=1)
+        def isolated_snapshot(_key):
+            return list(state), active
+        def isolated_merge(_key, candidates, expected_active):
+            nonlocal state
+            state, additions = merge_verified_missing(
+                state, candidates, active_minute=expected_active)
+            return len(additions)
+        worker = GapRecoveryWorker(
+            lambda _key: [rows_by_minute[missing]],
+            isolated_snapshot, isolated_merge,
+            cooldown=120, max_pending=1, min_request_spacing=0.001)
+        if not worker.request("ISOLATED_TEST"):
+            raise ValueError("isolated recovery request rejected")
+        worker.join(timeout=5)
+        stats = worker.status()
+        if (stats["pending"] != 0 or stats["failed"] != 0
+                or stats["completed"] != 1 or stats["verified_insertions"] != 1
+                or len(state) != 2):
+            raise ValueError("isolated worker did not restore exactly one gap")
+        print("PASS: real-candle asynchronous recovery worker verified")
         print("PASS: authenticated read-only response parsed and validated")
         print("PASS: real-candle in-memory gap insertion and idempotence verified")
         return 0
