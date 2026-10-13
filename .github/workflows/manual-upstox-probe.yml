@@ -20,7 +20,7 @@ jobs:
   probe:
     if: github.ref == 'refs/heads/feature/verified-gap-recovery'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,6 +28,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Run offline recovery and websocket regression tests
+        run: |
+          python -m compileall -q preflight_upstox_websocket.py probe_upstox_websocket_smoke.py isolated_live_tick_candles.py isolated_stream_recovery.py isolated_upstox_history.py v2/backend
+          python -m unittest -v tests/test_websocket_preflight.py test_websocket_smoke test_isolated_live_tick_candles test_isolated_stream_recovery test_gap_recovery_worker test_verified_gap_recovery test_isolated_upstox_history
       - name: Install read-only SDK
         run: python -m pip install upstox-python-sdk
       - name: Verify secret presence without printing its value
@@ -43,3 +47,13 @@ jobs:
           UPSTOX_ACCESS_TOKEN: ${{ secrets.UPSTOX_ACCESS_TOKEN }}
           INSTRUMENT_KEY: ${{ inputs.instrument_key }}
         run: python probe_upstox_recovery.py --instrument-key "$INSTRUMENT_KEY"
+
+      - name: Test isolated live websocket recovery (no orders)
+        env:
+          UPSTOX_ACCESS_TOKEN: ${{ secrets.UPSTOX_ACCESS_TOKEN }}
+          FIX10_TEST_INSTRUMENT_KEY: ${{ inputs.instrument_key }}
+          FIX10_NONPRODUCTION_ACK: I_AM_IN_AN_ISOLATED_TEST
+          FIX10_LIVE_STREAM_ACK: READ_ONLY_STREAM_TEST
+          FIX10_ISOLATED_RECOVERY_ACK: READ_ONLY_HISTORY
+          ENABLE_VERIFIED_GAP_RECOVERY: 'false'
+        run: python probe_upstox_websocket_smoke.py
