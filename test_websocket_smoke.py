@@ -85,6 +85,32 @@ class WebsocketSmokeTests(unittest.TestCase):
             with patch.dict(sys.modules, {"upstox_client": None}):
                 self.assertEqual(probe.main(), 2)
 
+    def test_unrecognized_controlled_ack_blocks_before_sdk(self):
+        with patch.dict(os.environ, {**ENV,
+                                      "FIX10_CONTROLLED_GAP_ACK": "BROKER_BACKED_MEMORY_ON"},
+                        clear=True):
+            with patch.dict(sys.modules, {"upstox_client": None}):
+                self.assertEqual(probe.main(), 2)
+
+    def test_controlled_ack_requires_history_ack_before_sdk(self):
+        with patch.dict(os.environ, {**ENV,
+                                      "FIX10_CONTROLLED_GAP_ACK": "BROKER_BACKED_MEMORY_ONLY"},
+                        clear=True):
+            with patch.dict(sys.modules, {"upstox_client": None}):
+                self.assertEqual(probe.main(), 2)
+
+    def test_controlled_acceptance_exception_is_inconclusive(self):
+        self.sdk.HistoryV3Api = lambda *_args: object()
+        with patch.dict(os.environ, {**ENV,
+                                      "FIX10_ISOLATED_RECOVERY_ACK": "READ_ONLY_HISTORY",
+                                      "FIX10_CONTROLLED_GAP_ACK": "BROKER_BACKED_MEMORY_ONLY"},
+                        clear=True):
+            with patch.dict(sys.modules, {"upstox_client": self.sdk}):
+                with patch.object(probe, "controlled_gap_acceptance",
+                                  side_effect=RuntimeError("sensitive data")):
+                    self.assertEqual(probe.main(), 3)
+        self.assertTrue(FakeStreamer.last.disconnected)
+
     def test_mocked_open_and_message_pass(self):
         with patch.dict(os.environ, ENV, clear=True):
             with patch.dict(sys.modules, {"upstox_client": self.sdk}):
