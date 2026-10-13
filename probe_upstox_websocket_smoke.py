@@ -14,6 +14,9 @@ from isolated_live_tick_candles import extract_tick, IsolatedTickCandles
 from isolated_stream_recovery import IsolatedStreamRecovery
 from isolated_upstox_history import make_historical_fetch
 
+# After the first fresh tick, keep listening for a natural minute jump.
+RECOVERY_OBSERVE_SECONDS = 90
+
 
 def has_instrument_tick(payload, instrument):
     """Only validated instrument trade ticks count as websocket evidence."""
@@ -130,6 +133,15 @@ def main():
             print("stale_ticks_ignored:", counts["stale"])
         print("completed_candles:", len(history))
         if recovery_mode:
+            # The first live tick alone cannot establish a minute gap. Keep
+            # the subscription active for a bounded observation window.
+            deadline = time.monotonic() + RECOVERY_OBSERVE_SECONDS
+            while (bridge.gap_requests == 0 and not errored.is_set()
+                   and time.monotonic() < deadline):
+                errored.wait(timeout=min(1, max(0, deadline - time.monotonic())))
+            if errored.is_set():
+                print("INCONCLUSIVE: websocket error during recovery observation")
+                return 3
             # Do not claim historical recovery succeeded merely because ticks
             # arrived: a naturally occurring minute gap may never occur.
             # Give an already scheduled off-feed worker a bounded chance to
