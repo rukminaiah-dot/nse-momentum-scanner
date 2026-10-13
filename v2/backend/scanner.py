@@ -509,7 +509,7 @@ def on_tick(key, data):
 
     # Only request historical verification for an observed same-session gap.
     # Network I/O occurs in a worker, never inside the feed callback.
-    if after > before and GAP_RECOVERY_ENABLED:
+    if after > before and GAP_RECOVERY_ENABLED and key in NIFTY_200.values():
         from datetime import timedelta
         history, active_minute = candles.recovery_snapshot(key)
         if len(history) >= 2 and active_minute is not None:
