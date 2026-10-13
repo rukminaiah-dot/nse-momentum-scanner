@@ -70,7 +70,7 @@ class GapRecoveryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             merge_verified_missing([], {}, limit=0)
 
-    def test_merge_rejected_after_active_minute_advances(self):
+    def test_merge_accepted_after_active_minute_advances(self):
         manager = CandleManager()
         key = "TEST"
         def tick(minute):
@@ -81,8 +81,16 @@ class GapRecoveryTests(unittest.TestCase):
         _, expected_active = manager.recovery_snapshot(key)
         tick(43)
         recovered = validated_completed_rows([row(41)], NOW)
-        self.assertEqual(manager.merge_recovered(key, recovered, expected_active), 0)
-        self.assertEqual([c.timestamp.minute for c in manager.completed[key]], [40, 42])
+        self.assertEqual(manager.merge_recovered(key, recovered, expected_active), 1)
+        self.assertEqual([c.timestamp.minute for c in manager.completed[key]], [40, 41, 42])
+
+    def test_merge_rejects_future_snapshot(self):
+        manager = CandleManager()
+        key = "TEST"
+        stamp = datetime(2026, 10, 13, 11, 42, tzinfo=IST)
+        manager.update(key, 100, int(stamp.timestamp() * 1000), 10)
+        recovered = validated_completed_rows([row(41)], NOW)
+        self.assertEqual(manager.merge_recovered(key, recovered, datetime(2026, 10, 13, 11, 43)), 0)
 
     def test_merge_inserts_gap_without_overwriting_live(self):
         manager = CandleManager()
