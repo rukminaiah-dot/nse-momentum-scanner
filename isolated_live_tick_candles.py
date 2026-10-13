@@ -54,7 +54,7 @@ class IsolatedTickCandles:
         if not instrument:
             raise ValueError("instrument required")
         self.instrument = instrument
-        self.manager = CandleManager()
+        self.manager = CandleManager(log_closed_candles=False)
         self.accepted = 0
         self.rejected = 0
 
