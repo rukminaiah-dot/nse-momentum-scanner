@@ -22,6 +22,14 @@ class IsolatedTickTests(unittest.TestCase):
             with self.subTest(value=str(bad)[:50]):
                 self.assertIsNone(extract_tick(bad, KEY))
 
+    def test_boolean_price_and_timestamp_are_not_market_ticks(self):
+        now = datetime.now(IST)
+        stamp = int(now.timestamp() * 1000)
+        for ltpc in ({"ltp": True, "ltt": stamp},
+                     {"ltp": 100, "ltt": True},
+                     {"ltp": 100, "ltt": 1234.5}):
+            self.assertIsNone(extract_tick({"feeds": {KEY: {"ltpc": ltpc}}}, KEY))
+
     def test_nested_upstox_v3_ltpc_feed_shapes(self):
         now = datetime.now(IST)
         ltpc = {"ltp": 123.5, "ltt": str(int(now.timestamp() * 1000))}
