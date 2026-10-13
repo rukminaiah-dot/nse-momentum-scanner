@@ -1,5 +1,7 @@
 """Offline controlled acceptance: no websocket, network, or credentials."""
 import unittest
+import threading
+from unittest.mock import patch
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -77,6 +79,37 @@ class ControlledGapTests(unittest.TestCase):
         self.assertFalse(passed)
         self.assertEqual(reason, "broker candle values differ")
         self.assertEqual(len(calls), 2)
+
+    def test_pending_worker_keeps_anchors_until_process_exit(self):
+        now = datetime.now(IST).replace(second=0, microsecond=0)
+        minutes = [now - timedelta(minutes=n) for n in (3, 2, 1)]
+        if minutes[0].date() != now.date():
+            self.skipTest("IST day boundary")
+        entered = threading.Event()
+        release = threading.Event()
+        calls = []
+        def fetch(key):
+            calls.append(key)
+            if len(calls) == 2:
+                entered.set()
+                release.wait(timeout=2)
+            return [[minute.isoformat(), 100, 101, 99, 100, 5]
+                    for minute in minutes]
+        bridge = IsolatedStreamRecovery(KEY, fetch, min_request_spacing=0.001)
+        tick = {"feeds": {KEY: {"ltpc": {
+            "ltp": 105, "ltt": str(int(now.timestamp() * 1000))}}}}
+        self.assertTrue(bridge.on_message(tick))
+        original_join = bridge.worker.join
+        try:
+            with patch.object(bridge.worker, "join", side_effect=lambda timeout: entered.wait(1)):
+                passed, reason = controlled_gap_acceptance(bridge)
+            self.assertFalse(passed)
+            self.assertEqual(reason, "historical recovery not verified")
+            history, _ = bridge.candles.manager.recovery_snapshot(KEY)
+            self.assertEqual(len(history), 2)
+        finally:
+            release.set()
+            original_join(timeout=3)
 
     def test_no_tick_never_fetches_broker(self):
         calls = []
