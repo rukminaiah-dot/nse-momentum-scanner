@@ -23,6 +23,9 @@ class ProbeTests(unittest.TestCase):
         row = [completed.isoformat(), 100, 103, 99, 102, 10]
         adjacent = [(completed - timedelta(minutes=1)).isoformat(), 100, 103, 99, 102, 10]
         calls = []
+        from contextlib import redirect_stdout
+        from io import StringIO
+        output = StringIO()
         class Api:
             def __init__(self, client):
                 pass
@@ -34,8 +37,9 @@ class ProbeTests(unittest.TestCase):
             ApiClient=lambda config: config, HistoryV3Api=Api)
         with patch.dict(sys.modules, {"upstox_client": fake_sdk}), patch.dict(
             "os.environ", {"UPSTOX_ACCESS_TOKEN": "offline-token"}
-        ), patch.object(sys, "argv", ["probe", "--instrument-key", "TEST"]):
+        ), patch.object(sys, "argv", ["probe", "--instrument-key", "TEST"]), redirect_stdout(output):
             self.assertEqual(probe.main(), 0)
+        self.assertIn("PASS: real-candle in-memory gap insertion and idempotence verified", output.getvalue())
         self.assertEqual(calls, [("TEST", "minutes", "1")])
 
     def test_invalid_response_fails_closed(self):
