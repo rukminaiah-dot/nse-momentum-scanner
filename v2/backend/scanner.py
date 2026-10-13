@@ -13,7 +13,27 @@ from .market_regime import index_signal
 from .trade_engine import buy, update_state, sell
 from .database import DB_PATH, init_db, reset_scanner_results
 
+from .gap_recovery_worker import GapRecoveryWorker
+
+def _fetch_recovery_rows(key):
+    config = upstox_client.Configuration()
+    config.access_token = os.environ["UPSTOX_ACCESS_TOKEN"]
+    api = upstox_client.HistoryV3Api(upstox_client.ApiClient(config))
+    response = api.get_intra_day_candle_data(key, "minutes", "1")
+    return response.data.candles or []
+
 candles = CandleManager()
+# Recovery is disabled by default; never activate on a production restart
+# without explicitly setting the opt-in environment flag.
+gap_recovery = GapRecoveryWorker(
+    _fetch_recovery_rows,
+    candles.recovery_snapshot,
+    candles.merge_recovered,
+    cooldown=120,
+    max_pending=2,
+)
+GAP_RECOVERY_ENABLED = os.getenv("ENABLE_VERIFIED_GAP_RECOVERY") == "1"
+
 active_trades = {}
 instrument_symbols = {key: symbol for symbol, key in {**NIFTY_200, **INDICES}.items()}
 market_regimes = {}
@@ -486,6 +506,19 @@ def on_tick(key, data):
     before = len(candles.completed.get(key, []))
     candles.update(key, price, ts, minute_volume)
     after = len(candles.completed.get(key, []))
+
+    # Only request historical verification for an observed same-session gap.
+    # Network I/O occurs in a worker, never inside the feed callback.
+    if after > before and GAP_RECOVERY_ENABLED:
+        from datetime import timedelta
+        history, active_minute = candles.recovery_snapshot(key)
+        if len(history) >= 2 and active_minute is not None:
+            left, right = history[-2:]
+            if (
+                left.timestamp.date() == right.timestamp.date()
+                and right.timestamp - left.timestamp > timedelta(minutes=1)
+            ):
+                gap_recovery.request(key)
 
     # Analyse only when a minute candle has actually closed.
     if after > before:
