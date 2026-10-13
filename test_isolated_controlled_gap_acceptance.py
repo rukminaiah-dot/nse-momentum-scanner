@@ -82,6 +82,7 @@ class ControlledGapTests(unittest.TestCase):
         self.assertFalse(passed)
         self.assertEqual(reason, "broker candle values differ")
         self.assertEqual(len(calls), 2)
+        self.assertEqual(bridge.candles.manager.recovery_snapshot(KEY)[0], [])
 
     def test_pending_worker_keeps_anchors_until_process_exit(self):
         now = datetime.now(IST).replace(second=0, microsecond=0)
