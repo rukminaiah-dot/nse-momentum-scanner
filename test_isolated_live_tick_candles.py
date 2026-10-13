@@ -22,6 +22,15 @@ class IsolatedTickTests(unittest.TestCase):
             with self.subTest(value=str(bad)[:50]):
                 self.assertIsNone(extract_tick(bad, KEY))
 
+    def test_nested_upstox_v3_ltpc_feed_shapes(self):
+        now = datetime.now(IST)
+        ltpc = {"ltp": 123.5, "ltt": str(int(now.timestamp() * 1000))}
+        for feed in ({"ltpc": ltpc},
+                     {"ltpcFeed": {"ltpc": ltpc}},
+                     {"fullFeed": {"marketFF": {"ltpc": ltpc}}}):
+            with self.subTest(feed=repr(feed)):
+                self.assertEqual(extract_tick({"feeds": {KEY: feed}}, KEY)[0], 123.5)
+
     def test_rolls_minutes_without_backwards_tick(self):
         now = datetime.now(IST).replace(second=0, microsecond=0)
         a, b = now - timedelta(minutes=2), now - timedelta(minutes=1)
