@@ -32,6 +32,8 @@ on:
       - 'isolated_live_tick_candles.py'
       - 'isolated_stream_recovery.py'
       - 'isolated_upstox_history.py'
+      - 'isolated_controlled_gap_acceptance.py'
+      - 'test_isolated_controlled_gap_acceptance.py'
       - 'test_isolated_upstox_history.py'
       - 'v2/backend/candle_manager.py'
       - 'v2/backend/gap_recovery_worker.py'
