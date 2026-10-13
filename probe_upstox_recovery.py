@@ -34,11 +34,12 @@ def main():
         if rows is None or not isinstance(rows, (list, tuple)):
             raise ValueError("missing or invalid candle collection")
         verified = validated_completed_rows(rows, datetime.now(ZoneInfo("Asia/Kolkata")))
-        print("PASS: authenticated read-only response parsed")
+        print("PASS: authenticated read-only response parsed and validated")
         print("returned_rows:", len(rows))
         print("verified_completed_same_day_rows:", len(verified))
         if not verified:
-            print("NOTE: zero verified bars; integration is inconclusive outside market hours")
+            print("INCONCLUSIVE: no verified completed same-day bars; retry during an active market session")
+            return 3
         return 0
     except Exception as exc:
         # Avoid printing exception text: SDK errors may include request metadata.
