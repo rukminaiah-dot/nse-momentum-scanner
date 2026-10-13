@@ -24,6 +24,10 @@ class RecoveryTriggerTests(unittest.TestCase):
     def test_contiguous_minutes_do_not_trigger(self):
         self.assertFalse(self.gate(history(minute(13, 40), minute(13, 41)), minute(13, 42)))
 
+    def test_malformed_middle_candle_fails_closed(self):
+        self.assertFalse(self.gate(history(minute(13, 40), None,
+                                           minute(13, 42), minute(13, 43)), minute(13, 44)))
+
     def test_old_gap_remains_eligible_after_new_live_closures(self):
         self.assertTrue(self.gate(history(minute(13, 40), minute(13, 42),
                                           minute(13, 43), minute(13, 44)), minute(13, 45)))
