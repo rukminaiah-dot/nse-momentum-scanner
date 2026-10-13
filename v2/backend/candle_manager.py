@@ -45,7 +45,7 @@ class CandleManager:
         with self.lock:
             item = self.current.get(key)
             active = item["minute"] if item else None
-            if active is None or active < expected_active_minute:
+            if active is None or active != expected_active_minute:
                 return 0
             merged, added = merge_verified_missing(self.completed.get(key, []), recovered, active_minute=active)
             if added:
