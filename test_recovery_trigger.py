@@ -24,6 +24,10 @@ class RecoveryTriggerTests(unittest.TestCase):
     def test_contiguous_minutes_do_not_trigger(self):
         self.assertFalse(self.gate(history(minute(13, 40), minute(13, 41)), minute(13, 42)))
 
+    def test_trailing_gap_with_single_closed_candle(self):
+        self.assertTrue(self.gate(history(minute(13, 40)), minute(13, 43)))
+        self.assertFalse(self.gate(history(minute(13, 42)), minute(13, 43)))
+
     def test_disabled_index_and_nonclosure_fail_closed(self):
         h = history(minute(13, 40), minute(13, 42))
         for flag in ("enabled", "stock", "candle_closed"):
@@ -46,7 +50,7 @@ class RecoveryTriggerTests(unittest.TestCase):
         self.assertIsNone(tick(40))
         self.assertIsNotNone(tick(42))
         history, active = manager.recovery_snapshot(key)
-        self.assertFalse(self.gate(history, active))
+        self.assertTrue(self.gate(history, active))
         self.assertIsNotNone(tick(43))
         history, active = manager.recovery_snapshot(key)
         self.assertTrue(self.gate(history, active))
@@ -63,7 +67,7 @@ class RecoveryTriggerTests(unittest.TestCase):
 
     def test_incomplete_history_fails_closed(self):
         self.assertFalse(self.gate([], minute(13, 43)))
-        self.assertFalse(self.gate(history(minute(13, 40)), minute(13, 43)))
+        self.assertTrue(self.gate(history(minute(13, 40)), minute(13, 43)))
         self.assertFalse(self.gate(history(minute(13, 40), None), minute(13, 43)))
 
 if __name__ == "__main__":
