@@ -50,6 +50,48 @@ class LiveTickRecoveryTests(unittest.TestCase):
                          [first.replace(tzinfo=None), missing.replace(tzinfo=None)])
         self.assertEqual(active, third.replace(tzinfo=None))
 
+    def test_callback_stays_responsive_while_historical_fetch_waits(self):
+        now = datetime.now(IST).replace(second=0, microsecond=0)
+        first, missing, third, fourth = (now - timedelta(minutes=4),
+                                         now - timedelta(minutes=3),
+                                         now - timedelta(minutes=2),
+                                         now - timedelta(minutes=1))
+        if first.date() != now.date():
+            self.skipTest("IST day boundary")
+        fetch_started = threading.Event()
+        release_fetch = threading.Event()
+        def fetch(_):
+            fetch_started.set()
+            if not release_fetch.wait(3):
+                raise TimeoutError("mock API did not release")
+            return [[missing.isoformat(), 101, 102, 100, 101, 10]]
+        bridge = IsolatedStreamRecovery(KEY, fetch, cooldown=120,
+                                        min_request_spacing=0.001)
+        try:
+            self.assertTrue(bridge.on_message(message(first, 100)))
+            self.assertTrue(bridge.on_message(message(third, 103)))
+            self.assertTrue(fetch_started.wait(2))
+            callback_finished = threading.Event()
+            feeder = threading.Thread(
+                target=lambda: (bridge.on_message(message(fourth, 104)),
+                                callback_finished.set()), daemon=True)
+            feeder.start()
+            self.assertTrue(callback_finished.wait(1),
+                            "websocket callback blocked on historical fetch")
+            release_fetch.set()
+            bridge.worker.join(timeout=5)
+            self.assertEqual(bridge.worker.status()["failed"], 0)
+            self.assertEqual(bridge.worker.status()["verified_insertions"], 1)
+            self.assertEqual(bridge.gap_requests, 1)
+            history, active = bridge.candles.manager.recovery_snapshot(KEY)
+            self.assertEqual([bar.timestamp for bar in history], [
+                first.replace(tzinfo=None), missing.replace(tzinfo=None),
+                third.replace(tzinfo=None)])
+            self.assertEqual(active, fourth.replace(tzinfo=None))
+        finally:
+            release_fetch.set()
+            bridge.worker.join(timeout=5)
+
     def test_stale_and_cross_session_ticks_do_not_schedule(self):
         now = datetime.now(IST).replace(second=0, microsecond=0)
         yesterday = now - timedelta(days=1)
