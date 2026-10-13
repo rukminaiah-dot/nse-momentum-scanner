@@ -45,8 +45,11 @@ def controlled_gap_acceptance(bridge):
         item = manager.current.get(key)
         if item is None or item["minute"] != active or item["candle"] is not active_candle:
             return False, "live minute advanced during setup"
-        if any(c.timestamp in candidates for c in manager.completed.get(key, [])):
-            return False, "candidate minutes already exist in live history"
+        existing = manager.completed.get(key, [])
+        if existing:
+            # Avoid trimming or overwriting real feed history during this
+            # controlled exercise; it is not a production merge test.
+            return False, "live completed candles already present; controlled setup skipped"
         # Seed only broker-verified anchors; the omitted minute is the gap.
         manager.completed.setdefault(key, []).extend(anchors)
     try:
