@@ -113,6 +113,30 @@ class LiveTickRecoveryTests(unittest.TestCase):
                          [first.replace(tzinfo=None)])
         self.assertEqual(active, third.replace(tzinfo=None))
 
+    def test_repeated_tick_in_same_minute_does_not_repeat_gap_request(self):
+        now = datetime.now(IST).replace(second=0, microsecond=0)
+        first, third = now - timedelta(minutes=3), now - timedelta(minutes=1)
+        if first.date() != now.date():
+            self.skipTest("IST day boundary")
+        started = threading.Event()
+        release = threading.Event()
+        def fetch(_):
+            started.set()
+            release.wait(3)
+            return []
+        bridge = IsolatedStreamRecovery(KEY, fetch, min_request_spacing=0.001)
+        try:
+            bridge.on_message(message(first, 100))
+            bridge.on_message(message(third, 103))
+            self.assertTrue(started.wait(2))
+            bridge.on_message(message(third, 104))
+            bridge.on_message(message(first, 99))
+            self.assertEqual(bridge.gap_requests, 1)
+            self.assertEqual(bridge.worker.status()["requested"], 1)
+        finally:
+            release.set()
+            bridge.worker.join(timeout=5)
+
     def test_stale_and_cross_session_ticks_do_not_schedule(self):
         now = datetime.now(IST).replace(second=0, microsecond=0)
         yesterday = now - timedelta(days=1)
