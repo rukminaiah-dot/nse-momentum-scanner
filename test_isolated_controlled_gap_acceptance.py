@@ -160,6 +160,30 @@ class ControlledGapTests(unittest.TestCase):
         self.assertFalse(passed)
         self.assertEqual(reason, "recovery reused initial broker candle instead of fresh fetch")
 
+    def test_prior_worker_activity_blocks_controlled_setup(self):
+        now = datetime.now(IST).replace(second=0, microsecond=0)
+        minutes = [now - timedelta(minutes=n) for n in (3, 2, 1)]
+        if minutes[0].date() != now.date():
+            self.skipTest("IST day boundary")
+        calls = []
+        def fetch(key):
+            calls.append(key)
+            return [[minute.isoformat(), 100, 101, 99, 100, 5]
+                    for minute in minutes]
+        bridge = IsolatedStreamRecovery(KEY, fetch, min_request_spacing=0.001)
+        tick = {"feeds": {KEY: {"ltpc": {
+            "ltp": 105, "ltt": str(int(now.timestamp() * 1000))}}}}
+        self.assertTrue(bridge.on_message(tick))
+        # Even a completed worker with zero insertions invalidates the
+        # cumulative counters as independent acceptance evidence.
+        with bridge.worker._lock:
+            bridge.worker._stats["completed"] = 1
+        passed, reason = controlled_gap_acceptance(bridge)
+        self.assertFalse(passed)
+        self.assertEqual(reason, "prior recovery activity; controlled setup skipped")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(bridge.candles.manager.recovery_snapshot(KEY)[0], [])
+
     def test_no_tick_never_fetches_broker(self):
         calls = []
         bridge = IsolatedStreamRecovery(KEY, lambda key: calls.append(key) or [])
