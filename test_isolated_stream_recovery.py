@@ -137,6 +137,23 @@ class LiveTickRecoveryTests(unittest.TestCase):
             release.set()
             bridge.worker.join(timeout=5)
 
+    def test_invalid_payload_cannot_trigger_broker_request(self):
+        now = datetime.now(IST).replace(second=0, microsecond=0)
+        first = now - timedelta(minutes=3)
+        if first.date() != now.date():
+            self.skipTest("IST day boundary")
+        called = []
+        bridge = IsolatedStreamRecovery(KEY, lambda _: called.append(True) or [])
+        self.assertTrue(bridge.on_message(message(first, 100)))
+        for bad in ({"type": "heartbeat"},
+                    {"feeds": {"OTHER": {"ltpc": {"ltp": 100, "ltt": "1"}}}},
+                    {"feeds": {KEY: {"ltpc": {"ltp": -1, "ltt": "1"}}}},
+                    {"feeds": {KEY: {"ltpc": {"ltp": 100, "ltt": "bad"}}}}):
+            self.assertFalse(bridge.on_message(bad))
+        self.assertEqual(bridge.gap_requests, 0)
+        self.assertEqual(bridge.worker.status()["requested"], 0)
+        self.assertEqual(called, [])
+
     def test_stale_and_cross_session_ticks_do_not_schedule(self):
         now = datetime.now(IST).replace(second=0, microsecond=0)
         yesterday = now - timedelta(days=1)
