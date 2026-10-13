@@ -42,3 +42,9 @@ Status: **LIVE ACCEPTANCE NOT YET VERIFIED**. This is a release checklist, not e
 - Evidence that the websocket callback is not blocked by recovery and shared locking protects state.
 - Explicit sign-off on Upstox rate limits and market-session handling.
 - A separate, reversible rollout/rollback plan. **Do not merge or enable the feature merely because the historical API probe passed.**
+
+## Controlled acceptance state hygiene
+- A successful controlled check removes both broker-backed seed anchors and the single recovered test candle from the live-feed manager. The active live candle must remain unchanged.
+- A completed negative check (for example, inconsistent broker OHLCV) must also remove controlled historical candles. If a historical worker is still pending at the bounded timeout, acceptance is inconclusive and cleanup does **not** race the worker; the disposable isolated process must terminate rather than reuse that state.
+- Controlled evidence requires exactly one worker request, one completed worker and one retained verified insertion, with no earlier worker activity. A separate natural-gap event cannot share the controlled acceptance counters.
+- GitHub Vercel status alone does not establish Python offline CI results; verify the exact feature commit's Python workflow before manual acceptance.
