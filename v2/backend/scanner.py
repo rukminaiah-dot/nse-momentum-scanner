@@ -22,6 +22,7 @@ last_trade_updates = {}
 last_cumulative_volumes = {}
 
 _tick_seen = {}
+_last_accepted_tick_ms = {}
 _last_health_write = 0.0
 _HEALTH_PATH = "/tmp/nse_200_feed_health.json"
 
@@ -328,6 +329,14 @@ def on_tick(key, data):
             return
     except (TypeError, ValueError, OverflowError):
         return
+
+    # Reject out-of-order exchange ticks within the same minute as well.
+    # Otherwise a delayed tick can corrupt OHLC, cumulative-volume deltas,
+    # and simulated trade state even when its minute is not older.
+    last_accepted = _last_accepted_tick_ms.get(key)
+    if last_accepted is not None and ts < last_accepted:
+        return
+    _last_accepted_tick_ms[key] = ts
 
     record_feed_health(key)
 
