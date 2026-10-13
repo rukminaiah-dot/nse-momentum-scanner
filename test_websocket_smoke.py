@@ -78,6 +78,13 @@ class WebsocketSmokeTests(unittest.TestCase):
             with patch.dict(sys.modules, {"upstox_client": None}):
                 self.assertEqual(probe.main(), 2)
 
+    def test_unrecognized_recovery_ack_blocks_before_sdk(self):
+        with patch.dict(os.environ, {**ENV,
+                                      "FIX10_ISOLATED_RECOVERY_ACK": "READ_ONLY_HISTROY"},
+                        clear=True):
+            with patch.dict(sys.modules, {"upstox_client": None}):
+                self.assertEqual(probe.main(), 2)
+
     def test_mocked_open_and_message_pass(self):
         with patch.dict(os.environ, ENV, clear=True):
             with patch.dict(sys.modules, {"upstox_client": self.sdk}):
