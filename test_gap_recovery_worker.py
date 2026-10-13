@@ -5,6 +5,15 @@ from unittest.mock import patch
 from v2.backend.gap_recovery_worker import GapRecoveryWorker
 
 class WorkerTests(unittest.TestCase):
+    def test_join_rejects_invalid_timeouts(self):
+        worker = GapRecoveryWorker(lambda key: [], lambda key: ([], None),
+                                   lambda *args: 0)
+        for timeout in (-1, float("nan"), float("inf"), True, "5"):
+            with self.subTest(timeout=repr(timeout)):
+                with self.assertRaises(ValueError):
+                    worker.join(timeout=timeout)
+        worker.join(timeout=None)
+
     def test_join_uses_single_deadline_across_multiple_threads(self):
         import time
         release = threading.Event()
