@@ -92,6 +92,17 @@ class GapRecoveryTests(unittest.TestCase):
         recovered = validated_completed_rows([row(41)], NOW)
         self.assertEqual(manager.merge_recovered(key, recovered, datetime(2026, 10, 13, 11, 43)), 0)
 
+    def test_delayed_merge_rejected_across_session_boundary(self):
+        manager = CandleManager()
+        key = "TEST"
+        for day, minute in ((13, 40), (14, 40)):
+            stamp = datetime(2026, 10, day, 11, minute, tzinfo=IST)
+            manager.update(key, 100, int(stamp.timestamp() * 1000), 10)
+        recovered = validated_completed_rows([row(41)], NOW)
+        previous_session = datetime(2026, 10, 13, 11, 42)
+        self.assertEqual(manager.merge_recovered(key, recovered, previous_session), 0)
+        self.assertEqual(len(manager.completed[key]), 1)
+
     def test_merge_inserts_gap_without_overwriting_live(self):
         manager = CandleManager()
         key = "TEST"
