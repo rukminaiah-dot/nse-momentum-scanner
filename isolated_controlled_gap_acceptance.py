@@ -91,6 +91,9 @@ def controlled_gap_acceptance(bridge):
     finally:
         # Never leave synthetic test setup in the live-feed manager.
         # The probe terminates after acceptance; retain any real feed updates.
-        with manager.lock:
-            seeded = manager.completed.get(key, [])
-            manager.completed[key] = [c for c in seeded if all(c is not a for a in anchors)]
+        # A timed-out worker may still be merging. Never remove its anchors
+        # underneath an in-flight merge; this disposable probe will exit.
+        if not bridge.worker.status()["pending"]:
+            with manager.lock:
+                seeded = manager.completed.get(key, [])
+                manager.completed[key] = [c for c in seeded if all(c is not a for a in anchors)]
