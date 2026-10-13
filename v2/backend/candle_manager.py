@@ -45,8 +45,10 @@ class CandleManager:
         with self.lock:
             item = self.current.get(key)
             active = item["minute"] if item else None
-            if active is None or active != expected_active_minute:
+            if active is None or active < expected_active_minute:
                 return 0
+            # The feed may advance while Upstox responds. Verified historical
+            # minutes remain safe to insert if still strictly before active.
             merged, added = merge_verified_missing(self.completed.get(key, []), recovered, active_minute=active)
             if added:
                 self.completed[key] = merged
