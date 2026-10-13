@@ -45,6 +45,7 @@ on:
       - 'probe_upstox_websocket_smoke.py'
       - 'test_websocket_smoke.py'
       - '.github/workflows/fix10-websocket-preflight.yml'
+      - '.github/workflows/manual-upstox-probe.yml'
 
 permissions:
   contents: read
