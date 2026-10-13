@@ -53,6 +53,49 @@ def record_feed_health(key):
 
 
 
+_last_quality_write = 0.0
+_QUALITY_PATH = "/tmp/nse_200_candle_quality.json"
+
+def write_candle_quality():
+    """Publish observed completed-candle quality; never infer missing bars."""
+    global _last_quality_write
+    now = time.time()
+    if now - _last_quality_write < 10:
+        return
+    _last_quality_write = now
+    import json
+    from pathlib import Path
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+    rows = {}
+    for key in NIFTY_200.values():
+        history = candles.completed.get(key, [])
+        recent = history[-6:]
+        same_day = len(recent) == 6 and all(
+            getattr(c, "timestamp", None) is not None
+            and c.timestamp.date() == today for c in recent
+        )
+        consecutive = same_day and all(
+            recent[i].timestamp - recent[i-1].timestamp == timedelta(minutes=1)
+            for i in range(1, 6)
+        )
+        last = history[-1] if history else None
+        rows[instrument_symbols.get(key, key)] = {
+            "six_consecutive_today": consecutive,
+            "last_closed_candle_ist": last.timestamp.isoformat() if last else None,
+            "last_closed_volume": float(last.volume) if last else None,
+            "last_tick_epoch": _tick_seen.get(key),
+        }
+    try:
+        path = Path(_QUALITY_PATH)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"observed_at_epoch": now, "stocks": rows}))
+        tmp.replace(path)
+    except (OSError, TypeError, ValueError) as exc:
+        print("CANDLE_QUALITY_WRITE_ERROR:", type(exc).__name__, flush=True)
+
+
 def load_active_trades():
     active_trades.clear()
     con = sqlite3.connect(DB_PATH)
@@ -437,6 +480,7 @@ def on_tick(key, data):
 
     # Analyse only when a minute candle has actually closed.
     if after > before:
+        write_candle_quality()
         analyse(key)
 
 
