@@ -234,15 +234,28 @@ def analyse(key):
     from zoneinfo import ZoneInfo
     today_ist = datetime.now(ZoneInfo("Asia/Kolkata")).date()
     recent = history[-6:]
-    if (
-        len(recent) < 6
-        or any(not hasattr(c, "timestamp") or c.timestamp.date() != today_ist for c in recent)
-        or any(
-            recent[i].timestamp - recent[i - 1].timestamp != timedelta(minutes=1)
-            for i in range(1, len(recent))
-        )
+    if len(recent) < 6:
+        continuity_reason = "WARMUP"
+    elif any(not hasattr(c, "timestamp") or c.timestamp.date() != today_ist for c in recent):
+        continuity_reason = "OVERNIGHT_GAP"
+    elif any(
+        recent[i].timestamp - recent[i - 1].timestamp != timedelta(minutes=1)
+        for i in range(1, len(recent))
     ):
-        print("MOMENTUM_CONTINUITY_BLOCKED:", key, flush=True)
+        continuity_reason = "MISSING_MINUTE"
+    else:
+        continuity_reason = None
+    if continuity_reason:
+        print(
+            "MOMENTUM_CONTINUITY_BLOCKED:", key,
+            "| REASON:", continuity_reason,
+            "| LAST_SIX:", [
+                getattr(c, "timestamp", None).strftime("%Y-%m-%d %H:%M")
+                if getattr(c, "timestamp", None) is not None else "NO_TIMESTAMP"
+                for c in recent
+            ],
+            flush=True,
+        )
         return
 
     closes = [c.close for c in history]
