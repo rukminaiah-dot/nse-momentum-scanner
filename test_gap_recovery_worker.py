@@ -112,5 +112,46 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(stats["verified_insertions"], 0)
         self.assertEqual(merged, [{}])
 
+    def test_invalid_ohlcv_response_fails_without_merge(self):
+        """Reject contradictory OHLC prices before touching live history."""
+        from datetime import datetime, timedelta
+        from zoneinfo import ZoneInfo
+        now = datetime.now(ZoneInfo("Asia/Kolkata"))
+        minute = (now - timedelta(minutes=2)).replace(second=0, microsecond=0)
+        if minute.date() != now.date():
+            self.skipTest("IST session boundary")
+        merged = []
+        worker = GapRecoveryWorker(
+            lambda key: [[minute.isoformat(), 100, 99, 98, 105, 10]],
+            lambda key: ([object()], minute.replace(tzinfo=None) + timedelta(minutes=1)),
+            lambda *args: merged.append(args) or 0)
+        self.assertTrue(worker.request("STOCK"))
+        worker.join(timeout=5)
+        self.assertEqual(merged, [])
+        self.assertEqual(worker.status()["failed"], 1)
+        self.assertEqual(worker.status()["verified_insertions"], 0)
+        self.assertEqual(worker.status()["pending"], 0)
+
+    def test_broker_exception_fails_without_merge(self):
+        """An Upstox network/API exception must release the worker slot."""
+        from datetime import datetime, timedelta
+        from zoneinfo import ZoneInfo
+        now = datetime.now(ZoneInfo("Asia/Kolkata"))
+        active = (now - timedelta(minutes=1)).replace(second=0, microsecond=0, tzinfo=None)
+        if active.date() != now.date():
+            self.skipTest("IST session boundary")
+        merged = []
+        def fetch(_):
+            raise ConnectionError("simulated broker outage")
+        worker = GapRecoveryWorker(
+            fetch, lambda key: ([object()], active),
+            lambda *args: merged.append(args) or 0)
+        self.assertTrue(worker.request("STOCK"))
+        worker.join(timeout=5)
+        self.assertEqual(merged, [])
+        self.assertEqual(worker.status()["failed"], 1)
+        self.assertEqual(worker.status()["completed"], 0)
+        self.assertEqual(worker.status()["pending"], 0)
+
 if __name__ == "__main__":
     unittest.main()
