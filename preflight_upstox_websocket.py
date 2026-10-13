@@ -12,8 +12,11 @@ def check(environ=None):
     errors = []
     if env.get("FIX10_NONPRODUCTION_ACK") != "I_AM_IN_AN_ISOLATED_TEST":
         errors.append("isolated nonproduction acknowledgement missing")
-    if env.get("ENABLE_VERIFIED_GAP_RECOVERY", "").strip().lower() in ("1", "true", "yes", "on"):
-        errors.append("production recovery flag must not be enabled for preflight")
+    # Reject ambiguous or mistyped values as well as explicitly enabled ones.
+    # A disposable probe must never rely on an unknown production flag value.
+    flag = env.get("ENABLE_VERIFIED_GAP_RECOVERY", "").strip().lower()
+    if flag not in ("", "0", "false", "no", "off"):
+        errors.append("production recovery flag must be explicitly disabled or unset")
     if not env.get("UPSTOX_ACCESS_TOKEN", "").strip():
         errors.append("Upstox credential missing")
     if not env.get("FIX10_TEST_INSTRUMENT_KEY", "").strip():
