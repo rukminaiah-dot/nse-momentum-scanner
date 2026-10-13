@@ -21,13 +21,14 @@ class ProbeTests(unittest.TestCase):
         if completed.date() != now.date():
             self.skipTest("IST midnight boundary")
         row = [completed.isoformat(), 100, 103, 99, 102, 10]
+        adjacent = [(completed - timedelta(minutes=1)).isoformat(), 100, 103, 99, 102, 10]
         calls = []
         class Api:
             def __init__(self, client):
                 pass
             def get_intra_day_candle_data(self, *args):
                 calls.append(args)
-                return SimpleNamespace(data=SimpleNamespace(candles=[row]))
+                return SimpleNamespace(data=SimpleNamespace(candles=[row, adjacent]))
         fake_sdk = SimpleNamespace(
             Configuration=lambda: SimpleNamespace(access_token=None),
             ApiClient=lambda config: config, HistoryV3Api=Api)
