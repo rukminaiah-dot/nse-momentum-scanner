@@ -1,5 +1,7 @@
 """Offline mocked tests for the isolated Upstox websocket smoke harness."""
 import os
+import io
+from contextlib import redirect_stderr
 import sys
 import types
 import unittest
@@ -68,6 +70,20 @@ class WebsocketSmokeTests(unittest.TestCase):
             with patch.dict(sys.modules, {"upstox_client": self.sdk}):
                 self.assertEqual(probe.main(), 3)
         self.assertTrue(FakeStreamer.last.disconnected)
+
+    def test_connection_exception_does_not_leak_sdk_details(self):
+        FakeStreamer.mode = "raise"
+        stderr = io.StringIO()
+        with patch.dict(os.environ, ENV, clear=True):
+            with patch.dict(sys.modules, {"upstox_client": self.sdk}):
+                with redirect_stderr(stderr):
+                    self.assertEqual(probe.main(), 3)
+        self.assertNotIn("secret-bearing", stderr.getvalue())
+
+    def test_missing_token_blocks_before_sdk(self):
+        with patch.dict(os.environ, {**ENV, "UPSTOX_ACCESS_TOKEN": ""}, clear=True):
+            with patch.dict(sys.modules, {"upstox_client": None}):
+                self.assertEqual(probe.main(), 2)
 
     def test_error_event_is_inconclusive(self):
         FakeStreamer.mode = "error"
