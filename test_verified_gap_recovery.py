@@ -62,8 +62,13 @@ class GapRecoveryTests(unittest.TestCase):
     def test_history_limit(self):
         recovered = validated_completed_rows([row(i) for i in range(35, 45)], NOW)
         merged, added = merge_verified_missing([], recovered, limit=6)
-        self.assertEqual(len(added), 10)
+        self.assertEqual(len(added), 6)
+        self.assertEqual([t.minute for t in added], list(range(39, 45)))
         self.assertEqual([c.timestamp.minute for c in merged], list(range(39, 45)))
+
+    def test_invalid_history_limit(self):
+        with self.assertRaises(ValueError):
+            merge_verified_missing([], {}, limit=0)
 
     def test_merge_rejected_after_active_minute_advances(self):
         manager = CandleManager()
