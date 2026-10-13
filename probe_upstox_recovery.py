@@ -7,7 +7,7 @@ Never submits orders, starts the scanner, or changes candle state.
 import argparse
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 
@@ -39,7 +39,28 @@ def main():
         if not verified:
             print("INCONCLUSIVE: no verified completed same-day bars; retry during an active market session")
             return 3
+        # Isolated in-memory gap: no scanner, database, or orders.
+        from v2.backend.verified_gap_recovery import merge_verified_missing
+        minutes = sorted(verified)
+        pair = next(((a, b) for a, b in zip(minutes, minutes[1:])
+                     if b - a == timedelta(minutes=1)), None)
+        if pair is None:
+            print("INCONCLUSIVE: no adjacent verified candles for in-memory gap test")
+            return 3
+        earlier, missing = pair
+        original = verified[earlier]
+        recovered = {missing: verified[missing]}
+        restored, inserted = merge_verified_missing(
+            [original], recovered, active_minute=missing + timedelta(minutes=1))
+        if (inserted != [missing] or len(restored) != 2
+                or restored[0] is not original or restored[1] is not verified[missing]):
+            raise ValueError("in-memory gap merge did not restore expected candle")
+        repeated, inserted_again = merge_verified_missing(
+            restored, recovered, active_minute=missing + timedelta(minutes=1))
+        if inserted_again or len(repeated) != 2 or repeated[0] is not original:
+            raise ValueError("in-memory merge not idempotent")
         print("PASS: authenticated read-only response parsed and validated")
+        print("PASS: real-candle in-memory gap insertion and idempotence verified")
         return 0
     except Exception as exc:
         # Avoid printing exception text: SDK errors may include request metadata.
