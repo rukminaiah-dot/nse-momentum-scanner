@@ -32,6 +32,18 @@ class HistoryAdapterTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     make_historical_fetch(FakeHistory(), "AUTHORIZED")("AUTHORIZED")
 
+    def test_broker_exception_propagates_without_retry_or_fallback(self):
+        class FailingHistory:
+            def __init__(self):
+                self.calls = 0
+            def get_intra_day_candle_data(self, *_):
+                self.calls += 1
+                raise ConnectionError("mock read-only broker failure")
+        api = FailingHistory()
+        with self.assertRaises(ConnectionError):
+            make_historical_fetch(api, "AUTHORIZED")("AUTHORIZED")
+        self.assertEqual(api.calls, 1)
+
     def test_empty_instrument_rejected(self):
         with self.assertRaises(ValueError):
             make_historical_fetch(object(), "")
