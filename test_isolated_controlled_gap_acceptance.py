@@ -188,6 +188,34 @@ class ControlledGapTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertEqual(bridge.candles.manager.recovery_snapshot(KEY)[0], [])
 
+    def test_live_minute_advancement_during_fetch_is_inconclusive(self):
+        now = datetime.now(IST).replace(second=0, microsecond=0)
+        minutes = [now - timedelta(minutes=n) for n in (3, 2, 1)]
+        if minutes[0].date() != now.date():
+            self.skipTest("IST day boundary")
+        bridge = None
+        calls = []
+        def fetch(key):
+            calls.append(key)
+            if len(calls) == 2:
+                later = now + timedelta(minutes=1)
+                tick = {"feeds": {KEY: {"ltpc": {
+                    "ltp": 106, "ltt": str(int(later.timestamp() * 1000))}}}}
+                self.assertTrue(bridge.on_message(tick))
+            return [[minute.isoformat(), 100, 101, 99, 100, 5]
+                    for minute in minutes]
+        bridge = IsolatedStreamRecovery(KEY, fetch, min_request_spacing=0.001)
+        tick = {"feeds": {KEY: {"ltpc": {
+            "ltp": 105, "ltt": str(int(now.timestamp() * 1000))}}}}
+        self.assertTrue(bridge.on_message(tick))
+        passed, reason = controlled_gap_acceptance(bridge)
+        self.assertFalse(passed)
+        self.assertEqual(reason, "isolated candle integrity check failed")
+        history, active = bridge.candles.manager.recovery_snapshot(KEY)
+        self.assertEqual(active, (now + timedelta(minutes=1)).replace(tzinfo=None))
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0].close, 105)
+
     def test_no_tick_never_fetches_broker(self):
         calls = []
         bridge = IsolatedStreamRecovery(KEY, lambda key: calls.append(key) or [])
