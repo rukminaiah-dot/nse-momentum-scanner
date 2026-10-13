@@ -1,0 +1,49 @@
+"""Verified completed-minute recovery helpers. Not wired to live feed yet.
+
+Caller must fetch Upstox intraday rows off the websocket callback thread and
+serialize merges with candle updates. Never synthesize missing minutes.
+"""
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from .candles import Candle
+
+IST = ZoneInfo("Asia/Kolkata")
+
+def validated_completed_rows(rows, now_ist):
+    """Return completed same-day Upstox OHLCV candles, or raise on bad data."""
+    cutoff = now_ist.replace(second=0, microsecond=0, tzinfo=None)
+    session = cutoff.date()
+    result = {}
+    for row in rows:
+        if len(row) < 6:
+            raise ValueError("incomplete Upstox candle")
+        stamp = datetime.fromisoformat(str(row[0]))
+        if stamp.tzinfo is None:
+            raise ValueError("candle timezone missing")
+        minute = stamp.astimezone(IST).replace(tzinfo=None)
+        if minute.date() != session or minute >= cutoff:
+            continue
+        if minute.second or minute.microsecond or minute in result:
+            raise ValueError("invalid or duplicate candle minute")
+        o, h, l, c, v = (float(x) for x in row[1:6])
+        from math import isfinite
+        if not all(isfinite(x) for x in (o, h, l, c, v)):
+            raise ValueError("non-finite candle value")
+        if min(o, h, l, c) <= 0 or v < 0 or h < max(o, c, l) or l > min(o, c, h):
+            raise ValueError("invalid OHLCV")
+        candle = Candle(o, v)
+        candle.open, candle.high, candle.low, candle.close = o, h, l, c
+        candle.timestamp = minute
+        result[minute] = candle
+    return result
+
+def merge_verified_missing(existing, recovered, active_minute=None, limit=60):
+    """Insert only absent completed minutes; never overwrite live candles."""
+    by_minute = {c.timestamp: c for c in existing}
+    added = []
+    for minute, candle in sorted(recovered.items()):
+        if minute in by_minute or (active_minute is not None and minute >= active_minute):
+            continue
+        by_minute[minute] = candle
+        added.append(minute)
+    return [by_minute[t] for t in sorted(by_minute)[-limit:]], added
