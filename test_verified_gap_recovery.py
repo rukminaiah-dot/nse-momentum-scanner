@@ -38,5 +38,22 @@ class GapRecoveryTests(unittest.TestCase):
         self.assertEqual([c.timestamp.minute for c in merged], [40, 41, 42])
         self.assertEqual(merged[0].volume, 10)
 
+    def test_no_synthetic_missing_minutes(self):
+        recovered = validated_completed_rows([row(40), row(43)], NOW)
+        merged, added = merge_verified_missing([], recovered)
+        self.assertEqual([t.minute for t in added], [40, 43])
+        self.assertEqual(len(merged), 2)
+
+    def test_prior_session_is_not_recovered(self):
+        prior = ["2026-10-12T15:29:00+05:30", 100, 103, 99, 102, 10]
+        got = validated_completed_rows([prior, row(42)], NOW)
+        self.assertEqual([t.minute for t in got], [42])
+
+    def test_history_limit(self):
+        recovered = validated_completed_rows([row(i) for i in range(35, 45)], NOW)
+        merged, added = merge_verified_missing([], recovered, limit=6)
+        self.assertEqual(len(added), 10)
+        self.assertEqual([c.timestamp.minute for c in merged], list(range(39, 45)))
+
 if __name__ == "__main__":
     unittest.main()
