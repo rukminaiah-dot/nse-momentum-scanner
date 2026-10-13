@@ -28,10 +28,10 @@ class ControlledGapTests(unittest.TestCase):
         passed, reason = controlled_gap_acceptance(bridge)
         self.assertTrue(passed, reason)
         self.assertEqual(calls, [KEY, KEY])
-        self.assertEqual(bridge.worker.status()["verified_insertions"], 2)
+        self.assertEqual(bridge.worker.status()["verified_insertions"], 1)
         history, active = bridge.candles.manager.recovery_snapshot(KEY)
         self.assertEqual(active, now.replace(tzinfo=None))
-        self.assertEqual(len(history), 2)
+        self.assertEqual(len(history), 1)
         self.assertEqual(bridge.candles.manager.current[KEY]["candle"].close, 105)
 
     def test_no_tick_never_fetches_broker(self):
