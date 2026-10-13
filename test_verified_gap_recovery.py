@@ -48,6 +48,14 @@ class GapRecoveryTests(unittest.TestCase):
         self.assertEqual([c.timestamp.minute for c in merged], [40, 41, 42])
         self.assertEqual(merged[0].volume, 10)
 
+    def test_merge_drops_previous_session(self):
+        candle = next(iter(validated_completed_rows([row(41)], NOW).values()))
+        prior = datetime(2026, 10, 12, 11, 41)
+        merged, added = merge_verified_missing([], {prior: candle},
+            active_minute=datetime(2026, 10, 13, 11, 44))
+        self.assertEqual(merged, [])
+        self.assertEqual(added, [])
+
     def test_no_synthetic_missing_minutes(self):
         recovered = validated_completed_rows([row(40), row(43)], NOW)
         merged, added = merge_verified_missing([], recovered)
