@@ -28,6 +28,15 @@ def controlled_gap_acceptance(bridge):
         active = active_item["minute"]
         active_candle = active_item["candle"]
         original = list(manager.completed.get(key, []))
+        if original:
+            return False, "live completed candles already present; controlled setup skipped"
+    # Avoid an unnecessary broker request if prior worker activity already
+    # disqualifies independent controlled acceptance.
+    initial_status = bridge.worker.status()
+    if (initial_status["pending"] or bridge.gap_requests
+            or initial_status["requested"] or initial_status["completed"]
+            or initial_status["failed"] or initial_status["verified_insertions"]):
+        return False, "prior recovery activity; controlled setup skipped"
     try:
         rows = bridge.worker.fetch_rows(key)
         validated = validated_completed_rows(rows, datetime.now(IST))
