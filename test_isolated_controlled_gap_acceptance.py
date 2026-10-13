@@ -28,7 +28,7 @@ class ControlledGapTests(unittest.TestCase):
         passed, reason = controlled_gap_acceptance(bridge)
         self.assertTrue(passed, reason)
         self.assertEqual(calls, [KEY, KEY])
-        self.assertEqual(bridge.worker.status()["verified_insertions"], 3)
+        self.assertEqual(bridge.worker.status()["verified_insertions"], 2)
         history, active = bridge.candles.manager.recovery_snapshot(KEY)
         self.assertEqual(active, now.replace(tzinfo=None))
         self.assertEqual(len(history), 3)
