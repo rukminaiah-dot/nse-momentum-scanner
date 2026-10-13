@@ -4,7 +4,8 @@ from zoneinfo import ZoneInfo
 from .candles import Candle
 
 class CandleManager:
-    def __init__(self):
+    def __init__(self, *, log_closed_candles=True):
+        self.log_closed_candles = log_closed_candles
         self.lock = threading.RLock()
         self.current = {}
         self.completed = {}
@@ -28,7 +29,8 @@ class CandleManager:
                 closed = item["candle"]
                 closed.timestamp = item["minute"]
                 self.completed.setdefault(key, []).append(closed)
-                print("CANDLE_CLOSED", key, closed.__dict__)
+                if self.log_closed_candles:
+                    print("CANDLE_CLOSED", key, closed.__dict__)
             self.current[key] = {"minute": minute, "candle": Candle(price, volume)}
             return closed if item else None
         else:
