@@ -3,6 +3,8 @@ import unittest
 from datetime import datetime
 from types import SimpleNamespace
 from v2.backend.recovery_trigger import should_request_recovery
+from v2.backend.candle_manager import CandleManager
+from v2.backend.verified_gap_recovery import validated_completed_rows
 
 def minute(day, n):
     return datetime(2026, 10, day, 11, n)
@@ -32,6 +34,32 @@ class RecoveryTriggerTests(unittest.TestCase):
         self.assertFalse(self.gate(history(minute(12, 40), minute(13, 42)), minute(13, 43)))
         self.assertFalse(self.gate(history(minute(13, 40), minute(13, 42)), minute(13, 42)))
         self.assertFalse(self.gate(history(minute(13, 40), minute(13, 42)), minute(14, 43)))
+
+    def test_live_closure_recovery_and_followup_continuity(self):
+        from zoneinfo import ZoneInfo
+        manager = CandleManager()
+        key = "STOCK"
+        ist = ZoneInfo("Asia/Kolkata")
+        def tick(m):
+            stamp = datetime(2026, 10, 13, 11, m, tzinfo=ist)
+            return manager.update(key, 100, int(stamp.timestamp() * 1000), 10)
+        self.assertIsNone(tick(40))
+        self.assertIsNotNone(tick(42))
+        history, active = manager.recovery_snapshot(key)
+        self.assertFalse(self.gate(history, active))
+        self.assertIsNotNone(tick(43))
+        history, active = manager.recovery_snapshot(key)
+        self.assertTrue(self.gate(history, active))
+        rows = [["2026-10-13T11:41:00+05:30", 100, 102, 99, 101, 12]]
+        recovered = validated_completed_rows(rows, datetime(2026, 10, 13, 11, 44, tzinfo=ist))
+        self.assertEqual(manager.merge_recovered(key, recovered, active), 1)
+        history, active = manager.recovery_snapshot(key)
+        self.assertEqual([c.timestamp.minute for c in history], [40, 41, 42])
+        self.assertFalse(self.gate(history, active))
+        self.assertIsNotNone(tick(44))
+        history, active = manager.recovery_snapshot(key)
+        self.assertEqual([c.timestamp.minute for c in history], [40, 41, 42, 43])
+        self.assertFalse(self.gate(history, active))
 
     def test_incomplete_history_fails_closed(self):
         self.assertFalse(self.gate([], minute(13, 43)))
