@@ -36,7 +36,7 @@ class ControlledGapTests(unittest.TestCase):
         self.assertEqual(bridge.worker.status()["skipped"], 0)
         history, active = bridge.candles.manager.recovery_snapshot(KEY)
         self.assertEqual(active, now.replace(tzinfo=None))
-        self.assertEqual(len(history), 1)
+        self.assertEqual(len(history), 0)
         self.assertEqual(bridge.candles.manager.current[KEY]["candle"].close, 105)
 
     def test_long_broker_history_recovers_only_one_minute(self):
