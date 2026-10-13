@@ -1,0 +1,45 @@
+name: Manual Upstox Read-Only Integration Probe
+
+# Manual-only: never runs on push, PR, schedule or production deploy.
+on:
+  workflow_dispatch:
+    inputs:
+      instrument_key:
+        description: 'Authorized Upstox instrument key to test (not a credential)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: manual-upstox-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    if: github.ref == 'refs/heads/feature/verified-gap-recovery'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install read-only SDK
+        run: python -m pip install upstox-python-sdk
+      - name: Verify secret presence without printing its value
+        env:
+          UPSTOX_ACCESS_TOKEN: ${{ secrets.UPSTOX_ACCESS_TOKEN }}
+        run: |
+          if [ -z "$UPSTOX_ACCESS_TOKEN" ]; then
+            echo "BLOCKED: repository Actions secret UPSTOX_ACCESS_TOKEN is unavailable"
+            exit 2
+          fi
+      - name: Probe authenticated intraday candles (no orders)
+        env:
+          UPSTOX_ACCESS_TOKEN: ${{ secrets.UPSTOX_ACCESS_TOKEN }}
+          INSTRUMENT_KEY: ${{ inputs.instrument_key }}
+        run: python probe_upstox_recovery.py --instrument-key "$INSTRUMENT_KEY"
