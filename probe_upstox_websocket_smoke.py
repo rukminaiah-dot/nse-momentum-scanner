@@ -10,28 +10,12 @@ import sys
 import threading
 
 from preflight_upstox_websocket import check
+from isolated_live_tick_candles import extract_tick
 
 
 def has_instrument_tick(payload, instrument):
-    """Reject heartbeats, acks and unrelated instrument messages."""
-    if not isinstance(payload, dict):
-        return False
-    feeds = payload.get("feeds")
-    if not isinstance(feeds, dict):
-        return False
-    feed = feeds.get(instrument)
-    if not isinstance(feed, dict):
-        return False
-    ltpc = feed.get("ltpc")
-    if not isinstance(ltpc, dict):
-        return False
-    try:
-        price = float(ltpc["ltp"])
-        timestamp = int(ltpc["ltt"])
-    except (KeyError, TypeError, ValueError, OverflowError):
-        return False
-    return math.isfinite(price) and price > 0 and timestamp > 0
-
+    """Only validated instrument trade ticks count as websocket evidence."""
+    return extract_tick(payload, instrument) is not None
 
 def main():
     failures = check()
