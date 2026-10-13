@@ -37,7 +37,7 @@ class FakeStreamer:
             self.callbacks["error"]("mock failure")
             return
         self.callbacks["open"]()
-        self.callbacks["message"]({"feeds": {"MOCK_INSTRUMENT": {"ltpc": {"ltp": 100.0, "ltt": "123456789"}}}})
+        self.callbacks["message"]({"feeds": {"MOCK_INSTRUMENT": {"ltpc": {"ltp": 100.0, "ltt": "1760000000000"}}}})
 
     def disconnect(self):
         self.disconnected = True
