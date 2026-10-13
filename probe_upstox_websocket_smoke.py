@@ -45,7 +45,23 @@ def main():
         opened.set()
         ready.set()
 
-    def on_message(*_args):
+    def on_message(*args):
+        # An open socket, heartbeat, or subscription acknowledgement is NOT
+        # evidence of market ticks. Require an instrument feed with LTPC.
+        payload = args[0] if args else None
+        if not isinstance(payload, dict):
+            return
+        feeds = payload.get("feeds")
+        if not isinstance(feeds, dict):
+            return
+        feed = feeds.get(instrument)
+        if not isinstance(feed, dict):
+            return
+        ltpc = feed.get("ltpc")
+        if not isinstance(ltpc, dict):
+            return
+        if ltpc.get("ltp") is None or ltpc.get("ltt") is None:
+            return
         counts["messages"] += 1
         seen.set()
 
