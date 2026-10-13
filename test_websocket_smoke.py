@@ -60,6 +60,13 @@ class WebsocketSmokeTests(unittest.TestCase):
                         {"feeds": {"MOCK_INSTRUMENT": {"ltpc": {"ltp": 100}}}}):
             with self.subTest(payload=repr(payload)):
                 self.assertFalse(probe.has_instrument_tick(payload, "MOCK_INSTRUMENT"))
+        for price, stamp in ((float("nan"), "1"), (float("inf"), "1"),
+                             (0, "1"), (-1, "1"), ("invalid", "1"),
+                             (100, "invalid"), (100, "0"), (None, "1")):
+            with self.subTest(price=str(price), stamp=str(stamp)):
+                self.assertFalse(probe.has_instrument_tick(
+                    {"feeds": {"MOCK_INSTRUMENT": {"ltpc": {"ltp": price, "ltt": stamp}}}},
+                    "MOCK_INSTRUMENT"))
         self.assertTrue(probe.has_instrument_tick(
             {"feeds": {"MOCK_INSTRUMENT": {"ltpc": {"ltp": 100, "ltt": "1"}}}},
             "MOCK_INSTRUMENT"))
