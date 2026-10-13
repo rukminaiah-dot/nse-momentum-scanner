@@ -68,5 +68,49 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(worker.status()["failed"], 2)
         self.assertEqual(worker.status()["pending"], 0)
 
+    def test_malformed_upstox_response_fails_without_merge(self):
+        """Malformed broker rows must not mutate completed candles."""
+        from datetime import datetime, timedelta
+        from zoneinfo import ZoneInfo
+        now = datetime.now(ZoneInfo("Asia/Kolkata"))
+        active = (now - timedelta(minutes=1)).replace(second=0, microsecond=0, tzinfo=None)
+        if active.date() != now.date():
+            self.skipTest("IST session boundary")
+        merged = []
+        worker = GapRecoveryWorker(
+            lambda key: [["invalid-timestamp", 100, 103, 99, 102, 10]],
+            lambda key: ([object()], active),
+            lambda *args: merged.append(args), max_pending=1)
+        self.assertTrue(worker.request("STOCK"))
+        worker.join(timeout=5)
+        stats = worker.status()
+        self.assertEqual(stats["failed"], 1)
+        self.assertEqual(stats["completed"], 0)
+        self.assertEqual(stats["verified_insertions"], 0)
+        self.assertEqual(stats["pending"], 0)
+        self.assertEqual(merged, [])
+
+    def test_empty_upstox_response_inserts_nothing(self):
+        """A valid empty response is not permission to synthesize bars."""
+        from datetime import datetime, timedelta
+        from zoneinfo import ZoneInfo
+        now = datetime.now(ZoneInfo("Asia/Kolkata"))
+        active = (now - timedelta(minutes=1)).replace(second=0, microsecond=0, tzinfo=None)
+        if active.date() != now.date():
+            self.skipTest("IST session boundary")
+        merged = []
+        def merge(key, recovered, minute):
+            merged.append(recovered)
+            return 0
+        worker = GapRecoveryWorker(
+            lambda key: [], lambda key: ([object()], active), merge)
+        self.assertTrue(worker.request("STOCK"))
+        worker.join(timeout=5)
+        stats = worker.status()
+        self.assertEqual(stats["failed"], 0)
+        self.assertEqual(stats["completed"], 1)
+        self.assertEqual(stats["verified_insertions"], 0)
+        self.assertEqual(merged, [{}])
+
 if __name__ == "__main__":
     unittest.main()
