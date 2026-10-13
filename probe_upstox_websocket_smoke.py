@@ -13,6 +13,7 @@ from preflight_upstox_websocket import check
 from isolated_live_tick_candles import extract_tick, IsolatedTickCandles
 from isolated_stream_recovery import IsolatedStreamRecovery
 from isolated_upstox_history import make_historical_fetch
+from isolated_controlled_gap_acceptance import controlled_gap_acceptance
 
 # After the first fresh tick, keep listening for a natural minute jump.
 RECOVERY_OBSERVE_SECONDS = 90
@@ -34,7 +35,14 @@ def main():
     if os.environ.get("FIX10_LIVE_STREAM_ACK") != "READ_ONLY_STREAM_TEST":
         print("BLOCKED: live stream acknowledgement missing", file=sys.stderr)
         return 2
+    controlled_ack = os.environ.get("FIX10_CONTROLLED_GAP_ACK")
+    if controlled_ack not in (None, "", "BROKER_BACKED_MEMORY_ONLY"):
+        print("BLOCKED: unrecognized controlled gap acknowledgement", file=sys.stderr)
+        return 2
     recovery_ack = os.environ.get("FIX10_ISOLATED_RECOVERY_ACK")
+    if controlled_ack == "BROKER_BACKED_MEMORY_ONLY" and recovery_ack != "READ_ONLY_HISTORY":
+        print("BLOCKED: controlled gap requires read-only historical acknowledgement", file=sys.stderr)
+        return 2
     if recovery_ack not in (None, "", "READ_ONLY_HISTORY"):
         print("BLOCKED: unrecognized recovery acknowledgement", file=sys.stderr)
         return 2
@@ -140,6 +148,11 @@ def main():
             print("stale_ticks_ignored:", counts["stale"])
         print("completed_candles:", len(history))
         if recovery_mode:
+            if controlled_ack == "BROKER_BACKED_MEMORY_ONLY":
+                passed, reason = controlled_gap_acceptance(bridge)
+                print(("PASS: " if passed else "INCONCLUSIVE: ") + reason)
+                print("NOTE: natural websocket minute-gap recovery is separately unverified")
+                return 0 if passed and not errored.is_set() else 3
             # The first live tick alone cannot establish a minute gap. Keep
             # the subscription active for a bounded observation window.
             deadline = time.monotonic() + RECOVERY_OBSERVE_SECONDS
