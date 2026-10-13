@@ -27,6 +27,17 @@ class WorkerTests(unittest.TestCase):
             release.set()
             worker.join(timeout=5)
 
+    def test_missing_snapshot_is_skipped_without_api_request(self):
+        called = []
+        worker = GapRecoveryWorker(lambda key: called.append(key),
+                                   lambda key: ([], None), lambda *args: 0)
+        self.assertTrue(worker.request("A"))
+        worker.join(timeout=5)
+        self.assertEqual(called, [])
+        self.assertEqual(worker.status()["skipped"], 1)
+        self.assertEqual(worker.status()["completed"], 0)
+        self.assertEqual(worker.status()["pending"], 0)
+
     def test_invalid_limits_fail_closed(self):
         with self.assertRaises(ValueError):
             GapRecoveryWorker(None, None, None, min_request_spacing=0)
