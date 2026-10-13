@@ -120,7 +120,9 @@ def write_candle_quality():
     try:
         path = Path(_QUALITY_PATH)
         tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps({"observed_at_epoch": now, "stocks": rows}))
+        tmp.write_text(json.dumps({"observed_at_epoch": now, "stocks": rows,
+                                   "gap_recovery": {"enabled": GAP_RECOVERY_ENABLED,
+                                                    **gap_recovery.status()}}))
         tmp.replace(path)
     except (OSError, TypeError, ValueError) as exc:
         print("CANDLE_QUALITY_WRITE_ERROR:", type(exc).__name__, flush=True)
