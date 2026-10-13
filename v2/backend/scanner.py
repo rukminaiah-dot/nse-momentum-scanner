@@ -110,18 +110,35 @@ def preload_history(key):
     if key in INDICES.values() and loaded:
         previous_closes[key] = loaded[-1].close
 
-    if key in INDICES.values():
-        intraday = api.get_intra_day_candle_data(key, "minutes", "1")
-        today_rows = intraday.data.candles or []
-        current = []
-        for row in reversed(today_rows):
-            c = Candle(float(row[1]), float(row[5]))
-            c.open, c.high, c.low, c.close = map(float, row[1:5])
-            c.timestamp = datetime.fromisoformat(row[0]).astimezone(ZoneInfo("Asia/Kolkata")).replace(tzinfo=None)
-            current.append(c)
-        if current:
-            loaded = current
-            print("INTRADAY PRELOAD:", key, len(current), "candles")
+    # Warm stocks as well as indices with today's *completed* intraday bars.
+    # Keep previous-day data only as an indicator warmup fallback. Never preload
+    # the still-forming current minute, and never treat an API error as valid data.
+    if key in INDICES.values() or key in NIFTY_200.values():
+        try:
+            intraday = api.get_intra_day_candle_data(key, "minutes", "1")
+            today_rows = intraday.data.candles or []
+            now_ist = datetime.now(ZoneInfo("Asia/Kolkata")).replace(tzinfo=None)
+            current_minute = now_ist.replace(second=0, microsecond=0)
+            current = []
+            seen_minutes = set()
+            for row in today_rows:
+                stamp = datetime.fromisoformat(row[0]).astimezone(
+                    ZoneInfo("Asia/Kolkata")
+                ).replace(tzinfo=None)
+                if stamp.date() != today or stamp >= current_minute or stamp in seen_minutes:
+                    continue
+                seen_minutes.add(stamp)
+                c = Candle(float(row[1]), float(row[5]))
+                c.open, c.high, c.low, c.close = map(float, row[1:5])
+                c.timestamp = stamp
+                current.append(c)
+            current.sort(key=lambda c: c.timestamp)
+            if current:
+                # Keep a bounded, chronological same-session history.
+                loaded = current[-60:]
+                print("INTRADAY PRELOAD:", key, len(loaded), "completed candles", flush=True)
+        except Exception as exc:
+            print("INTRADAY PRELOAD FAILED:", key, type(exc).__name__, flush=True)
 
     candles.completed[key] = loaded
     print("PRELOAD:", key, len(loaded), "historical candles")
