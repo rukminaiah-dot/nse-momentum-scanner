@@ -56,13 +56,25 @@ def main():
 
     # A daemonized connector prevents an SDK blocking connect from hanging
     # this disposable smoke process. Exit is always bounded.
-    connector = threading.Thread(target=streamer.connect, daemon=True)
+    def connect_safely():
+        try:
+            streamer.connect()
+        except Exception:
+            errored.set()
+
+    connector = threading.Thread(target=connect_safely, daemon=True)
     connector.start()
     try:
         if not opened.wait(timeout=15):
+            if errored.is_set():
+                print("INCONCLUSIVE: websocket connection failed")
+                return 3
             print("INCONCLUSIVE: websocket did not open within timeout")
             return 3
         if not seen.wait(timeout=45):
+            if errored.is_set():
+                print("INCONCLUSIVE: websocket reported an error")
+                return 3
             print("INCONCLUSIVE: no live message observed within timeout")
             return 3
         if errored.is_set():
