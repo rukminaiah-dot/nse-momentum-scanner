@@ -1,0 +1,33 @@
+name: Fix 10 Websocket Preflight Tests
+
+# Offline only: no broker credentials, network subscriptions or deployments.
+on:
+  pull_request:
+    paths:
+      - 'preflight_upstox_websocket.py'
+      - 'tests/test_websocket_preflight.py'
+      - '.github/workflows/fix10-websocket-preflight.yml'
+  push:
+    branches:
+      - feature/verified-gap-recovery
+    paths:
+      - 'preflight_upstox_websocket.py'
+      - 'tests/test_websocket_preflight.py'
+      - '.github/workflows/fix10-websocket-preflight.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run fail-closed websocket preflight tests (no secrets)
+        run: python -m unittest -v tests/test_websocket_preflight.py
