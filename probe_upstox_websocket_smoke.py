@@ -151,6 +151,9 @@ def main():
             # finish before reporting acceptance. Never wait on feed callbacks.
             bridge.worker.join(timeout=5)
             stats = bridge.worker.status()
+            if errored.is_set():
+                print("INCONCLUSIVE: websocket error during historical recovery")
+                return 3
             print("gap_requests:", bridge.gap_requests)
             print("recovery_completed:", stats["completed"])
             print("verified_insertions:", stats["verified_insertions"])
@@ -171,10 +174,18 @@ def main():
             print("NOTE: recovery worker was not invoked; integration gate remains pending")
         return 0
     finally:
-        try:
-            streamer.disconnect()
-        except Exception:
-            pass
+        # SDK disconnect can block on network teardown. Never let an
+        # inconclusive disposable probe hang indefinitely during cleanup.
+        def disconnect_safely():
+            try:
+                streamer.disconnect()
+            except Exception:
+                pass
+        cleanup = threading.Thread(target=disconnect_safely, daemon=True)
+        cleanup.start()
+        cleanup.join(timeout=3)
+        if cleanup.is_alive():
+            print("WARNING: websocket disconnect exceeded cleanup timeout")
 
 
 if __name__ == "__main__":
