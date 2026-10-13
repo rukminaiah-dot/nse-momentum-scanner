@@ -1,9 +1,11 @@
+import threading
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from .candles import Candle
 
 class CandleManager:
     def __init__(self):
+        self.lock = threading.RLock()
         self.current = {}
         self.completed = {}
 
@@ -11,6 +13,10 @@ class CandleManager:
         return datetime.fromtimestamp(float(ts) / 1000, ZoneInfo("Asia/Kolkata")).replace(second=0, microsecond=0, tzinfo=None)
 
     def update(self, key, price, ts, volume=0):
+        with self.lock:
+            return self._update_locked(key, price, ts, volume)
+
+    def _update_locked(self, key, price, ts, volume=0):
         minute = self.minute_key(ts)
         item = self.current.get(key)
 
@@ -28,3 +34,20 @@ class CandleManager:
         else:
             item["candle"].update(price, volume)
             return None
+
+    def recovery_snapshot(self, key):
+        with self.lock:
+            item = self.current.get(key)
+            return list(self.completed.get(key, [])), (item["minute"] if item else None)
+
+    def merge_recovered(self, key, recovered, expected_active_minute):
+        from .verified_gap_recovery import merge_verified_missing
+        with self.lock:
+            item = self.current.get(key)
+            active = item["minute"] if item else None
+            if active is None or active < expected_active_minute:
+                return 0
+            merged, added = merge_verified_missing(self.completed.get(key, []), recovered, active_minute=active)
+            if added:
+                self.completed[key] = merged
+            return len(added)
