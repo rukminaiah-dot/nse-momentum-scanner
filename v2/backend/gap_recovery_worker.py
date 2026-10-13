@@ -110,5 +110,9 @@ class GapRecoveryWorker:
             raise ValueError("invalid worker join timeout")
         deadline = None if timeout is None else time.monotonic() + timeout
         for thread in threads:
+            # request() registers a worker just before thread.start(); a
+            # concurrent shutdown can observe it before it has started.
+            if thread.ident is None:
+                continue
             thread.join(timeout=None if deadline is None else
                         max(0, deadline - time.monotonic()))
