@@ -68,7 +68,9 @@ def controlled_gap_acceptance(bridge):
             completed = list(manager.completed.get(key, []))
             current = manager.current.get(key)
         by_minute = {c.timestamp: c for c in completed}
-        if status["pending"] or status["failed"] or status["verified_insertions"] != 1:
+        if (status["pending"] or status["failed"] or status["skipped"]
+                or status["requested"] != 1 or status["completed"] != 1
+                or status["verified_insertions"] != 1):
             return False, "historical recovery not verified"
         if (missing not in by_minute or current is None
                 or current["minute"] < active
