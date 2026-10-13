@@ -39,6 +39,10 @@ def controlled_gap_acceptance(bridge):
     if len(candidates) < 2:
         return False, "insufficient same-day completed broker minutes"
     # Use only already authenticated broker candles, strictly before live minute.
+    # Do not mix this controlled acceptance with an already scheduled natural
+    # recovery worker: their insertion counters would be indistinguishable.
+    if bridge.worker.status()["pending"] or bridge.gap_requests:
+        return False, "natural recovery already scheduled; controlled setup skipped"
     missing = candidates[-2]
     anchors = [validated[m] for m in candidates if m != missing]
     with manager.lock:
