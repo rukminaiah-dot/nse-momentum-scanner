@@ -46,6 +46,18 @@ class WorkerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             GapRecoveryWorker(None, None, None, cooldown=0)
 
+    def test_nonfinite_rate_limits_fail_closed(self):
+        for invalid in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(value=str(invalid)):
+                with self.assertRaises(ValueError):
+                    GapRecoveryWorker(None, None, None, cooldown=invalid)
+                with self.assertRaises(ValueError):
+                    GapRecoveryWorker(None, None, None, min_request_spacing=invalid)
+        for invalid in (True, 1.5):
+            with self.subTest(queue_cap=invalid):
+                with self.assertRaises(ValueError):
+                    GapRecoveryWorker(None, None, None, max_pending=invalid)
+
     def test_failure_releases_pending_slot(self):
         finished = threading.Event()
         def fetch(key):
