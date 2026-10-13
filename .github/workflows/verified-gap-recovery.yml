@@ -8,6 +8,7 @@ on:
       - 'test_verified_gap_recovery.py'
       - 'test_gap_recovery_worker.py'
       - 'test_recovery_trigger.py'
+      - 'test_recovery_integration.py'
   workflow_dispatch:
 
 jobs:
@@ -20,4 +21,4 @@ jobs:
         with:
           python-version: '3.11'
       - name: Offline regression suite
-        run: python -m unittest -v test_verified_gap_recovery test_gap_recovery_worker test_recovery_trigger
+        run: python -m unittest -v test_verified_gap_recovery test_gap_recovery_worker test_recovery_trigger test_recovery_integration
