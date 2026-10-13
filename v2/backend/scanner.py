@@ -267,7 +267,8 @@ def save_scan_result(key, price, ema9_value, ema20_value, mom, market, trend_5m,
 
 
 def analyse(key):
-    history = candles.completed.get(key, [])
+    with candles.lock:
+        history = list(candles.completed.get(key, []))
 
     # Reject old candles before generating any signals.
     if history:
