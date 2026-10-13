@@ -56,6 +56,28 @@ class ControlledGapTests(unittest.TestCase):
         self.assertEqual(active, now.replace(tzinfo=None))
         self.assertEqual(len(history), 1)
 
+    def test_changed_broker_candle_does_not_pass(self):
+        now = datetime.now(IST).replace(second=0, microsecond=0)
+        minutes = [now - timedelta(minutes=n) for n in (3, 2, 1)]
+        if minutes[0].date() != now.date():
+            self.skipTest("IST day boundary")
+        calls = []
+        def fetch(key):
+            calls.append(key)
+            # The omitted minute is the second-oldest historical minute.
+            # Change its close on the worker's second authenticated fetch.
+            return [[minute.isoformat(), 100, 101, 99,
+                     (100.5 if len(calls) == 2 and minute == minutes[1] else 100), 5]
+                    for minute in minutes]
+        bridge = IsolatedStreamRecovery(KEY, fetch, min_request_spacing=0.001)
+        tick = {"feeds": {KEY: {"ltpc": {
+            "ltp": 105, "ltt": str(int(now.timestamp() * 1000))}}}}
+        self.assertTrue(bridge.on_message(tick))
+        passed, reason = controlled_gap_acceptance(bridge)
+        self.assertFalse(passed)
+        self.assertEqual(reason, "broker candle values differ")
+        self.assertEqual(len(calls), 2)
+
     def test_no_tick_never_fetches_broker(self):
         calls = []
         bridge = IsolatedStreamRecovery(KEY, lambda key: calls.append(key) or [])
