@@ -64,6 +64,7 @@ def main():
             streamer.connect()
         except Exception:
             errored.set()
+            ready.set()
 
     connector = threading.Thread(target=connect_safely, daemon=True)
     connector.start()
