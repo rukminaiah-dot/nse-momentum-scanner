@@ -29,9 +29,12 @@ def extract_tick(payload, instrument):
     if not isinstance(ltpc, dict):
         return None
     try:
-        price = float(ltpc["ltp"])
+        raw_price = ltpc["ltp"]
+        if isinstance(raw_price, bool):
+            return None
+        price = float(raw_price)
         raw_ts = ltpc["ltt"]
-        if isinstance(raw_ts, bool) or isinstance(raw_ts, float):
+        if isinstance(raw_ts, bool) or not isinstance(raw_ts, (int, str)):
             return None
         timestamp = int(raw_ts)
         if not math.isfinite(price) or price <= 0 or timestamp <= 0:
