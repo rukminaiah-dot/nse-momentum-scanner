@@ -50,6 +50,19 @@ class LiveTickRecoveryTests(unittest.TestCase):
                          [first.replace(tzinfo=None), missing.replace(tzinfo=None)])
         self.assertEqual(active, third.replace(tzinfo=None))
 
+    def test_stale_and_cross_session_ticks_do_not_schedule(self):
+        now = datetime.now(IST).replace(second=0, microsecond=0)
+        yesterday = now - timedelta(days=1)
+        earlier = yesterday.replace(hour=15, minute=27)
+        later = now.replace(hour=9, minute=16)
+        called = []
+        bridge = IsolatedStreamRecovery(KEY, lambda _: called.append(True) or [])
+        self.assertTrue(bridge.on_message(message(earlier, 100)))
+        self.assertTrue(bridge.on_message(message(later, 101)))
+        self.assertTrue(bridge.on_message(message(earlier, 99)))
+        self.assertEqual(bridge.gap_requests, 0)
+        self.assertEqual(called, [])
+
     def test_contiguous_ticks_do_not_schedule_recovery(self):
         now = datetime.now(IST).replace(second=0, microsecond=0)
         a, b = now - timedelta(minutes=2), now - timedelta(minutes=1)
