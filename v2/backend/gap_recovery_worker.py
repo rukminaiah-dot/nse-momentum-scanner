@@ -7,12 +7,12 @@ import threading
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from .verified_gap_recovery import validated_completed_rows, merge_verified_missing
+from .verified_gap_recovery import validated_completed_rows
 
 IST = ZoneInfo("Asia/Kolkata")
 
 class GapRecoveryWorker:
-    def __init__(self, fetch_rows, snapshot, merge, *, cooldown=120, max_pending=203):
+    def __init__(self, fetch_rows, snapshot, merge, *, cooldown=120, max_pending=4):
         """fetch_rows(key), snapshot(key)->(history,active_minute),
         merge(key,recovered,active_minute)->count. Both state callbacks must lock.
         """
@@ -20,6 +20,8 @@ class GapRecoveryWorker:
         self.snapshot = snapshot
         self.merge = merge
         self.cooldown = cooldown
+        if max_pending < 1 or cooldown <= 0:
+            raise ValueError("invalid recovery limits")
         self.max_pending = max_pending
         self._last_attempt = {}
         self._pending = set()
