@@ -10,6 +10,7 @@ on:
       - 'isolated_stream_recovery.py'
       - 'isolated_upstox_history.py'
       - 'isolated_controlled_gap_acceptance.py'
+      - 'test_isolated_controlled_gap_acceptance.py'
       - 'test_isolated_upstox_history.py'
       - 'v2/backend/candle_manager.py'
       - 'v2/backend/gap_recovery_worker.py'
@@ -60,4 +61,4 @@ jobs:
       - name: Run fail-closed websocket preflight tests (no secrets)
         run: |
           python -m compileall -q isolated_controlled_gap_acceptance.py preflight_upstox_websocket.py probe_upstox_websocket_smoke.py isolated_live_tick_candles.py isolated_stream_recovery.py isolated_upstox_history.py v2/backend
-          python -m unittest -v tests/test_websocket_preflight.py test_websocket_smoke test_isolated_live_tick_candles test_isolated_stream_recovery test_gap_recovery_worker test_verified_gap_recovery test_isolated_upstox_history
+          python -m unittest -v tests/test_websocket_preflight.py test_websocket_smoke test_isolated_live_tick_candles test_isolated_stream_recovery test_gap_recovery_worker test_verified_gap_recovery test_isolated_upstox_history test_isolated_controlled_gap_acceptance
