@@ -179,6 +179,50 @@ def nifty200_feed_health():
     return base
 
 
+@app.get("/api/v2/candle-feed-quality")
+def candle_feed_quality():
+    """Read-only observed candle continuity and volume; stale snapshots fail closed."""
+    import json
+    import time
+    from pathlib import Path
+    now = time.time()
+    result = {
+        "universe_size": len(NIFTY_200),
+        "order_execution_enabled": False,
+        "status": "NO_REPORT",
+        "stocks_six_consecutive_today": 0,
+        "stocks_with_recent_ticks": 0,
+        "stocks_with_positive_last_candle_volume": 0,
+        "stocks": {},
+    }
+    try:
+        data = json.loads(Path("/tmp/nse_200_candle_quality.json").read_text())
+        age = now - float(data["observed_at_epoch"])
+        rows = data["stocks"]
+        if not isinstance(rows, dict) or not 0 <= age <= 30:
+            result["status"] = "STALE_REPORT"
+            return result
+        result["status"] = "REPORTING"
+        result["snapshot_age_seconds"] = round(age, 1)
+        result["stocks"] = rows
+        result["stocks_six_consecutive_today"] = sum(
+            v.get("six_consecutive_today") is True for v in rows.values()
+        )
+        result["stocks_with_recent_ticks"] = sum(
+            isinstance(v.get("last_tick_epoch"), (int, float))
+            and 0 <= now - v["last_tick_epoch"] <= 120
+            for v in rows.values()
+        )
+        result["stocks_with_positive_last_candle_volume"] = sum(
+            isinstance(v.get("last_closed_volume"), (int, float))
+            and v["last_closed_volume"] > 0
+            for v in rows.values()
+        )
+    except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
+        pass
+    return result
+
+
 @app.get("/api/v2/top-momentum-setups")
 def top_momentum_setups():
     """Rank verified fresh scanner candidates; research only, never place orders."""
