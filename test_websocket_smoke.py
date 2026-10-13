@@ -84,6 +84,26 @@ class WebsocketSmokeTests(unittest.TestCase):
                 self.assertEqual(probe.main(), 0)
         self.assertTrue(FakeStreamer.last.disconnected)
 
+    def test_explicit_recovery_ack_initializes_read_only_history(self):
+        class FakeHistory:
+            def __init__(self, *_args):
+                self.calls = []
+            def get_intra_day_candle_data(self, *args):
+                self.calls.append(args)
+                return types.SimpleNamespace(data=types.SimpleNamespace(candles=[]))
+        self.sdk.HistoryV3Api = FakeHistory
+        with patch.dict(os.environ, {**ENV,
+                                      "FIX10_ISOLATED_RECOVERY_ACK": "READ_ONLY_HISTORY"},
+                        clear=True):
+            with patch.dict(sys.modules, {"upstox_client": self.sdk}):
+                self.assertEqual(probe.main(), 0)
+        self.assertTrue(FakeStreamer.last.disconnected)
+
+    def test_recovery_is_not_initialized_without_separate_ack(self):
+        with patch.dict(os.environ, ENV, clear=True):
+            with patch.dict(sys.modules, {"upstox_client": self.sdk}):
+                self.assertEqual(probe.main(), 0)
+
     def test_stale_tick_does_not_count_as_live_evidence(self):
         FakeStreamer.mode = "stale"
         # Patch the single event wait on the main thread only; the connector
