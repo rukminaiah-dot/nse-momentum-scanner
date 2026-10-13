@@ -509,18 +509,16 @@ def on_tick(key, data):
     candles.update(key, price, ts, minute_volume)
     after = len(candles.completed.get(key, []))
 
-    # Only request historical verification for an observed same-session gap.
-    # Network I/O occurs in a worker, never inside the feed callback.
+    # Only request recovery after a genuine live closure of a same-session gap.
+    # Never request for indices, disabled mode or overnight discontinuities.
     if after > before and GAP_RECOVERY_ENABLED and key in NIFTY_200.values():
-        from datetime import timedelta
+        from .recovery_trigger import should_request_recovery
         history, active_minute = candles.recovery_snapshot(key)
-        if len(history) >= 2 and active_minute is not None:
-            left, right = history[-2:]
-            if (
-                left.timestamp.date() == right.timestamp.date()
-                and right.timestamp - left.timestamp > timedelta(minutes=1)
-            ):
-                gap_recovery.request(key)
+        if should_request_recovery(
+            history, active_minute, enabled=GAP_RECOVERY_ENABLED,
+            stock=True, candle_closed=True
+        ):
+            gap_recovery.request(key)
 
     # Analyse only when a minute candle has actually closed.
     if after > before:
