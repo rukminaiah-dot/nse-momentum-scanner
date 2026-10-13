@@ -227,6 +227,24 @@ def analyse(key):
         if len(history) < 20:
             return
 
+    # Five-bar momentum must never bridge overnight or a missing 1-minute bar.
+    # Historical warmup is allowed for EMA/ATR, but the latest six closes
+    # used for momentum must be from consecutive minutes in today's session.
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    today_ist = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+    recent = history[-6:]
+    if (
+        len(recent) < 6
+        or any(not hasattr(c, "timestamp") or c.timestamp.date() != today_ist for c in recent)
+        or any(
+            recent[i].timestamp - recent[i - 1].timestamp != timedelta(minutes=1)
+            for i in range(1, len(recent))
+        )
+    ):
+        print("MOMENTUM_CONTINUITY_BLOCKED:", key, flush=True)
+        return
+
     closes = [c.close for c in history]
     highs = [c.high for c in history]
     lows = [c.low for c in history]
