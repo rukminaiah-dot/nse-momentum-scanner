@@ -1,4 +1,4 @@
-"""Verified completed-minute recovery helpers. Not wired to live feed yet.
+"""Verified completed-minute recovery helpers. Opt-in integration only.
 
 Caller must fetch Upstox intraday rows off the websocket callback thread and
 serialize merges with candle updates. Never synthesize missing minutes.
@@ -11,7 +11,9 @@ IST = ZoneInfo("Asia/Kolkata")
 
 def validated_completed_rows(rows, now_ist):
     """Return completed same-day Upstox OHLCV candles, or raise on bad data."""
-    cutoff = now_ist.replace(second=0, microsecond=0, tzinfo=None)
+    if now_ist.tzinfo is None or now_ist.utcoffset() is None:
+        raise ValueError("current time timezone missing")
+    cutoff = now_ist.astimezone(IST).replace(second=0, microsecond=0, tzinfo=None)
     session = cutoff.date()
     result = {}
     for row in rows:
