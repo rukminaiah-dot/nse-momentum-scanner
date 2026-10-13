@@ -4,6 +4,7 @@ import io
 from contextlib import redirect_stderr
 import sys
 import types
+import time
 import unittest
 from unittest.mock import patch
 
@@ -37,7 +38,8 @@ class FakeStreamer:
             self.callbacks["error"]("mock failure")
             return
         self.callbacks["open"]()
-        self.callbacks["message"]({"feeds": {"MOCK_INSTRUMENT": {"ltpc": {"ltp": 100.0, "ltt": "1760000000000"}}}})
+        stamp = str(int(time.time() * 1000)) if self.mode != "stale" else "1760000000000"
+        self.callbacks["message"]({"feeds": {"MOCK_INSTRUMENT": {"ltpc": {"ltp": 100.0, "ltt": stamp}}}})
 
     def disconnect(self):
         self.disconnected = True
@@ -80,6 +82,16 @@ class WebsocketSmokeTests(unittest.TestCase):
         with patch.dict(os.environ, ENV, clear=True):
             with patch.dict(sys.modules, {"upstox_client": self.sdk}):
                 self.assertEqual(probe.main(), 0)
+        self.assertTrue(FakeStreamer.last.disconnected)
+
+    def test_stale_tick_does_not_count_as_live_evidence(self):
+        FakeStreamer.mode = "stale"
+        # Avoid waiting the full live timeout in a deterministic offline test.
+        with patch.dict(os.environ, ENV, clear=True):
+            with patch.dict(sys.modules, {"upstox_client": self.sdk}):
+                with patch.object(probe.threading.Event, "wait", autospec=True,
+                                  side_effect=lambda event, timeout=None: event.is_set()):
+                    self.assertEqual(probe.main(), 3)
         self.assertTrue(FakeStreamer.last.disconnected)
 
     def test_connector_exception_is_inconclusive(self):
