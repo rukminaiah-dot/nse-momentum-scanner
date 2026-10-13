@@ -5,6 +5,7 @@ Requires explicit nonproduction acknowledgement and an authorized instrument.
 Prints only connection/tick counters, never raw messages or credentials.
 """
 import os
+import math
 import sys
 import threading
 
@@ -22,7 +23,14 @@ def has_instrument_tick(payload, instrument):
     if not isinstance(feed, dict):
         return False
     ltpc = feed.get("ltpc")
-    return isinstance(ltpc, dict) and ltpc.get("ltp") is not None and ltpc.get("ltt") is not None
+    if not isinstance(ltpc, dict):
+        return False
+    try:
+        price = float(ltpc["ltp"])
+        timestamp = int(ltpc["ltt"])
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return False
+    return math.isfinite(price) and price > 0 and timestamp > 0
 
 
 def main():
