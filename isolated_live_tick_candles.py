@@ -14,7 +14,18 @@ def extract_tick(payload, instrument):
         return None
     feeds = payload.get("feeds")
     feed = feeds.get(instrument) if isinstance(feeds, dict) else None
-    ltpc = feed.get("ltpc") if isinstance(feed, dict) else None
+    # Upstox V3 LTPC may be directly on the feed or nested in ltpcFeed.
+    # Full-mode market feeds can nest the same structure under fullFeed.
+    ltpc = None
+    if isinstance(feed, dict):
+        ltpc = feed.get("ltpc")
+        if ltpc is None and isinstance(feed.get("ltpcFeed"), dict):
+            ltpc = feed["ltpcFeed"].get("ltpc")
+        full = feed.get("fullFeed")
+        if ltpc is None and isinstance(full, dict):
+            market = full.get("marketFF")
+            if isinstance(market, dict):
+                ltpc = market.get("ltpc")
     if not isinstance(ltpc, dict):
         return None
     try:
