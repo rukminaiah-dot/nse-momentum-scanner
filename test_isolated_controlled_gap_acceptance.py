@@ -214,6 +214,7 @@ class ControlledGapTests(unittest.TestCase):
         history, active = bridge.candles.manager.recovery_snapshot(KEY)
         self.assertEqual(active, (now + timedelta(minutes=1)).replace(tzinfo=None))
         self.assertEqual(len(history), 1)
+        self.assertEqual(history[0].timestamp, now.replace(tzinfo=None))
         self.assertEqual(history[0].close, 105)
 
     def test_no_tick_never_fetches_broker(self):
