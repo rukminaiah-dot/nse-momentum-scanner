@@ -74,8 +74,8 @@ def controlled_gap_acceptance(bridge):
                 or status["verified_insertions"] != 1):
             return False, "historical recovery not verified"
         if (missing not in by_minute or current is None
-                or current["minute"] < active
-                or (current["minute"] == active and current["candle"] is not active_candle)
+                or current["minute"] != active
+                or current["candle"] is not active_candle
                 or any(c.timestamp not in by_minute for c in original)):
             return False, "isolated candle integrity check failed"
         # The worker must insert a candle obtained from its second authenticated
