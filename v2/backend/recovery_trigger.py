@@ -1,14 +1,26 @@
 """Pure fail-closed gate for requesting verified historical gap recovery."""
 from datetime import timedelta
 
+ONE_MINUTE = timedelta(minutes=1)
+
 def should_request_recovery(history, active_minute, *, enabled, stock, candle_closed):
-    if not (enabled and stock and candle_closed and active_minute and len(history) >= 2):
+    """Detect missing *completed* minutes; never infer or synthesize their OHLCV."""
+    if not (enabled and stock and candle_closed and active_minute and history):
         return False
-    left, right = history[-2:]
-    first = getattr(left, "timestamp", None)
-    second = getattr(right, "timestamp", None)
-    if first is None or second is None:
+    latest = getattr(history[-1], "timestamp", None)
+    if latest is None or latest.date() != active_minute.date():
         return False
-    if first.date() != second.date() or second.date() != active_minute.date():
+    if latest >= active_minute:
         return False
-    return second < active_minute and second - first > timedelta(minutes=1)
+    # A closure can jump directly from 11:40 to active 11:43. Request
+    # verification even if only one completed candle exists.
+    if active_minute - latest > ONE_MINUTE:
+        return True
+    if len(history) < 2:
+        return False
+    previous = getattr(history[-2], "timestamp", None)
+    return (
+        previous is not None
+        and previous.date() == latest.date()
+        and latest - previous > ONE_MINUTE
+    )
