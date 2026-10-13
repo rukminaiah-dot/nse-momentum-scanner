@@ -44,7 +44,10 @@ def merge_verified_missing(existing, recovered, active_minute=None, limit=60):
     by_minute = {c.timestamp: c for c in existing}
     added = []
     for minute, candle in sorted(recovered.items()):
-        if minute in by_minute or (active_minute is not None and minute >= active_minute):
+        if (active_minute is not None and
+                (minute.date() != active_minute.date() or minute >= active_minute)):
+            continue
+        if minute in by_minute:
             continue
         by_minute[minute] = candle
         added.append(minute)
