@@ -20,7 +20,7 @@ jobs:
       - name: Checkout reviewed Fix 10 probe commit (not production scanner)
         uses: actions/checkout@v4
         with:
-          ref: 5b02a115199cce9cb61953f66d167198880ef741
+          ref: e2d6a7c10977d87a8c7fa7df927ff1b3d08d31a8
           persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@v5
