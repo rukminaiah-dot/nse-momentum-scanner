@@ -86,5 +86,19 @@ class ProbeTests(unittest.TestCase):
         ), patch.object(sys, "argv", ["probe", "--instrument-key", "TEST"]):
             self.assertEqual(probe.main(), 1)
 
+    def test_empty_response_is_inconclusive_not_verified(self):
+        class Api:
+            def __init__(self, client):
+                pass
+            def get_intra_day_candle_data(self, *args):
+                return SimpleNamespace(data=SimpleNamespace(candles=[]))
+        fake_sdk = SimpleNamespace(
+            Configuration=lambda: SimpleNamespace(access_token=None),
+            ApiClient=lambda config: config, HistoryV3Api=Api)
+        with patch.dict(sys.modules, {"upstox_client": fake_sdk}), patch.dict(
+            "os.environ", {"UPSTOX_ACCESS_TOKEN": "offline-token"}
+        ), patch.object(sys, "argv", ["probe", "--instrument-key", "TEST"]):
+            self.assertEqual(probe.main(), 3)
+
 if __name__ == "__main__":
     unittest.main()
