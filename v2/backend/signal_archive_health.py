@@ -10,7 +10,7 @@ def _timestamp(value):
 
 def compare_archive_keys(sqlite_path, pg_connection):
     """Compare observation keys AND signal/price values without modifying databases."""
-    with sqlite3.connect(sqlite_path, timeout=10) as source:
+    with sqlite3.connect(f"file:{sqlite_path}?mode=ro", uri=True, timeout=10) as source:
         source_rows = {
             (symbol, _timestamp(stamp)): (float(price), signal)
             for symbol, stamp, price, signal in source.execute(
