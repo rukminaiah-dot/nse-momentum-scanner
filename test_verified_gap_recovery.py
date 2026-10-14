@@ -29,6 +29,12 @@ class GapRecoveryTests(unittest.TestCase):
                          [c.timestamp for c in before[-60:]])
         self.assertEqual(still_active, active)
 
+    def test_missing_active_boundary_never_inserts_broker_history(self):
+        recovered = validated_completed_rows([row(41)], NOW)
+        merged, added = merge_verified_missing([], recovered)
+        self.assertEqual(merged, [])
+        self.assertEqual(added, [])
+
     def test_completed_only_and_order(self):
         got = validated_completed_rows([row(44), row(42), row(45)], NOW)
         self.assertEqual([t.minute for t in sorted(got)], [42, 44])
