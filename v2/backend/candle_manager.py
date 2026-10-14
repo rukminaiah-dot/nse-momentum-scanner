@@ -26,11 +26,15 @@ class CandleManager:
             return None
         if item is None or item["minute"] != minute:
             if item:
-                closed = item["candle"]
-                closed.timestamp = item["minute"]
-                self.completed.setdefault(key, []).append(closed)
-                if self.log_closed_candles:
-                    print("CANDLE_CLOSED", key, closed.__dict__)
+                if item["minute"].date() != minute.date():
+                    # A new trading date must not inherit prior-session bars.
+                    self.completed.pop(key, None)
+                else:
+                    closed = item["candle"]
+                    closed.timestamp = item["minute"]
+                    self.completed.setdefault(key, []).append(closed)
+                    if self.log_closed_candles:
+                        print("CANDLE_CLOSED", key, closed.__dict__)
             self.current[key] = {"minute": minute, "candle": Candle(price, volume)}
             return closed if item else None
         else:
