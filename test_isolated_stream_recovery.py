@@ -22,6 +22,25 @@ def message(minute, price):
 
 
 class LiveTickRecoveryTests(unittest.TestCase):
+    def test_delayed_tick_does_not_rewind_live_minute_or_schedule_gap(self):
+        now = datetime.now(IST).replace(second=0, microsecond=0)
+        first = now - timedelta(minutes=2)
+        if first.date() != now.date():
+            self.skipTest("IST day boundary")
+        fetches = []
+        bridge = IsolatedStreamRecovery(
+            KEY, lambda key: fetches.append(key) or [],
+            min_request_spacing=0.001)
+        self.assertTrue(bridge.on_message(message(now, 105)))
+        self.assertTrue(bridge.on_message(message(first, 99)))
+        history, active = bridge.candles.manager.recovery_snapshot(KEY)
+        self.assertEqual(history, [])
+        self.assertEqual(active, now.replace(tzinfo=None))
+        self.assertEqual(bridge.candles.manager.current[KEY]["candle"].close, 105)
+        self.assertEqual(bridge.gap_requests, 0)
+        self.assertEqual(bridge.worker.status()["requested"], 0)
+        self.assertEqual(fetches, [])
+
     def test_gap_detected_from_ticks_and_fetch_runs_off_feed_thread(self):
         now = datetime.now(IST).replace(second=0, microsecond=0)
         first, missing, third = (now - timedelta(minutes=3),
