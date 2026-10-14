@@ -42,7 +42,19 @@ def compare_archive_keys(sqlite_path, pg_connection):
         "sqlite_available_observations": len(source_keys),
         "postgres_archive_observations": len(archive_keys),
         "missing_from_archive": len(missing),
+        "missing_samples": [
+            {"symbol": symbol, "candle_time_ist": stamp}
+            for symbol, stamp in sorted(missing)[:10]
+        ],
         "mismatched_archive_values": len(mismatched),
+        "mismatched_samples": [
+            {"symbol": symbol, "candle_time_ist": stamp,
+             "sqlite_signal": source_rows[(symbol, stamp)][1],
+             "postgres_signal": archive_rows[(symbol, stamp)][1],
+             "sqlite_price": source_rows[(symbol, stamp)][0],
+             "postgres_price": archive_rows[(symbol, stamp)][0]}
+            for symbol, stamp in sorted(mismatched)[:10]
+        ],
         "extra_archive_observations": len(extra),
         "historical_completeness_verified": False,
         "note": "Only currently available SQLite observations checked; lost prior history cannot be verified."
