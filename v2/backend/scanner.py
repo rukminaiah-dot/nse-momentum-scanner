@@ -266,6 +266,13 @@ def save_scan_result(key, price, ema9_value, ema20_value, mom, market, trend_5m,
             (key,candle_time,price,ema9_value,ema20_value,mom,market,trend_5m,signal))
     con.commit()
     con.close()
+    # Optional archival only after the local scanner history commit succeeds.
+    # Never block signal generation if PostgreSQL is unavailable.
+    if candle_time is not None and os.getenv("ENABLE_SIGNAL_ARCHIVE_POSTGRES") == "1":
+        from .signal_archive_hook import archive_observed_signal
+        status = archive_observed_signal(key, candle_time, price, signal)
+        if status != "ARCHIVED_OR_ALREADY_PRESENT":
+            print("SIGNAL_ARCHIVE_STATUS:", status, flush=True)
     if key in ("NIFTY 50", "SENSEX") and candle_time is not None:
         try:
             from .index_snapshot_archive import save_index_snapshot
