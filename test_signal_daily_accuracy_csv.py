@@ -20,6 +20,8 @@ class DailyAccuracyCsvTests(unittest.TestCase):
         self.assertEqual(rows[1]["sell_date_ist"], "TOTAL")
         self.assertEqual(rows[1]["stock_closed"], "2")
         self.assertEqual(rows[1]["index_points_sum"], "-25.0")
+        self.assertEqual(rows[0]["stock_win_rate_pct"], "50.0")
+        self.assertEqual(rows[0]["index_win_rate_pct"], "0.0")
 
     def test_total_sums_multiple_days_without_combining_index_and_stock(self):
         report = {"daily_by_sell_date": {
@@ -35,6 +37,15 @@ class DailyAccuracyCsvTests(unittest.TestCase):
         self.assertEqual(rows[-1]["index_closed"], "2")
         self.assertEqual(rows[-1]["stock_price_difference_sum"], "-2")
         self.assertEqual(rows[-1]["index_points_sum"], "20")
+        self.assertEqual(rows[-1]["stock_win_rate_pct"], "33.33")
+        self.assertEqual(rows[-1]["index_win_rate_pct"], "50.0")
+
+    def test_no_closed_calls_has_blank_win_rate(self):
+        rows = list(csv.DictReader(io.StringIO(daily_accuracy_csv({"daily_by_sell_date": {}}))))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["sell_date_ist"], "TOTAL")
+        self.assertEqual(rows[0]["stock_win_rate_pct"], "")
+        self.assertEqual(rows[0]["index_win_rate_pct"], "")
 
 if __name__ == "__main__":
     unittest.main()
