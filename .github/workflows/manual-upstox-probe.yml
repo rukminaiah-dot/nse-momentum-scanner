@@ -6,7 +6,8 @@ on:
     inputs:
       instrument_key:
         description: 'Authorized Upstox instrument key to test (not a credential)'
-        required: true
+        required: false
+        default: 'NSE_EQ|INE974X01010'
         type: string
 
 permissions:
@@ -53,13 +54,13 @@ jobs:
       - name: Probe authenticated intraday candles (no orders)
         env:
           UPSTOX_ACCESS_TOKEN: ${{ secrets.UPSTOX_ACCESS_TOKEN }}
-          INSTRUMENT_KEY: ${{ inputs.instrument_key }}
+          INSTRUMENT_KEY: ${{ inputs.instrument_key || 'NSE_EQ|INE974X01010' }}
         run: python probe_upstox_recovery.py --instrument-key "$INSTRUMENT_KEY"
 
       - name: Test isolated live websocket recovery (no orders)
         env:
           UPSTOX_ACCESS_TOKEN: ${{ secrets.UPSTOX_ACCESS_TOKEN }}
-          FIX10_TEST_INSTRUMENT_KEY: ${{ inputs.instrument_key }}
+          FIX10_TEST_INSTRUMENT_KEY: ${{ inputs.instrument_key || 'NSE_EQ|INE974X01010' }}
           FIX10_NONPRODUCTION_ACK: I_AM_IN_AN_ISOLATED_TEST
           FIX10_LIVE_STREAM_ACK: READ_ONLY_STREAM_TEST
           FIX10_ISOLATED_RECOVERY_ACK: READ_ONLY_HISTORY
