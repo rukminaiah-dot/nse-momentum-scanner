@@ -28,7 +28,7 @@ def validated_completed_rows(rows, now_ist):
         if not isinstance(row[0], str):
             raise ValueError("invalid candle timestamp type")
         stamp = datetime.fromisoformat(row[0])
-        if stamp.tzinfo is None:
+        if stamp.tzinfo is None or stamp.utcoffset() is None:
             raise ValueError("candle timezone missing")
         minute = stamp.astimezone(IST).replace(tzinfo=None)
         if minute.date() != session or minute >= cutoff:
