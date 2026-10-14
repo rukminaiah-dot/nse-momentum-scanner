@@ -17,6 +17,8 @@ def validated_completed_rows(rows, now_ist):
     session = cutoff.date()
     result = {}
     for row in rows:
+        if not isinstance(row, (list, tuple)):
+            raise ValueError("invalid Upstox candle row")
         if len(row) < 6:
             raise ValueError("incomplete Upstox candle")
         stamp = datetime.fromisoformat(str(row[0]))
