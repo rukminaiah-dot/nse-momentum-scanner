@@ -4,7 +4,6 @@ Long-only BUY -> SELL cycles, grouped by instrument, including overnight holds.
 All figures are indicative signal-price returns, not actual execution P&L.
 """
 from datetime import date, datetime, timedelta
-from .signal_accuracy_report import report_from_rows
 from .paper_signal_ledger import PaperLedger, Signal
 
 def cumulative_report(rows, *, index_symbols=()):
@@ -61,16 +60,9 @@ def cumulative_report(rows, *, index_symbols=()):
         "note": "No combined rupee P&L: quantity, execution prices, costs and index trade instrument are unknown. Points must not be added across instruments."
     }
 
-def fetch_cumulative_archive(connection, *, start_date, end_date):
-    """Include earlier entries so exits in range can match prior BUYs.
-
-    Returns observations through end_date, starting at archive inception.
-    Filter the resulting closed_calls by sell date for period-specific metrics.
-    """
-    start = date.fromisoformat(start_date)
+def fetch_cumulative_archive(connection, *, end_date):
+    """Include all earlier entries so exits can match prior BUYs."""
     end = date.fromisoformat(end_date)
-    if end < start:
-        raise ValueError("end_date must be >= start_date")
     end_exclusive = datetime.combine(end + timedelta(days=1), datetime.min.time())
     return connection.execute(
         """SELECT symbol,candle_time_ist,price,signal
