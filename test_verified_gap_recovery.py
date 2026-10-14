@@ -185,8 +185,10 @@ class GapRecoveryTests(unittest.TestCase):
         self.assertEqual([c.timestamp.minute for c in merged], list(range(39, 45)))
 
     def test_invalid_history_limit(self):
-        with self.assertRaises(ValueError):
-            merge_verified_missing([], {}, limit=0)
+        for limit in (0, -1, True, False, None, 1.5, "60"):
+            with self.subTest(limit=limit):
+                with self.assertRaisesRegex(ValueError, "invalid history limit"):
+                    merge_verified_missing([], {}, limit=limit)
 
     def test_merge_accepted_after_active_minute_advances(self):
         manager = CandleManager()
