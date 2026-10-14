@@ -43,6 +43,22 @@ class GapRecoveryTests(unittest.TestCase):
                          [c.timestamp for c in before[-60:]])
         self.assertEqual(still_active, active)
 
+    def test_merge_drops_stale_session_completed_bars(self):
+        manager = CandleManager(log_closed_candles=False)
+        key = "STALE_HISTORY"
+        today = datetime(2026, 10, 14, 9, 15, tzinfo=IST)
+        manager.update(key, 105, int(today.timestamp() * 1000))
+        old = datetime(2026, 10, 13, 15, 29, tzinfo=IST)
+        manager.completed[key] = []
+        from v2.backend.candles import Candle
+        stale = Candle(100, 0)
+        stale.timestamp = old.replace(tzinfo=None)
+        manager.completed[key].append(stale)
+        _, active = manager.recovery_snapshot(key)
+        self.assertEqual(manager.merge_recovered(key, {}, active), 0)
+        self.assertEqual(manager.recovery_snapshot(key)[0], [])
+        self.assertEqual(manager.current[key]["candle"].close, 105)
+
     def test_missing_active_boundary_never_inserts_broker_history(self):
         recovered = validated_completed_rows([row(41)], NOW)
         merged, added = merge_verified_missing([], recovered)
