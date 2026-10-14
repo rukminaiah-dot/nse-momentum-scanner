@@ -15,6 +15,7 @@ on:
       - 'test_signal_accuracy_report.py'
       - 'test_signal_archive_postgres.py'
       - 'test_signal_archive_sync.py'
+      - 'test_signal_cumulative_report.py'
       - 'probe_upstox_recovery.py'
 
 permissions:
@@ -34,4 +35,4 @@ jobs:
       - name: Compile recovery modules
         run: python -m compileall -q v2/backend probe_upstox_recovery.py
       - name: Offline regression suite
-        run: python -m unittest -v test_verified_gap_recovery test_gap_recovery_worker test_recovery_trigger test_recovery_integration test_preload_control_flow test_upstox_probe test_paper_signal_ledger test_signal_accuracy_report test_signal_archive_postgres test_signal_archive_sync
+        run: python -m unittest -v test_verified_gap_recovery test_gap_recovery_worker test_recovery_trigger test_recovery_integration test_preload_control_flow test_upstox_probe test_paper_signal_ledger test_signal_accuracy_report test_signal_archive_postgres test_signal_archive_sync test_signal_cumulative_report
