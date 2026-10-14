@@ -15,6 +15,27 @@ class Pg:
         return self.rows
 
 class ArchiveHealthTests(unittest.TestCase):
+    def test_duplicate_sqlite_keys_are_not_silently_accepted(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "signals.db"
+            with sqlite3.connect(path) as con:
+                con.execute("CREATE TABLE scanner_signal_history (symbol TEXT,candle_time TEXT,price REAL,signal TEXT)")
+                con.executemany("INSERT INTO scanner_signal_history VALUES (?,?,?,?)", [
+                    ("A", "2026-10-14 10:00:00", 100, "BUY"),
+                    ("A", "2026-10-14 10:00:00", 100, "BUY"),
+                ])
+            pg = Pg([("A", datetime(2026, 10, 14, 10), 100, "BUY")])
+            result = compare_archive_keys(path, pg)
+            self.assertEqual(result["status"], "DUPLICATE_SQLITE_OBSERVATIONS")
+            self.assertEqual(result["duplicate_sqlite_candle_keys"], 1)
+            self.assertFalse(result["available_source_reconciliation_verified"])
+            with sqlite3.connect(path) as con:
+                con.execute("UPDATE scanner_signal_history SET price=101 WHERE rowid=2")
+            result = compare_archive_keys(path, pg)
+            self.assertEqual(result["status"], "CONFLICTING_SQLITE_OBSERVATIONS")
+            self.assertEqual(result["conflicting_sqlite_candle_keys"], 1)
+            self.assertFalse(result["available_source_reconciliation_verified"])
+
     def test_missing_sqlite_database_is_not_created_by_verification(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "not-present.db"
