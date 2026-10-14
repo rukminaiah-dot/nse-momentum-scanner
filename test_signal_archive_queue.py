@@ -8,6 +8,7 @@ class ArchiveQueueTests(unittest.TestCase):
         self.assertTrue(archive.submit(("A", "2026-10-14 10:00:00", 100, "BUY")))
         self.assertFalse(archive.submit(("B", "2026-10-14 10:00:00", 200, "BUY")))
         self.assertEqual(archive.status()["dropped"], 1)
+        self.assertEqual(archive.status()["last_dropped_key"], ("B", "2026-10-14 10:00:00"))
         self.assertFalse(archive.status()["running"])
 
     def test_explicit_start_delivers_and_tracks_failures(self):
@@ -21,6 +22,7 @@ class ArchiveQueueTests(unittest.TestCase):
         self.assertTrue(completed.wait(timeout=2))
         archive.pending.join()
         self.assertEqual(archive.status()["failed"], 1)
+        self.assertEqual(archive.status()["last_failed_key"], ("A", "2026-10-14 10:00:00"))
         self.assertEqual(archive.status()["delivered"], 0)
 
     def test_invalid_capacity(self):
