@@ -43,6 +43,23 @@ class GapRecoveryTests(unittest.TestCase):
                          [c.timestamp for c in before[-60:]])
         self.assertEqual(still_active, active)
 
+    def test_merge_discards_completed_candles_at_or_after_active(self):
+        manager = CandleManager(log_closed_candles=False)
+        key = "FUTURE_COMPLETED"
+        active_stamp = datetime(2026, 10, 13, 11, 43, tzinfo=IST)
+        manager.update(key, 105, int(active_stamp.timestamp() * 1000))
+        from v2.backend.candles import Candle
+        for minute in (41, 43, 44):
+            candle = Candle(100, 0)
+            candle.timestamp = datetime(2026, 10, 13, 11, minute)
+            manager.completed.setdefault(key, []).append(candle)
+        _, active = manager.recovery_snapshot(key)
+        self.assertEqual(manager.merge_recovered(key, {}, active), 0)
+        completed, unchanged = manager.recovery_snapshot(key)
+        self.assertEqual([c.timestamp.minute for c in completed], [41])
+        self.assertEqual(unchanged, active)
+        self.assertEqual(manager.current[key]["candle"].close, 105)
+
     def test_merge_drops_stale_session_completed_bars(self):
         manager = CandleManager(log_closed_candles=False)
         key = "STALE_HISTORY"
