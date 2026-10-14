@@ -13,6 +13,9 @@ on:
       - 'test_upstox_probe.py'
       - 'probe_upstox_recovery.py'
 
+permissions:
+  contents: read
+
 jobs:
   offline-tests:
     runs-on: ubuntu-latest
@@ -24,5 +27,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Compile recovery modules
+        run: python -m compileall -q v2/backend probe_upstox_recovery.py
       - name: Offline regression suite
         run: python -m unittest -v test_verified_gap_recovery test_gap_recovery_worker test_recovery_trigger test_recovery_integration test_preload_control_flow test_upstox_probe
