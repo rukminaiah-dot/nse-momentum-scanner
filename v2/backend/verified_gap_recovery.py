@@ -54,7 +54,9 @@ def merge_verified_missing(existing, recovered, active_minute=None, limit=60):
     if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
         raise ValueError("invalid history limit")
     by_minute = {c.timestamp: c for c in existing
-                 if active_minute is None or c.timestamp.date() == active_minute.date()}
+                 if active_minute is None or (
+                     c.timestamp.date() == active_minute.date()
+                     and c.timestamp < active_minute)}
     added = []
     for minute, candle in sorted(recovered.items()):
         if getattr(candle, "timestamp", None) != minute:
