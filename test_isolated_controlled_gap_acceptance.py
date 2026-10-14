@@ -189,6 +189,29 @@ class ControlledGapTests(unittest.TestCase):
         self.assertEqual(len(calls), 0)
         self.assertEqual(bridge.candles.manager.recovery_snapshot(KEY)[0], [])
 
+    def test_malformed_initial_broker_history_never_seeds_state(self):
+        now = datetime.now(IST).replace(second=0, microsecond=0)
+        if (now - timedelta(minutes=3)).date() != now.date():
+            self.skipTest("IST day boundary")
+        calls = []
+        def fetch(key):
+            calls.append(key)
+            minute = now - timedelta(minutes=2)
+            return [[minute.isoformat(), 100, 101, 99, 100, 5],
+                    [minute.isoformat(), 100, 101, 99, 100, 5]]
+        bridge = IsolatedStreamRecovery(KEY, fetch, min_request_spacing=0.001)
+        tick = {"feeds": {KEY: {"ltpc": {
+            "ltp": 105, "ltt": str(int(now.timestamp() * 1000))}}}}
+        self.assertTrue(bridge.on_message(tick))
+        passed, reason = controlled_gap_acceptance(bridge)
+        self.assertFalse(passed)
+        self.assertEqual(reason, "initial authenticated historical fetch failed")
+        self.assertEqual(calls, [KEY])
+        history, active = bridge.candles.manager.recovery_snapshot(KEY)
+        self.assertEqual(history, [])
+        self.assertEqual(active, now.replace(tzinfo=None))
+        self.assertEqual(bridge.worker.status()["requested"], 0)
+
     def test_existing_live_completed_candle_skips_broker_fetch(self):
         now = datetime.now(IST).replace(second=0, microsecond=0)
         if (now - timedelta(minutes=2)).date() != now.date():
