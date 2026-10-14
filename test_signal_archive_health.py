@@ -34,8 +34,14 @@ class ArchiveHealthTests(unittest.TestCase):
             self.assertEqual(result["extra_archive_samples"][0]["symbol"], "OLD")
             self.assertIn("retained history", result["extra_archive_interpretation"])
             self.assertFalse(result["historical_completeness_verified"])
+            self.assertFalse(result["available_source_reconciliation_verified"])
+            self.assertEqual(result["verification_scope"], "CURRENT_SQLITE_ROWS_ONLY")
             pg.rows.append(("A", datetime(2026, 10, 14, 10, 1), 101, "SELL"))
-            self.assertEqual(compare_archive_keys(path, pg)["status"], "MATCHED_AVAILABLE_SOURCE")
+            matched = compare_archive_keys(path, pg)
+            self.assertEqual(matched["status"], "MATCHED_AVAILABLE_SOURCE")
+            self.assertTrue(matched["available_source_reconciliation_verified"])
+            self.assertFalse(matched["historical_completeness_verified"])
+            self.assertEqual(matched["historical_audit_status"], "NOT_VERIFIABLE_FROM_CURRENT_SQLITE")
 
     def test_same_keys_with_different_signal_or_price_are_mismatched(self):
         with tempfile.TemporaryDirectory() as folder:
