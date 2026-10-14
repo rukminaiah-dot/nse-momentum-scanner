@@ -40,6 +40,21 @@ class SyncTests(unittest.TestCase):
             self.assertEqual(second["observations_inserted"], 0)
             self.assertEqual(second["observations_already_present"], 3)
 
+    def test_missing_source_database_is_not_created(self):
+        with tempfile.TemporaryDirectory() as folder:
+            db = Path(folder) / "missing.db"
+            with self.assertRaises(sqlite3.OperationalError):
+                sync_observed_signals(db, FakePg())
+            self.assertFalse(db.exists())
+
+    def test_missing_history_table_is_error(self):
+        with tempfile.TemporaryDirectory() as folder:
+            db = Path(folder) / "history.db"
+            with sqlite3.connect(db) as con:
+                con.execute("CREATE TABLE unrelated (id INTEGER)")
+            with self.assertRaises(sqlite3.OperationalError):
+                sync_observed_signals(db, FakePg())
+
     def test_invalid_batch_size(self):
         with self.assertRaises(ValueError):
             sync_observed_signals("unused", FakePg(), batch_size=0)
