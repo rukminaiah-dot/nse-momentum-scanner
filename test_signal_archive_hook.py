@@ -27,8 +27,8 @@ class ArchiveHookTests(unittest.TestCase):
             connections.append(obj)
             return obj
         with patch.dict(os.environ, {"ENABLE_SIGNAL_ARCHIVE_POSTGRES": "1",
-                                     "DATABASE_URL": "postgres://example"}, clear=True), \\
-             patch.dict(sys.modules, {"psycopg": SimpleNamespace(connect=connect)}), \\
+                                     "DATABASE_URL": "postgres://example"}, clear=True), \
+             patch.dict(sys.modules, {"psycopg": SimpleNamespace(connect=connect)}), \
              patch("v2.backend.signal_archive_postgres.archive_signal_rows", return_value=1):
             try:
                 self.assertEqual(hook.archive_observed_signal("A", "2026-10-14 10:00:00", 100, "BUY"),
