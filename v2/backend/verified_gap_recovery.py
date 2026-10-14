@@ -25,7 +25,9 @@ def validated_completed_rows(rows, now_ist):
             raise ValueError("invalid Upstox candle row")
         if len(row) < 6:
             raise ValueError("incomplete Upstox candle")
-        stamp = datetime.fromisoformat(str(row[0]))
+        if not isinstance(row[0], str):
+            raise ValueError("invalid candle timestamp type")
+        stamp = datetime.fromisoformat(row[0])
         if stamp.tzinfo is None:
             raise ValueError("candle timezone missing")
         minute = stamp.astimezone(IST).replace(tzinfo=None)
