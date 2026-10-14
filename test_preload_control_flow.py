@@ -66,7 +66,12 @@ class PreloadControlFlowTests(unittest.TestCase):
         namespace = {}
         exec(compile(ast.Module(body=[preload], type_ignores=[]),
                      str(SCANNER), "exec"), namespace)
-        now = datetime.now(ZoneInfo("Asia/Kolkata"))
+        # Freeze the market-session clock; CI may run after midnight IST.
+        now = datetime(2026, 10, 14, 11, 45, tzinfo=ZoneInfo("Asia/Kolkata"))
+        class SessionDatetime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return now if tz is None else now.astimezone(tz)
         completed = (now - timedelta(minutes=2)).replace(second=0, microsecond=0)
         row = [completed.isoformat(), 100, 103, 99, 102, 15]
         calls = []
@@ -101,7 +106,7 @@ class PreloadControlFlowTests(unittest.TestCase):
                 ApiClient=lambda config: config, HistoryV3Api=FakeApi),
             os=os, Candle=FakeCandle, candles=manager,
             INDICES={}, NIFTY_200={"STOCK": "TEST_KEY"}, previous_closes={})
-        with patch.dict(os.environ, {"UPSTOX_ACCESS_TOKEN": "offline-test"}):
+        with patch("datetime.datetime", SessionDatetime), patch.dict(os.environ, {"UPSTOX_ACCESS_TOKEN": "offline-test"}):
             namespace["preload_history"]("TEST_KEY")
         self.assertEqual(calls, ["historical", "intraday"])
         self.assertEqual(len(manager.completed["TEST_KEY"]), 1)
