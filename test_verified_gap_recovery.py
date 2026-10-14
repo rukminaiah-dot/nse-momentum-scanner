@@ -238,7 +238,8 @@ class GapRecoveryTests(unittest.TestCase):
         recovered = validated_completed_rows([row(41)], NOW)
         previous_session = datetime(2026, 10, 13, 11, 42)
         self.assertEqual(manager.merge_recovered(key, recovered, previous_session), 0)
-        self.assertEqual(len(manager.completed[key]), 1)
+        self.assertEqual(manager.completed.get(key, []), [])
+        self.assertEqual(manager.current[key]["minute"].date(), datetime(2026, 10, 14).date())
 
     def test_merge_inserts_gap_without_overwriting_live(self):
         manager = CandleManager()
