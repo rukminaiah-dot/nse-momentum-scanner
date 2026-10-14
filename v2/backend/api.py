@@ -500,3 +500,26 @@ def download_cumulative_signal_accuracy(end_date: str):
         headers={"Content-Disposition":
                  'attachment; filename="paper_signal_accuracy_' + end_date + '.csv"'},
     )
+
+
+@app.get("/api/v2/signal-accuracy/paper-pnl")
+def get_signal_paper_pnl(
+    end_date: str,
+    notional_inr: float = 10000,
+    round_trip_cost_pct: float = 0,
+):
+    """Explicit assumptions; no real broker P&L or index rupee estimates."""
+    from fastapi import HTTPException
+    from .signal_paper_pnl import model_stock_pnl
+    report = get_cumulative_signal_accuracy(end_date)
+    try:
+        result = model_stock_pnl(
+            report,
+            notional_inr=notional_inr,
+            round_trip_cost_pct=round_trip_cost_pct,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    result["through_date_ist"] = end_date
+    result["order_execution_enabled"] = False
+    return result
