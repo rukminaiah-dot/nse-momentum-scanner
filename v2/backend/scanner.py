@@ -162,11 +162,17 @@ def preload_history(key):
     to_date = today - timedelta(days=1)
     from_date = to_date - timedelta(days=7)
 
-    response = api.get_historical_candle_data1(
-        key, "minutes", "1",
-        str(to_date), str(from_date)
-    )
-    rows = response.data.candles or []
+    # A previous-session history outage must not prevent today's completed
+    # intraday candles from warming the scanner.
+    try:
+        response = api.get_historical_candle_data1(
+            key, "minutes", "1",
+            str(to_date), str(from_date)
+        )
+        rows = response.data.candles or []
+    except Exception as exc:
+        print("HISTORICAL PRELOAD FAILED:", key, type(exc).__name__, flush=True)
+        rows = []
 
     if not rows:
         print("PRELOAD: no historical candles for", key)
