@@ -29,6 +29,7 @@ class ArchiveHealthTests(unittest.TestCase):
             result = compare_archive_keys(path, pg)
             self.assertEqual(result["status"], "MISSING_ARCHIVE_ROWS")
             self.assertEqual(result["missing_from_archive"], 1)
+            self.assertEqual(result["missing_samples"][0]["symbol"], "A")
             self.assertEqual(result["extra_archive_observations"], 1)
             self.assertFalse(result["historical_completeness_verified"])
             pg.rows.append(("A", datetime(2026, 10, 14, 10, 1), 101, "SELL"))
@@ -50,6 +51,10 @@ class ArchiveHealthTests(unittest.TestCase):
             result = compare_archive_keys(path, pg)
             self.assertEqual(result["missing_from_archive"], 0)
             self.assertEqual(result["mismatched_archive_values"], 2)
+            self.assertEqual(result["mismatched_samples"][0]["sqlite_signal"], "BUY")
+            self.assertEqual(result["mismatched_samples"][0]["postgres_signal"], "HOLD")
+            self.assertEqual(result["mismatched_samples"][1]["sqlite_price"], 101.0)
+            self.assertEqual(result["mismatched_samples"][1]["postgres_price"], 102.0)
             self.assertEqual(result["status"], "MISMATCHED_ARCHIVE_VALUES")
             self.assertFalse(result["historical_completeness_verified"])
 
