@@ -64,6 +64,9 @@ def compare_archive_keys(sqlite_path, pg_connection):
             "Archive-only rows may be valid retained history absent from current SQLite; "
             "they are not automatically treated as corruption."
         ),
+        "available_source_reconciliation_verified": not (missing or mismatched),
         "historical_completeness_verified": False,
+        "verification_scope": "CURRENT_SQLITE_ROWS_ONLY",
+        "historical_audit_status": "NOT_VERIFIABLE_FROM_CURRENT_SQLITE",
         "note": "Only currently available SQLite observations checked; lost prior history cannot be verified."
     }
