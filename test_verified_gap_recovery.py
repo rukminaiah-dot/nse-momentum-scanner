@@ -103,7 +103,8 @@ class GapRecoveryTests(unittest.TestCase):
 
     def test_no_synthetic_missing_minutes(self):
         recovered = validated_completed_rows([row(40), row(43)], NOW)
-        merged, added = merge_verified_missing([], recovered)
+        merged, added = merge_verified_missing(
+            [], recovered, active_minute=datetime(2026, 10, 13, 11, 44))
         self.assertEqual([t.minute for t in added], [40, 43])
         self.assertEqual(len(merged), 2)
 
@@ -114,7 +115,8 @@ class GapRecoveryTests(unittest.TestCase):
 
     def test_history_limit(self):
         recovered = validated_completed_rows([row(i) for i in range(35, 45)], NOW)
-        merged, added = merge_verified_missing([], recovered, limit=6)
+        merged, added = merge_verified_missing(
+            [], recovered, active_minute=datetime(2026, 10, 13, 11, 45), limit=6)
         self.assertEqual(len(added), 6)
         self.assertEqual([t.minute for t in added], list(range(39, 45)))
         self.assertEqual([c.timestamp.minute for c in merged], list(range(39, 45)))
