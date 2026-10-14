@@ -58,7 +58,7 @@ def main(argv=None):
                 rows = fetch_cumulative_archive(pg, end_date=args.end_date)
                 result = cumulative_report(rows, index_symbols=set(INDICES))
                 print(json.dumps(result, sort_keys=True))
-    except (psycopg.Error, sqlite3.Error, OSError) as exc:
+    except (psycopg.Error, sqlite3.Error, OSError, ValueError) as exc:
         print("ERROR: signal archive operation failed (" + type(exc).__name__ + ")", file=sys.stderr)
         return 1
     return 0
