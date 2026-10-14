@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from v2.backend.verified_gap_recovery import validated_completed_rows, merge_verified_missing
 from v2.backend.candle_manager import CandleManager
+from v2.backend.candles import Candle
 
 IST = ZoneInfo("Asia/Kolkata")
 NOW = datetime(2026, 10, 13, 11, 45, tzinfo=IST)
