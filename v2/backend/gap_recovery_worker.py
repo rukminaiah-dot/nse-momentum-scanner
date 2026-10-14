@@ -59,7 +59,10 @@ class GapRecoveryWorker:
                 self._threads.discard(thread)
                 self._last_attempt.pop(key, None)
                 self._stats["requested"] -= 1
-            raise
+                self._stats["failed"] += 1
+            # Never propagate thread startup failures into a websocket
+            # callback. Release the pending slot and report rejection.
+            return False
         return True
 
     def _run(self, key):
