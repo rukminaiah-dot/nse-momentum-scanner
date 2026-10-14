@@ -229,6 +229,18 @@ class GapRecoveryTests(unittest.TestCase):
         recovered = validated_completed_rows([row(41)], NOW)
         self.assertEqual(manager.merge_recovered(key, recovered, datetime(2026, 10, 13, 11, 43)), 0)
 
+    def test_cross_session_rollover_returns_no_closed_candle(self):
+        manager = CandleManager(log_closed_candles=False)
+        key = "NEW_SESSION"
+        previous = datetime(2026, 10, 13, 15, 29, tzinfo=IST)
+        today = datetime(2026, 10, 14, 9, 15, tzinfo=IST)
+        self.assertIsNone(manager.update(key, 100, int(previous.timestamp() * 1000)))
+        self.assertIsNone(manager.update(key, 105, int(today.timestamp() * 1000)))
+        history, active = manager.recovery_snapshot(key)
+        self.assertEqual(history, [])
+        self.assertEqual(active, today.replace(tzinfo=None))
+        self.assertEqual(manager.current[key]["candle"].close, 105)
+
     def test_delayed_merge_rejected_across_session_boundary(self):
         manager = CandleManager()
         key = "TEST"
