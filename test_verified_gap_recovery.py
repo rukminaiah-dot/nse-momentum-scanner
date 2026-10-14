@@ -54,6 +54,25 @@ class GapRecoveryTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, "boolean OHLCV"):
                         validated_completed_rows([malformed], NOW)
 
+    def test_invalid_broker_batch_cannot_partially_merge(self):
+        manager = CandleManager(log_closed_candles=False)
+        key = "ATOMIC_BATCH"
+        for minute in (40, 43):
+            stamp = datetime(2026, 10, 13, 11, minute, tzinfo=IST)
+            manager.update(key, 100, int(stamp.timestamp() * 1000), 10)
+        original, active = manager.recovery_snapshot(key)
+        self.assertEqual([c.timestamp.minute for c in original], [40])
+        malformed = row(42)
+        malformed[4] = float("nan")
+        with self.assertRaises(ValueError):
+            verified = validated_completed_rows([row(41), malformed], NOW)
+            manager.merge_recovered(key, verified, active)
+        after, current = manager.recovery_snapshot(key)
+        self.assertEqual(current, active)
+        self.assertEqual(len(after), len(original))
+        self.assertTrue(all(a is b for a, b in zip(after, original)))
+        self.assertEqual(manager.current[key]["candle"].close, 100)
+
     def test_reject_bad_ohlcv(self):
         for bad in ([row(42, -1)], [row(42), row(42)],
                     [[row(42)[0], 100, 98, 99, 102, 10]],
