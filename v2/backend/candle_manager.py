@@ -54,6 +54,9 @@ class CandleManager:
             # The feed may advance while Upstox responds. Verified historical
             # minutes remain safe to insert if still strictly before active.
             merged, added = merge_verified_missing(self.completed.get(key, []), recovered, active_minute=active)
-            if added:
+            # Apply retention even when the broker supplied no missing bars.
+            # Otherwise an uninterrupted feed can leave completed history
+            # unbounded whenever recovery requests are idempotent.
+            if added or len(merged) != len(self.completed.get(key, [])):
                 self.completed[key] = merged
             return len(added)
