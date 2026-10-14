@@ -68,6 +68,43 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertEqual(worker.status()["pending"], 0)
 
+    def test_join_waits_for_registered_thread_to_start(self):
+        import time
+        registered = threading.Event()
+        allow_start = threading.Event()
+        fetch_entered = threading.Event()
+        release_fetch = threading.Event()
+        original_start = threading.Thread.start
+
+        def delayed_start(thread):
+            registered.set()
+            if not allow_start.wait(2):
+                raise TimeoutError("start barrier")
+            return original_start(thread)
+
+        def fetch(_):
+            fetch_entered.set()
+            release_fetch.wait(2)
+            return []
+
+        worker = GapRecoveryWorker(fetch, lambda _: ([object()], object()),
+                                   lambda *args: 0)
+        driver = threading.Thread(target=lambda: worker.request("A"))
+        with patch.object(threading.Thread, "start", delayed_start):
+            original_start(driver)
+            try:
+                self.assertTrue(registered.wait(1))
+                start = time.monotonic()
+                worker.join(timeout=0.08)
+                self.assertGreaterEqual(time.monotonic() - start, 0.06)
+                self.assertEqual(worker.status()["pending"], 1)
+            finally:
+                allow_start.set()
+                driver.join(timeout=2)
+                release_fetch.set()
+        worker.join(timeout=2)
+        self.assertEqual(worker.status()["pending"], 0)
+
     def test_join_rejects_invalid_timeouts(self):
         worker = GapRecoveryWorker(lambda key: [], lambda key: ([], None),
                                    lambda *args: 0)
