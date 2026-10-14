@@ -39,6 +39,15 @@ class GapRecoveryTests(unittest.TestCase):
         got = validated_completed_rows([row(44), row(42), row(45)], NOW)
         self.assertEqual([t.minute for t in sorted(got)], [42, 44])
 
+    def test_reject_boolean_ohlcv_fields(self):
+        for column in range(1, 6):
+            for value in (True, False):
+                with self.subTest(column=column, value=value):
+                    malformed = row(42)
+                    malformed[column] = value
+                    with self.assertRaisesRegex(ValueError, "boolean OHLCV"):
+                        validated_completed_rows([malformed], NOW)
+
     def test_reject_bad_ohlcv(self):
         for bad in ([row(42, -1)], [row(42), row(42)],
                     [[row(42)[0], 100, 98, 99, 102, 10]],
