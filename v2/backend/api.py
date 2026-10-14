@@ -485,6 +485,11 @@ def get_cumulative_signal_accuracy(end_date: str):
     result = cumulative_report(rows, index_symbols=set(INDICES))
     result["through_date_ist"] = end_date
     result["archive_reconciliation_status"] = "NOT_VERIFIED_FOR_THIS_REQUEST"
+    result["archive_reading_scope"] = "BUY_SELL_ONLY"
+    result["archive_empty_warning"] = (
+        "No archived BUY/SELL readings found; this does not prove no scanner signals occurred."
+        if result["observation_status"] == "NO_ARCHIVED_BUY_SELL_READINGS" else None
+    )
     result["historical_completeness_verified"] = False
     result["archive_integrity_note"] = (
         "PostgreSQL signal values were not reconciled against SQLite for this request; "
