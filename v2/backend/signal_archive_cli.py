@@ -50,7 +50,8 @@ def main(argv=None):
             elif args.action == "verify":
                 result = compare_archive_keys(DB_PATH, pg)
                 print(json.dumps(result, sort_keys=True))
-                if result["missing_from_archive"] or result["mismatched_archive_values"]:
+                if (not result["available_source_reconciliation_verified"]
+                        or result["missing_from_archive"] or result["mismatched_archive_values"]):
                     return 3
             else:
                 rows = fetch_cumulative_archive(pg, end_date=args.end_date)
