@@ -18,6 +18,13 @@ def sync_observed_signals(sqlite_path, pg_connection, *, batch_size=500):
         raise ValueError("batch_size must be a positive integer")
     scanned = inserted = 0
     with sqlite3.connect(f"file:{sqlite_path}?mode=ro", uri=True, timeout=10) as source:
+        duplicates = source.execute(
+            """SELECT symbol,candle_time FROM scanner_signal_history
+               WHERE signal IN ('BUY','SELL','HOLD') AND price IS NOT NULL
+               GROUP BY symbol,candle_time HAVING COUNT(*) > 1 LIMIT 1"""
+        ).fetchone()
+        if duplicates is not None:
+            raise ValueError("duplicate SQLite candle keys; resolve before manual archive sync")
         cursor = source.execute(
             """SELECT symbol,candle_time,price,signal
                FROM scanner_signal_history
