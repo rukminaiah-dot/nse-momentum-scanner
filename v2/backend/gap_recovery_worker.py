@@ -116,7 +116,12 @@ class GapRecoveryWorker:
         for thread in threads:
             # request() registers a worker just before thread.start(); a
             # concurrent shutdown can observe it before it has started.
-            if thread.ident is None:
-                continue
-            thread.join(timeout=None if deadline is None else
-                        max(0, deadline - time.monotonic()))
+            # A registered thread may not have started yet. Wait for its
+            # registration to finish, bounded by the same overall deadline.
+            while thread.ident is None and thread in self._threads:
+                if deadline is not None and time.monotonic() >= deadline:
+                    break
+                time.sleep(0.001)
+            if thread.ident is not None:
+                thread.join(timeout=None if deadline is None else
+                            max(0, deadline - time.monotonic()))
