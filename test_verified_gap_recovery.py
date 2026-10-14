@@ -262,6 +262,21 @@ class GapRecoveryTests(unittest.TestCase):
         recovered = validated_completed_rows([row(41)], NOW)
         self.assertEqual(manager.merge_recovered(key, recovered, datetime(2026, 10, 13, 11, 43)), 0)
 
+    def test_previous_session_response_cannot_repopulate_new_day(self):
+        manager = CandleManager(log_closed_candles=False)
+        key = "STALE_RESPONSE"
+        yesterday = datetime(2026, 10, 13, 15, 29, tzinfo=IST)
+        manager.update(key, 100, int(yesterday.timestamp() * 1000))
+        _, previous_active = manager.recovery_snapshot(key)
+        today = datetime(2026, 10, 14, 9, 15, tzinfo=IST)
+        manager.update(key, 105, int(today.timestamp() * 1000))
+        recovered = validated_completed_rows([row(41)], NOW)
+        self.assertEqual(manager.merge_recovered(key, recovered, previous_active), 0)
+        history, active = manager.recovery_snapshot(key)
+        self.assertEqual(history, [])
+        self.assertEqual(active, today.replace(tzinfo=None))
+        self.assertEqual(manager.current[key]["candle"].close, 105)
+
     def test_new_session_rollover_does_not_clear_other_instruments(self):
         manager = CandleManager(log_closed_candles=False)
         previous = datetime(2026, 10, 13, 15, 28, tzinfo=IST)
