@@ -39,6 +39,9 @@ class SyncTests(unittest.TestCase):
             self.assertEqual((first["observations_scanned"], first["observations_inserted"]), (3, 3))
             self.assertEqual(second["observations_inserted"], 0)
             self.assertEqual(second["observations_already_present"], 3)
+            self.assertFalse(second["existing_values_overwritten"])
+            self.assertFalse(second["existing_value_matches_verified"])
+            self.assertIn("verify", second["next_step"])
 
     def test_missing_source_database_is_not_created(self):
         with tempfile.TemporaryDirectory() as folder:
