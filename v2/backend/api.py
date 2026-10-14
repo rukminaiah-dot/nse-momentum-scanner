@@ -484,6 +484,12 @@ def get_cumulative_signal_accuracy(end_date: str):
         raise HTTPException(status_code=503, detail="PostgreSQL signal archive unavailable") from exc
     result = cumulative_report(rows, index_symbols=set(INDICES))
     result["through_date_ist"] = end_date
+    result["archive_reconciliation_status"] = "NOT_VERIFIED_FOR_THIS_REQUEST"
+    result["historical_completeness_verified"] = False
+    result["archive_integrity_note"] = (
+        "PostgreSQL signal values were not reconciled against SQLite for this request; "
+        "missing or stale observations may change paper results."
+    )
     result["order_execution_enabled"] = False
     return result
 
