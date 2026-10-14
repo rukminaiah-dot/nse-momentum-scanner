@@ -6,7 +6,7 @@ FIELDS = (
     "sell_date_ist", "stock_closed", "stock_wins", "stock_losses", "stock_flat",
     "stock_win_rate_pct", "index_closed", "index_wins", "index_losses",
     "index_flat", "index_win_rate_pct", "stock_price_difference_sum",
-    "index_points_sum",
+    "index_points_sum", "archive_reconciliation_status",
 )
 COUNTS = ("stock_closed", "stock_wins", "stock_losses", "stock_flat",
           "index_closed", "index_wins", "index_losses", "index_flat")
@@ -31,9 +31,11 @@ def daily_accuracy_csv(report):
             totals[name] += item[name]
         item["stock_win_rate_pct"] = _rate(item["stock_wins"], item["stock_closed"])
         item["index_win_rate_pct"] = _rate(item["index_wins"], item["index_closed"])
+        item["archive_reconciliation_status"] = report.get("archive_reconciliation_status", "NOT_VERIFIED_FOR_THIS_REQUEST")
         writer.writerow(item)
     writer.writerow({
         "sell_date_ist": "TOTAL", **totals,
+        "archive_reconciliation_status": report.get("archive_reconciliation_status", "NOT_VERIFIED_FOR_THIS_REQUEST"),
         "stock_win_rate_pct": _rate(totals["stock_wins"], totals["stock_closed"]),
         "index_win_rate_pct": _rate(totals["index_wins"], totals["index_closed"]),
     })
