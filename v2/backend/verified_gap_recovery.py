@@ -11,6 +11,8 @@ IST = ZoneInfo("Asia/Kolkata")
 
 def validated_completed_rows(rows, now_ist):
     """Return completed same-day Upstox OHLCV candles, or raise on bad data."""
+    if not isinstance(now_ist, datetime):
+        raise ValueError("current time must be datetime")
     if now_ist.tzinfo is None or now_ist.utcoffset() is None:
         raise ValueError("current time timezone missing")
     cutoff = now_ist.astimezone(IST).replace(second=0, microsecond=0, tzinfo=None)
