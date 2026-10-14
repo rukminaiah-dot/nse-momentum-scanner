@@ -57,6 +57,8 @@ class CandleManager:
             # Apply retention even when the broker supplied no missing bars.
             # Otherwise an uninterrupted feed can leave completed history
             # unbounded whenever recovery requests are idempotent.
-            if added or len(merged) != len(self.completed.get(key, [])):
+            existing = self.completed.get(key, [])
+            if len(merged) != len(existing) or any(
+                    a is not b for a, b in zip(merged, existing)):
                 self.completed[key] = merged
             return len(added)
