@@ -313,6 +313,36 @@ class GapRecoveryTests(unittest.TestCase):
         self.assertEqual([c.timestamp for c in history],
                          [next_day.replace(tzinfo=None)])
 
+    def test_first_live_tick_preserves_same_day_preload(self):
+        manager = CandleManager(log_closed_candles=False)
+        key = "PRELOADED"
+        first = datetime(2026, 10, 14, 9, 15)
+        second = datetime(2026, 10, 14, 9, 16)
+        previous = datetime(2026, 10, 13, 15, 29)
+        old = Candle(90, 1)
+        old.timestamp = previous
+        a = Candle(100, 1)
+        a.timestamp = first
+        b = Candle(101, 1)
+        b.timestamp = second
+        manager.completed[key] = [old, b, a]
+        live = datetime(2026, 10, 14, 9, 17, tzinfo=IST)
+        self.assertIsNone(manager.update(key, 102, int(live.timestamp() * 1000)))
+        history, active = manager.recovery_snapshot(key)
+        self.assertEqual(history, [a, b])
+        self.assertEqual(active, live.replace(tzinfo=None))
+        self.assertEqual(manager.current[key]["candle"].close, 102)
+
+    def test_first_live_tick_discards_preload_at_or_after_active_minute(self):
+        manager = CandleManager(log_closed_candles=False)
+        key = "FUTURE_PRELOAD"
+        at_active = Candle(100, 1)
+        at_active.timestamp = datetime(2026, 10, 14, 9, 17)
+        manager.completed[key] = [at_active]
+        live = datetime(2026, 10, 14, 9, 17, tzinfo=IST)
+        manager.update(key, 102, int(live.timestamp() * 1000))
+        self.assertEqual(manager.recovery_snapshot(key)[0], [])
+
     def test_first_tick_discards_orphaned_completed_history(self):
         manager = CandleManager(log_closed_candles=False)
         key = "REINITIALIZED"
