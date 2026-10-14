@@ -13,6 +13,22 @@ def row(minute, volume=10):
             100, 103, 99, 102, volume]
 
 class GapRecoveryTests(unittest.TestCase):
+    def test_idempotent_manager_recovery_still_trims_completed_history(self):
+        manager = CandleManager(log_closed_candles=False)
+        key = "RETENTION_TEST"
+        base = datetime(2026, 10, 13, 10, 0, tzinfo=IST)
+        for offset in range(75):
+            stamp = int((base + timedelta(minutes=offset)).timestamp() * 1000)
+            manager.update(key, 100 + offset, stamp)
+        before, active = manager.recovery_snapshot(key)
+        self.assertEqual(len(before), 74)
+        self.assertEqual(manager.merge_recovered(key, {}, active), 0)
+        after, still_active = manager.recovery_snapshot(key)
+        self.assertEqual(len(after), 60)
+        self.assertEqual([c.timestamp for c in after],
+                         [c.timestamp for c in before[-60:]])
+        self.assertEqual(still_active, active)
+
     def test_completed_only_and_order(self):
         got = validated_completed_rows([row(44), row(42), row(45)], NOW)
         self.assertEqual([t.minute for t in sorted(got)], [42, 44])
