@@ -27,6 +27,8 @@ def validated_completed_rows(rows, now_ist):
             continue
         if minute.second or minute.microsecond or minute in result:
             raise ValueError("invalid or duplicate candle minute")
+        if any(isinstance(value, bool) for value in row[1:6]):
+            raise ValueError("boolean OHLCV value")
         o, h, l, c, v = (float(x) for x in row[1:6])
         from math import isfinite
         if not all(isfinite(x) for x in (o, h, l, c, v)):
