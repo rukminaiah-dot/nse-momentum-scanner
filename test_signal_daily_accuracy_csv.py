@@ -18,6 +18,8 @@ class DailyAccuracyCsvTests(unittest.TestCase):
         self.assertEqual(rows[0]["index_points_sum"], "-25.0")
         self.assertEqual(rows[0]["stock_price_difference_sum"], "3.5")
         self.assertEqual(rows[1]["sell_date_ist"], "TOTAL")
+        self.assertEqual(rows[0]["archive_reconciliation_status"], "NOT_VERIFIED_FOR_THIS_REQUEST")
+        self.assertEqual(rows[1]["archive_reconciliation_status"], "NOT_VERIFIED_FOR_THIS_REQUEST")
         self.assertEqual(rows[1]["stock_closed"], "2")
         self.assertEqual(rows[1]["index_points_sum"], "-25.0")
         self.assertEqual(rows[0]["stock_win_rate_pct"], "50.0")
