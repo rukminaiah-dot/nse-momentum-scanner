@@ -39,6 +39,13 @@ class GapRecoveryTests(unittest.TestCase):
         got = validated_completed_rows([row(44), row(42), row(45)], NOW)
         self.assertEqual([t.minute for t in sorted(got)], [42, 44])
 
+    def test_reject_malformed_top_level_broker_batches(self):
+        for malformed in (None, 123, True, {"candles": [row(42)]},
+                          "not a candle batch"):
+            with self.subTest(malformed=repr(malformed)):
+                with self.assertRaisesRegex(ValueError, "invalid Upstox candle batch"):
+                    validated_completed_rows(malformed, NOW)
+
     def test_reject_malformed_broker_row_shapes(self):
         for malformed in (None, 123, True, {"timestamp": "bad"}, "bad"):
             with self.subTest(malformed=repr(malformed)):
