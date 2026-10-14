@@ -29,6 +29,29 @@ class PreloadControlFlowTests(unittest.TestCase):
                 return
         self.fail("expected historical empty-rows guard")
 
+    def test_historical_failure_does_not_skip_intraday(self):
+        tree = ast.parse(SCANNER.read_text())
+        preload = next(n for n in tree.body
+                       if isinstance(n, ast.FunctionDef) and n.name == "preload_history")
+        historical_calls = [
+            n for n in ast.walk(preload)
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+            and n.func.attr == "get_historical_candle_data1"
+        ]
+        self.assertEqual(len(historical_calls), 1)
+        protected = [
+            n for n in ast.walk(preload)
+            if isinstance(n, ast.Try)
+            and any(call is historical_calls[0]
+                    for stmt in n.body for call in ast.walk(stmt))
+        ]
+        self.assertTrue(protected, "historical endpoint must be guarded")
+        self.assertTrue(any(n.handlers for n in protected))
+        self.assertTrue(any(
+            isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+            and n.func.attr == "get_intra_day_candle_data"
+            for n in ast.walk(preload)))
+
     def test_empty_history_still_loads_completed_intraday_rows(self):
         """Exercise preload with fake Upstox; no credentials or network."""
         import os
