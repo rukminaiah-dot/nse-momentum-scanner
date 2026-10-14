@@ -32,10 +32,14 @@ def cumulative_report(rows, *, index_symbols=()):
         day = trade.sold_at.date().isoformat()
         item = by_day.setdefault(day, {"stock_closed": 0, "index_closed": 0,
                                         "stock_wins": 0, "index_wins": 0,
+                                        "stock_losses": 0, "index_losses": 0,
+                                        "stock_flat": 0, "index_flat": 0,
                                         "stock_points": 0.0, "index_points": 0.0})
         kind = trade.kind
         item[kind + "_closed"] += 1
         item[kind + "_wins"] += int(trade.points > 0)
+        item[kind + "_losses"] += int(trade.points < 0)
+        item[kind + "_flat"] += int(trade.points == 0)
         item[kind + "_points"] += trade.points
     return {
         "mode": "PAPER_SIGNALS_ONLY",
