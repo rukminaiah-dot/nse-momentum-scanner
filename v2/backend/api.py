@@ -536,3 +536,17 @@ def get_signal_archive_health():
     result["mode"] = "OBSERVABILITY_ONLY"
     result["order_execution_enabled"] = False
     return result
+
+
+@app.get("/api/v2/signal-accuracy/daily-summary.csv")
+def download_daily_signal_accuracy_summary(end_date: str):
+    """Download per-day closed signal calls; not executed broker trades."""
+    from fastapi.responses import Response
+    from .signal_daily_accuracy_csv import daily_accuracy_csv
+    report = get_cumulative_signal_accuracy(end_date)
+    return Response(
+        content=daily_accuracy_csv(report),
+        media_type="text/csv",
+        headers={"Content-Disposition":
+                 'attachment; filename="paper_signal_daily_summary_' + end_date + '.csv"'},
+    )
