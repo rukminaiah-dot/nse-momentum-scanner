@@ -51,7 +51,7 @@ def validated_completed_rows(rows, now_ist):
 
 def merge_verified_missing(existing, recovered, active_minute=None, limit=60):
     """Insert only absent completed minutes; never overwrite live candles."""
-    if limit < 1:
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
         raise ValueError("invalid history limit")
     by_minute = {c.timestamp: c for c in existing}
     added = []
