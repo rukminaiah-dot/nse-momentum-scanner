@@ -5,6 +5,21 @@ from unittest.mock import patch
 from v2.backend.gap_recovery_worker import GapRecoveryWorker
 
 class WorkerTests(unittest.TestCase):
+    def test_thread_construction_failure_releases_pending(self):
+        worker = GapRecoveryWorker(
+            lambda key: [], lambda key: ([], None), lambda *args: 0)
+        with patch("v2.backend.gap_recovery_worker.threading.Thread",
+                   side_effect=RuntimeError("thread allocation failed")):
+            self.assertFalse(worker.request("A"))
+        status = worker.status()
+        self.assertEqual(status["pending"], 0)
+        self.assertEqual(status["requested"], 0)
+        self.assertEqual(status["failed"], 1)
+        self.assertEqual(worker._threads, set())
+        self.assertTrue(worker.request("A"))
+        worker.join(timeout=2)
+        self.assertEqual(worker.status()["pending"], 0)
+
     def test_thread_start_failure_releases_pending_and_returns_false(self):
         worker = GapRecoveryWorker(
             lambda key: [], lambda key: ([], None), lambda *args: 0)
