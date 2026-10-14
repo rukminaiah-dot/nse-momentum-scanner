@@ -229,6 +229,21 @@ class GapRecoveryTests(unittest.TestCase):
         recovered = validated_completed_rows([row(41)], NOW)
         self.assertEqual(manager.merge_recovered(key, recovered, datetime(2026, 10, 13, 11, 43)), 0)
 
+    def test_first_tick_discards_orphaned_completed_history(self):
+        manager = CandleManager(log_closed_candles=False)
+        key = "REINITIALIZED"
+        previous = datetime(2026, 10, 13, 15, 29, tzinfo=IST)
+        today = datetime(2026, 10, 14, 9, 15, tzinfo=IST)
+        manager.update(key, 100, int(previous.timestamp() * 1000))
+        manager.update(key, 101, int((previous + timedelta(minutes=1)).timestamp() * 1000))
+        self.assertEqual(len(manager.completed[key]), 1)
+        manager.current.pop(key)
+        self.assertIsNone(manager.update(key, 105, int(today.timestamp() * 1000)))
+        history, active = manager.recovery_snapshot(key)
+        self.assertEqual(history, [])
+        self.assertEqual(active, today.replace(tzinfo=None))
+        self.assertEqual(manager.current[key]["candle"].close, 105)
+
     def test_cross_session_rollover_returns_no_closed_candle(self):
         manager = CandleManager(log_closed_candles=False)
         key = "NEW_SESSION"
