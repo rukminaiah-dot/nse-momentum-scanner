@@ -118,7 +118,7 @@ class PreloadControlFlowTests(unittest.TestCase):
         calls.clear()
         manager.completed.clear()
         FakeApi.fail_historical = True
-        with patch.dict(os.environ, {"UPSTOX_ACCESS_TOKEN": "offline-test"}):
+        with patch("datetime.datetime", SessionDatetime), patch.dict(os.environ, {"UPSTOX_ACCESS_TOKEN": "offline-test"}):
             namespace["preload_history"]("TEST_KEY")
         self.assertEqual(calls, ["historical", "intraday"])
         self.assertEqual(len(manager.completed["TEST_KEY"]), 1)
