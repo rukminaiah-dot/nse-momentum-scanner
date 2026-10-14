@@ -61,8 +61,8 @@ class GapRecoveryWorker:
                 self._last_attempt.pop(key, None)
                 self._stats["requested"] -= 1
                 self._stats["failed"] += 1
-            # Never propagate thread startup failures into a websocket
-            # callback. Release the pending slot and report rejection.
+            # Neither thread allocation nor startup may interrupt the live
+            # websocket callback. Release the slot and report failure.
             return False
         return True
 
