@@ -13,6 +13,20 @@ def row(minute, volume=10):
             100, 103, 99, 102, volume]
 
 class GapRecoveryTests(unittest.TestCase):
+    def test_idempotent_recovery_normalizes_equal_length_history(self):
+        manager = CandleManager(log_closed_candles=False)
+        key = "NORMALIZE_TEST"
+        for minute in (40, 41, 42):
+            stamp = datetime(2026, 10, 13, 11, minute, tzinfo=IST)
+            manager.update(key, 100, int(stamp.timestamp() * 1000))
+        original, active = manager.recovery_snapshot(key)
+        manager.completed[key] = list(reversed(original))
+        self.assertEqual(manager.merge_recovered(key, {}, active), 0)
+        normalized, still_active = manager.recovery_snapshot(key)
+        self.assertEqual([c.timestamp.minute for c in normalized], [40, 41])
+        self.assertTrue(all(a is b for a, b in zip(normalized, original)))
+        self.assertEqual(still_active, active)
+
     def test_idempotent_manager_recovery_still_trims_completed_history(self):
         manager = CandleManager(log_closed_candles=False)
         key = "RETENTION_TEST"
