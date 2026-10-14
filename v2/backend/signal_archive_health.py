@@ -31,7 +31,9 @@ def compare_archive_keys(sqlite_path, pg_connection):
         if source_rows[key] != archive_rows[key]
     }
     extra = archive_keys - source_keys
-    if missing:
+    if not source_keys:
+        status = "NO_AVAILABLE_SQLITE_OBSERVATIONS"
+    elif missing:
         status = "MISSING_ARCHIVE_ROWS"
     elif mismatched:
         status = "MISMATCHED_ARCHIVE_VALUES"
@@ -64,7 +66,7 @@ def compare_archive_keys(sqlite_path, pg_connection):
             "Archive-only rows may be valid retained history absent from current SQLite; "
             "they are not automatically treated as corruption."
         ),
-        "available_source_reconciliation_verified": not (missing or mismatched),
+        "available_source_reconciliation_verified": bool(source_keys) and not (missing or mismatched),
         "historical_completeness_verified": False,
         "verification_scope": "CURRENT_SQLITE_ROWS_ONLY",
         "historical_audit_status": "NOT_VERIFIABLE_FROM_CURRENT_SQLITE",
