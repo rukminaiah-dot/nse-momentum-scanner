@@ -189,6 +189,32 @@ class ControlledGapTests(unittest.TestCase):
         self.assertEqual(len(calls), 0)
         self.assertEqual(bridge.candles.manager.recovery_snapshot(KEY)[0], [])
 
+    def test_malformed_second_broker_response_cleans_controlled_state(self):
+        now = datetime.now(IST).replace(second=0, microsecond=0)
+        minutes = [now - timedelta(minutes=n) for n in (3, 2, 1)]
+        if minutes[0].date() != now.date():
+            self.skipTest("IST day boundary")
+        calls = []
+        def fetch(key):
+            calls.append(key)
+            rows = [[minute.isoformat(), 100, 101, 99, 100, 5]
+                    for minute in minutes]
+            if len(calls) == 2:
+                rows.append(rows[1][:])
+            return rows
+        bridge = IsolatedStreamRecovery(KEY, fetch, min_request_spacing=0.001)
+        tick = {"feeds": {KEY: {"ltpc": {
+            "ltp": 105, "ltt": str(int(now.timestamp() * 1000))}}}}
+        self.assertTrue(bridge.on_message(tick))
+        passed, reason = controlled_gap_acceptance(bridge)
+        self.assertFalse(passed)
+        self.assertEqual(reason, "historical recovery not verified")
+        self.assertEqual(calls, [KEY, KEY])
+        self.assertEqual(bridge.worker.status()["failed"], 1)
+        history, active = bridge.candles.manager.recovery_snapshot(KEY)
+        self.assertEqual(history, [])
+        self.assertEqual(active, now.replace(tzinfo=None))
+
     def test_malformed_initial_broker_history_never_seeds_state(self):
         now = datetime.now(IST).replace(second=0, microsecond=0)
         if (now - timedelta(minutes=3)).date() != now.date():
