@@ -17,6 +17,7 @@ on:
       - 'v2/backend/verified_gap_recovery.py'
       - 'test_gap_recovery_worker.py'
       - 'test_verified_gap_recovery.py'
+      - '.github/workflows/verified-gap-recovery.yml'
       - 'test_isolated_live_tick_candles.py'
       - 'test_isolated_stream_recovery.py'
       - 'probe_upstox_websocket_smoke.py'
