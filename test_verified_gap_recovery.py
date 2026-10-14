@@ -171,6 +171,23 @@ class GapRecoveryTests(unittest.TestCase):
         self.assertEqual(manager.merge_recovered(key, recovered, expected_active), 1)
         self.assertEqual([c.timestamp.minute for c in manager.completed[key]], [40, 41, 42])
 
+    def test_stale_broker_snapshot_never_overwrites_new_live_minute(self):
+        manager = CandleManager(log_closed_candles=False)
+        key = "ADVANCED_FEED"
+        def tick(minute, price):
+            stamp = datetime(2026, 10, 13, 11, minute, tzinfo=IST)
+            manager.update(key, price, int(stamp.timestamp() * 1000))
+        tick(40, 100)
+        tick(42, 102)
+        _, expected_active = manager.recovery_snapshot(key)
+        tick(44, 104)
+        recovered = validated_completed_rows([row(41), row(43)], NOW)
+        self.assertEqual(manager.merge_recovered(key, recovered, expected_active), 2)
+        history, active = manager.recovery_snapshot(key)
+        self.assertEqual([c.timestamp.minute for c in history], [40, 41, 42, 43])
+        self.assertEqual(active.minute, 44)
+        self.assertEqual(manager.current[key]["candle"].close, 104)
+
     def test_merge_rejects_future_snapshot(self):
         manager = CandleManager()
         key = "TEST"
