@@ -15,6 +15,8 @@ def validated_completed_rows(rows, now_ist):
         raise ValueError("current time timezone missing")
     cutoff = now_ist.astimezone(IST).replace(second=0, microsecond=0, tzinfo=None)
     session = cutoff.date()
+    if not isinstance(rows, (list, tuple)):
+        raise ValueError("invalid Upstox candle batch")
     result = {}
     for row in rows:
         if not isinstance(row, (list, tuple)):
