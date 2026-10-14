@@ -4,6 +4,7 @@ Long-only BUY -> SELL cycles, grouped by instrument, including overnight holds.
 All figures are indicative signal-price returns, not actual execution P&L.
 """
 from datetime import date, datetime, timedelta
+from math import isfinite
 from .paper_signal_ledger import PaperLedger, Signal
 
 def cumulative_report(rows, *, index_symbols=()):
@@ -18,12 +19,20 @@ def cumulative_report(rows, *, index_symbols=()):
             stamp = datetime.fromisoformat(stamp)
         if not isinstance(stamp, datetime) or stamp.tzinfo is not None:
             raise ValueError("timestamps must be naive IST datetimes")
+        if not isinstance(symbol, str) or not symbol.strip():
+            raise ValueError("archived instrument must be a nonempty string")
+        try:
+            numeric_price = float(price)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError("archived price must be finite and positive") from exc
+        if not isfinite(numeric_price) or numeric_price <= 0:
+            raise ValueError("archived price must be finite and positive")
         key = (symbol, stamp)
         if key in seen:
             continue
         seen.add(key)
         readings[side] += 1
-        normalized.append((symbol, stamp, price, side))
+        normalized.append((symbol, stamp, numeric_price, side))
     for symbol, stamp, price, side in sorted(normalized, key=lambda r: (r[1], r[0])):
         ledger.record(Signal(symbol, "index" if symbol in index_symbols else "stock",
                              side, price, stamp))
