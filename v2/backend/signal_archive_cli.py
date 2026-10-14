@@ -59,7 +59,8 @@ def main(argv=None):
                 result = cumulative_report(rows, index_symbols=set(INDICES))
                 print(json.dumps(result, sort_keys=True))
     except (psycopg.Error, sqlite3.Error, OSError, ValueError) as exc:
-        print("ERROR: signal archive operation failed (" + type(exc).__name__ + ")", file=sys.stderr)
+        detail = "duplicate SQLite candle keys" if isinstance(exc, ValueError) and "duplicate SQLite candle keys" in str(exc) else type(exc).__name__
+        print("ERROR: signal archive operation failed (" + detail + ")", file=sys.stderr)
         return 1
     return 0
 
