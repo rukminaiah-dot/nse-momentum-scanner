@@ -97,6 +97,28 @@ class CumulativeReportTests(unittest.TestCase):
             with self.subTest(row=row), self.assertRaises(ValueError):
                 cumulative_report([row])
 
+    def test_conflicting_duplicate_candle_is_rejected(self):
+        rows = [
+            ("A", "2026-10-14 09:15:00", 100, "BUY"),
+            ("A", "2026-10-14 09:15:00", 100, "SELL"),
+        ]
+        with self.assertRaisesRegex(ValueError, "conflicting archived observations"):
+            cumulative_report(rows)
+        rows[1] = ("A", "2026-10-14 09:15:00", 101, "BUY")
+        with self.assertRaisesRegex(ValueError, "conflicting archived observations"):
+            cumulative_report(rows)
+
+    def test_identical_duplicate_candle_is_deduplicated(self):
+        rows = [
+            ("A", "2026-10-14 09:15:00", 100, "BUY"),
+            ("A", "2026-10-14 09:15:00", 100, "BUY"),
+            ("A", "2026-10-14 09:20:00", 105, "SELL"),
+        ]
+        report = cumulative_report(rows)
+        self.assertEqual(report["buy_readings"], 1)
+        self.assertEqual(report["gross_closed_calls"], 1)
+        self.assertEqual(report["stock"]["wins"], 1)
+
     def test_archive_end_is_exclusive(self):
         connection = FakeConnection()
         fetch_cumulative_archive(connection, end_date="2026-10-14")
