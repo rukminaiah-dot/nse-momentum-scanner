@@ -103,6 +103,15 @@ class GapRecoveryTests(unittest.TestCase):
         got = validated_completed_rows([row(42)], NOW.astimezone(timezone.utc))
         self.assertEqual([t.minute for t in got], [42])
 
+    def test_accept_utc_broker_timestamp_and_normalize_to_ist(self):
+        from datetime import timezone
+        stamp = datetime(2026, 10, 13, 11, 42, tzinfo=IST)
+        candle_row = row(42)
+        candle_row[0] = stamp.astimezone(timezone.utc).isoformat()
+        verified = validated_completed_rows([candle_row], NOW)
+        self.assertEqual(list(verified), [stamp.replace(tzinfo=None)])
+        self.assertEqual(verified[stamp.replace(tzinfo=None)].close, 102)
+
     def test_reject_non_string_broker_timestamps(self):
         for invalid in (None, 0, True, 1234567890000):
             with self.subTest(timestamp=repr(invalid)):
