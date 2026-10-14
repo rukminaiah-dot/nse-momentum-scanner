@@ -41,6 +41,9 @@ def cumulative_report(rows, *, index_symbols=()):
         "mode": "PAPER_SIGNALS_ONLY",
         "buy_readings": readings["BUY"], "sell_readings": readings["SELL"],
         "gross_closed_calls": len(ledger.closed),
+        "gross_open_calls": len(ledger.open),
+        "gross_distinct_calls": len(ledger.closed) + len(ledger.open),
+        "call_count_rule": "One BUY opens a call per instrument; repeated BUY readings do not open more calls; first subsequent SELL closes it.",
         "stock": ledger.summary("stock"),
         "index": ledger.summary("index"),
         "closed_calls": [{
@@ -56,6 +59,8 @@ def cumulative_report(rows, *, index_symbols=()):
             "buy_time_ist": s.timestamp.isoformat(sep=" "), "buy_price": s.price
         } for s in ledger.open.values()],
         "rejected_readings": len(ledger.rejected),
+        "duplicate_buy_readings": sum(reason == "duplicate BUY" for _, reason in ledger.rejected),
+        "unmatched_sell_readings": sum(reason == "SELL without BUY" for _, reason in ledger.rejected),
         "pnl_inr": None,
         "note": "No combined rupee P&L: quantity, execution prices, costs and index trade instrument are unknown. Points must not be added across instruments."
     }
