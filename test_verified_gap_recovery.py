@@ -88,6 +88,12 @@ class GapRecoveryTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     validated_completed_rows(bad, NOW)
 
+    def test_reject_non_datetime_validation_clock(self):
+        for invalid in (None, 0, True, "2026-10-13T11:45:00+05:30"):
+            with self.subTest(clock=repr(invalid)):
+                with self.assertRaisesRegex(ValueError, "current time must be datetime"):
+                    validated_completed_rows([row(42)], invalid)
+
     def test_reject_naive_current_clock(self):
         with self.assertRaises(ValueError):
             validated_completed_rows([row(42)], datetime(2026, 10, 13, 11, 45))
