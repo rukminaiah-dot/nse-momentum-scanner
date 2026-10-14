@@ -26,8 +26,20 @@ class CandleManager:
             return None
         if item is None or item["minute"] != minute:
             if item is None:
-                # A fresh session must not inherit retained bars from an old feed.
-                self.completed.pop(key, None)
+                # Preserve same-session preload history when the first live
+                # tick arrives. Discard stale/future bars from prior sessions
+                # or a malformed preload, without altering the live candle.
+                preloaded = self.completed.get(key, [])
+                valid = [c for c in preloaded
+                         if isinstance(getattr(c, "timestamp", None), datetime)
+                         and c.timestamp.tzinfo is None
+                         and c.timestamp.date() == minute.date()
+                         and c.timestamp < minute]
+                if valid:
+                    self.completed[key] = sorted(
+                        valid, key=lambda c: c.timestamp)[-60:]
+                else:
+                    self.completed.pop(key, None)
             closed = None
             if item:
                 if item["minute"].date() != minute.date():
