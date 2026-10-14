@@ -17,7 +17,7 @@ def sync_observed_signals(sqlite_path, pg_connection, *, batch_size=500):
     if not isinstance(batch_size, int) or isinstance(batch_size, bool) or batch_size < 1:
         raise ValueError("batch_size must be a positive integer")
     scanned = inserted = 0
-    with sqlite3.connect(sqlite_path, timeout=10) as source:
+    with sqlite3.connect(f"file:{sqlite_path}?mode=ro", uri=True, timeout=10) as source:
         cursor = source.execute(
             """SELECT symbol,candle_time,price,signal
                FROM scanner_signal_history
