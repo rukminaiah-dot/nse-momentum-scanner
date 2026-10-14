@@ -34,4 +34,7 @@ def sync_observed_signals(sqlite_path, pg_connection, *, batch_size=500):
     return {"observations_scanned": scanned,
             "observations_inserted": inserted,
             "observations_already_present": scanned - inserted,
-            "mode": "EXPLICIT_READ_ONLY_SOURCE_SYNC"}
+            "mode": "EXPLICIT_READ_ONLY_SOURCE_SYNC",
+            "existing_values_overwritten": False,
+            "existing_value_matches_verified": False,
+            "next_step": "Run manual verify to detect mismatched price/signal values; sync does not repair conflicts."}
