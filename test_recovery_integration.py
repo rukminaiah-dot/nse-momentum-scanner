@@ -105,16 +105,22 @@ class WorkerIntegrationTests(unittest.TestCase):
         def tick(stamp, price):
             manager.update(key, price, int(stamp.timestamp() * 1000), 10)
         tick(yesterday, 100)
-        tick(today, 105)
-        old_history, _ = manager.recovery_snapshot(key)
+        tick(yesterday + timedelta(minutes=2), 102)
+        old_history, old_active = manager.recovery_snapshot(key)
         self.assertEqual(len(old_history), 1)
-        # Recovery snapshot taken before session rollover must not commit later.
+        self.assertEqual(old_active, (yesterday + timedelta(minutes=2)).replace(tzinfo=None))
+        # Capture a pending recovery result before the feed crosses sessions.
         recovered = {missing.replace(tzinfo=None): old_history[0]}
+        tick(today, 105)
+        history, active = manager.recovery_snapshot(key)
+        self.assertEqual(history, [], "previous-session candles must be cleared at rollover")
+        self.assertEqual(active, today.replace(tzinfo=None))
+        # The delayed previous-day response must not resurrect cleared history.
         self.assertEqual(
             manager.merge_recovered(
-                key, recovered, yesterday.replace(tzinfo=None)), 0)
+                key, recovered, old_active), 0)
         history, active = manager.recovery_snapshot(key)
-        self.assertEqual(len(history), 1)
+        self.assertEqual(history, [])
         self.assertEqual(active, today.replace(tzinfo=None))
 
 if __name__ == "__main__":
