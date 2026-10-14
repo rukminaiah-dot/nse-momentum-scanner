@@ -15,7 +15,7 @@ from datetime import date
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Manual paper signal archive maintenance")
-    parser.add_argument("action", choices=("init", "sync", "report"))
+    parser.add_argument("action", choices=("init", "sync", "report", "verify"))
     parser.add_argument("--end-date", help="IST YYYY-MM-DD, required for report")
     args = parser.parse_args(argv)
     if args.action == "report":
@@ -35,6 +35,7 @@ def main(argv=None):
     from .market_config import INDICES
     from .signal_archive_postgres import init_signal_archive
     from .signal_archive_sync import sync_observed_signals
+    from .signal_archive_health import compare_archive_keys
     from .signal_cumulative_report import cumulative_report, fetch_cumulative_archive
 
     try:
@@ -45,6 +46,11 @@ def main(argv=None):
             elif args.action == "sync":
                 result = sync_observed_signals(DB_PATH, pg)
                 print(json.dumps(result, sort_keys=True))
+            elif args.action == "verify":
+                result = compare_archive_keys(DB_PATH, pg)
+                print(json.dumps(result, sort_keys=True))
+                if result["missing_from_archive"]:
+                    return 3
             else:
                 rows = fetch_cumulative_archive(pg, end_date=args.end_date)
                 result = cumulative_report(rows, index_symbols=set(INDICES))
