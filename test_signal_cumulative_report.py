@@ -84,6 +84,19 @@ class CumulativeReportTests(unittest.TestCase):
         self.assertEqual(report["gross_open_calls"], 1)
         self.assertIsNone(report["stock"]["win_rate_pct"])
 
+    def test_invalid_archived_prices_and_symbols_fail_closed(self):
+        bad_rows = [
+            ("A", "2026-10-14 09:15:00", float("nan"), "BUY"),
+            ("A", "2026-10-14 09:15:00", float("inf"), "BUY"),
+            ("A", "2026-10-14 09:15:00", 0, "BUY"),
+            ("A", "2026-10-14 09:15:00", "invalid", "BUY"),
+            ("", "2026-10-14 09:15:00", 100, "BUY"),
+            ("A", "2026-10-14T09:15:00+05:30", 100, "BUY"),
+        ]
+        for row in bad_rows:
+            with self.subTest(row=row), self.assertRaises(ValueError):
+                cumulative_report([row])
+
     def test_archive_end_is_exclusive(self):
         connection = FakeConnection()
         fetch_cumulative_archive(connection, end_date="2026-10-14")
