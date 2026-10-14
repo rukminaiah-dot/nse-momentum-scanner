@@ -24,15 +24,34 @@ class ArchiveHealthTests(unittest.TestCase):
                     ("A", "2026-10-14 10:00:00", 100, "BUY"),
                     ("A", "2026-10-14 10:01:00", 101, "SELL"),
                 ])
-            pg = Pg([("A", datetime(2026, 10, 14, 10)),
-                     ("OLD", datetime(2026, 10, 13, 10))])
+            pg = Pg([("A", datetime(2026, 10, 14, 10), 100, "BUY"),
+                     ("OLD", datetime(2026, 10, 13, 10), 90, "SELL")])
             result = compare_archive_keys(path, pg)
             self.assertEqual(result["status"], "MISSING_ARCHIVE_ROWS")
             self.assertEqual(result["missing_from_archive"], 1)
             self.assertEqual(result["extra_archive_observations"], 1)
             self.assertFalse(result["historical_completeness_verified"])
-            pg.rows.append(("A", datetime(2026, 10, 14, 10, 1)))
+            pg.rows.append(("A", datetime(2026, 10, 14, 10, 1), 101, "SELL"))
             self.assertEqual(compare_archive_keys(path, pg)["status"], "MATCHED_AVAILABLE_SOURCE")
+
+    def test_same_keys_with_different_signal_or_price_are_mismatched(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "signals.db"
+            with sqlite3.connect(path) as con:
+                con.execute("CREATE TABLE scanner_signal_history (symbol TEXT,candle_time TEXT,price REAL,signal TEXT)")
+                con.executemany("INSERT INTO scanner_signal_history VALUES (?,?,?,?)", [
+                    ("A", "2026-10-14 10:00:00", 100, "BUY"),
+                    ("A", "2026-10-14 10:01:00", 101, "SELL"),
+                ])
+            pg = Pg([
+                ("A", datetime(2026, 10, 14, 10), 100, "HOLD"),
+                ("A", datetime(2026, 10, 14, 10, 1), 102, "SELL"),
+            ])
+            result = compare_archive_keys(path, pg)
+            self.assertEqual(result["missing_from_archive"], 0)
+            self.assertEqual(result["mismatched_archive_values"], 2)
+            self.assertEqual(result["status"], "MISMATCHED_ARCHIVE_VALUES")
+            self.assertFalse(result["historical_completeness_verified"])
 
 if __name__ == "__main__":
     unittest.main()
