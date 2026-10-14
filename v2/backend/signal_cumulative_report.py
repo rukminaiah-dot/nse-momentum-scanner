@@ -9,7 +9,7 @@ from .paper_signal_ledger import PaperLedger, Signal
 
 def cumulative_report(rows, *, index_symbols=()):
     ledger = PaperLedger()
-    seen = set()
+    seen = {}
     readings = {"BUY": 0, "SELL": 0}
     normalized = []
     for symbol, stamp, price, side in rows:
@@ -29,8 +29,10 @@ def cumulative_report(rows, *, index_symbols=()):
             raise ValueError("archived price must be finite and positive")
         key = (symbol, stamp)
         if key in seen:
+            if seen[key] != (numeric_price, side):
+                raise ValueError("conflicting archived observations for one candle")
             continue
-        seen.add(key)
+        seen[key] = (numeric_price, side)
         readings[side] += 1
         normalized.append((symbol, stamp, numeric_price, side))
     for symbol, stamp, price, side in sorted(normalized, key=lambda r: (r[1], r[0])):
