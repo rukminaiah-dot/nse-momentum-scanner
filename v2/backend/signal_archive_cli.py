@@ -4,6 +4,7 @@ Examples (from repository root, in an authorized environment):
   python -m v2.backend.signal_archive_cli init
   python -m v2.backend.signal_archive_cli sync
   python -m v2.backend.signal_archive_cli report --end-date 2026-10-14
+  python -m v2.backend.signal_archive_cli verify
 
 No command runs on import. Never prints DATABASE_URL or credentials.
 """
