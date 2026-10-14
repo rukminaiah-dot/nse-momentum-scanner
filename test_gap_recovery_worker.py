@@ -34,7 +34,7 @@ class WorkerTests(unittest.TestCase):
         self.assertTrue(worker.request("A"))
         worker.join(timeout=2)
         self.assertEqual(worker.status()["skipped"], 1)
-
+        self.assertEqual(worker.status()["pending"], 0)
 
     def test_join_during_thread_registration_does_not_raise(self):
         registered = threading.Event()
