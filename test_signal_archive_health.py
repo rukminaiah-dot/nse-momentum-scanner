@@ -15,6 +15,19 @@ class Pg:
         return self.rows
 
 class ArchiveHealthTests(unittest.TestCase):
+    def test_empty_sqlite_source_is_inconclusive_even_if_postgres_has_history(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "signals.db"
+            with sqlite3.connect(path) as con:
+                con.execute("CREATE TABLE scanner_signal_history (symbol TEXT,candle_time TEXT,price REAL,signal TEXT)")
+            for archive_rows in ([], [("OLD", datetime(2026, 10, 13, 10), 90, "BUY")]):
+                with self.subTest(archive_rows=archive_rows):
+                    result = compare_archive_keys(path, Pg(archive_rows))
+                    self.assertEqual(result["status"], "NO_AVAILABLE_SQLITE_OBSERVATIONS")
+                    self.assertFalse(result["available_source_reconciliation_verified"])
+                    self.assertFalse(result["historical_completeness_verified"])
+                    self.assertEqual(result["sqlite_available_observations"], 0)
+
     def test_missing_rows_detected_even_with_extra_archive_rows(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "signals.db"
