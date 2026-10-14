@@ -482,7 +482,11 @@ def get_cumulative_signal_accuracy(end_date: str):
     except psycopg.Error as exc:
         print("SIGNAL_ARCHIVE_READ_ERROR:", type(exc).__name__, flush=True)
         raise HTTPException(status_code=503, detail="PostgreSQL signal archive unavailable") from exc
-    result = cumulative_report(rows, index_symbols=set(INDICES))
+    try:
+        result = cumulative_report(rows, index_symbols=set(INDICES))
+    except (ValueError, TypeError, OverflowError) as exc:
+        print("SIGNAL_ARCHIVE_INVALID_DATA:", type(exc).__name__, flush=True)
+        raise HTTPException(status_code=503, detail="PostgreSQL signal archive contains invalid observations") from exc
     result["through_date_ist"] = end_date
     result["archive_reconciliation_status"] = "NOT_VERIFIED_FOR_THIS_REQUEST"
     result["archive_reading_scope"] = "BUY_SELL_ONLY"
