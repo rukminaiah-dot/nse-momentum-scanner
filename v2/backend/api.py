@@ -435,3 +435,25 @@ def quality_ratings():
     if output["ratings"]:
         output["status"] = "CANDLE_RATINGS_AVAILABLE"
     return output
+
+
+@app.get("/api/v2/signal-accuracy/daily")
+def get_daily_signal_accuracy(date: str):
+    """Read-only observed BUY-to-SELL paper ledger; no inferred executions."""
+    from datetime import date as date_type
+    from fastapi import HTTPException
+    from .market_config import INDICES
+    from .signal_accuracy_report import report_from_sqlite
+
+    try:
+        date_type.fromisoformat(date)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Date must be YYYY-MM-DD")
+    try:
+        result = report_from_sqlite(DB_PATH, date, index_symbols=set(INDICES))
+    except sqlite3.Error as exc:
+        print("SIGNAL_ACCURACY_READ_ERROR:", type(exc).__name__, flush=True)
+        raise HTTPException(status_code=503, detail="Scanner signal history unavailable") from exc
+    result["order_execution_enabled"] = False
+    result["mode"] = "OBSERVED_SIGNALS_PAPER_ONLY"
+    return result
