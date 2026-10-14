@@ -68,6 +68,22 @@ class CumulativeReportTests(unittest.TestCase):
         self.assertEqual(report["index"]["net_points"], -10)
         self.assertEqual(report["rejected_readings"], 1)
 
+    def test_empty_archive_is_not_reported_as_zero_percent_accuracy(self):
+        report = cumulative_report([])
+        self.assertEqual(report["observation_status"], "NO_ARCHIVED_BUY_SELL_READINGS")
+        self.assertEqual(report["observed_signal_readings"], 0)
+        self.assertEqual(report["gross_closed_calls"], 0)
+        self.assertIsNone(report["stock"]["win_rate_pct"])
+        self.assertIsNone(report["index"]["win_rate_pct"])
+
+    def test_observed_buy_without_sell_is_not_a_completed_call(self):
+        report = cumulative_report([("A", "2026-10-14 09:15:00", 100, "BUY")])
+        self.assertEqual(report["observation_status"], "NO_COMPLETED_CALLS")
+        self.assertEqual(report["observed_signal_readings"], 1)
+        self.assertEqual(report["gross_closed_calls"], 0)
+        self.assertEqual(report["gross_open_calls"], 1)
+        self.assertIsNone(report["stock"]["win_rate_pct"])
+
     def test_archive_end_is_exclusive(self):
         connection = FakeConnection()
         fetch_cumulative_archive(connection, end_date="2026-10-14")
