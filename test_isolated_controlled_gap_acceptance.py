@@ -189,6 +189,27 @@ class ControlledGapTests(unittest.TestCase):
         self.assertEqual(len(calls), 0)
         self.assertEqual(bridge.candles.manager.recovery_snapshot(KEY)[0], [])
 
+    def test_existing_live_completed_candle_skips_broker_fetch(self):
+        now = datetime.now(IST).replace(second=0, microsecond=0)
+        if (now - timedelta(minutes=2)).date() != now.date():
+            self.skipTest("IST day boundary")
+        calls = []
+        bridge = IsolatedStreamRecovery(
+            KEY, lambda key: calls.append(key) or [], min_request_spacing=0.001)
+        for minute, price in ((now - timedelta(minutes=1), 104), (now, 105)):
+            tick = {"feeds": {KEY: {"ltpc": {
+                "ltp": price, "ltt": str(int(minute.timestamp() * 1000))}}}}
+            self.assertTrue(bridge.on_message(tick))
+        before, active = bridge.candles.manager.recovery_snapshot(KEY)
+        self.assertEqual(len(before), 1)
+        passed, reason = controlled_gap_acceptance(bridge)
+        self.assertFalse(passed)
+        self.assertEqual(reason, "live completed candles already present; controlled setup skipped")
+        self.assertEqual(calls, [])
+        after, current = bridge.candles.manager.recovery_snapshot(KEY)
+        self.assertIs(after[0], before[0])
+        self.assertEqual(current, active)
+
     def test_live_minute_advancement_during_fetch_is_inconclusive(self):
         now = datetime.now(IST).replace(second=0, microsecond=0)
         minutes = [now - timedelta(minutes=n) for n in (3, 2, 1)]
