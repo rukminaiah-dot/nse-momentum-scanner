@@ -229,6 +229,23 @@ class GapRecoveryTests(unittest.TestCase):
         recovered = validated_completed_rows([row(41)], NOW)
         self.assertEqual(manager.merge_recovered(key, recovered, datetime(2026, 10, 13, 11, 43)), 0)
 
+    def test_new_session_rollover_does_not_clear_other_instruments(self):
+        manager = CandleManager(log_closed_candles=False)
+        previous = datetime(2026, 10, 13, 15, 28, tzinfo=IST)
+        following = datetime(2026, 10, 13, 15, 29, tzinfo=IST)
+        for key in ("A", "B"):
+            manager.update(key, 100, int(previous.timestamp() * 1000))
+            manager.update(key, 101, int(following.timestamp() * 1000))
+        other_history, other_active = manager.recovery_snapshot("B")
+        self.assertEqual(len(other_history), 1)
+        today = datetime(2026, 10, 14, 9, 15, tzinfo=IST)
+        manager.update("A", 105, int(today.timestamp() * 1000))
+        self.assertEqual(manager.recovery_snapshot("A")[0], [])
+        preserved, still_active = manager.recovery_snapshot("B")
+        self.assertEqual(still_active, other_active)
+        self.assertEqual(len(preserved), 1)
+        self.assertIs(preserved[0], other_history[0])
+
     def test_new_trading_day_clears_multiple_prior_completed_bars(self):
         manager = CandleManager(log_closed_candles=False)
         key = "SESSION_BOUNDARY"
