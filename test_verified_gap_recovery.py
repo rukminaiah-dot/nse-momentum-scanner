@@ -103,6 +103,14 @@ class GapRecoveryTests(unittest.TestCase):
         got = validated_completed_rows([row(42)], NOW.astimezone(timezone.utc))
         self.assertEqual([t.minute for t in got], [42])
 
+    def test_reject_non_string_broker_timestamps(self):
+        for invalid in (None, 0, True, 1234567890000):
+            with self.subTest(timestamp=repr(invalid)):
+                malformed = row(42)
+                malformed[0] = invalid
+                with self.assertRaisesRegex(ValueError, "invalid candle timestamp type"):
+                    validated_completed_rows([malformed], NOW)
+
     def test_reject_naive_timestamp(self):
         with self.assertRaises(ValueError):
             validated_completed_rows([["2026-10-13T11:42:00", 100, 103, 99, 102, 10]], NOW)
