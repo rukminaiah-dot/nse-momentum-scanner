@@ -47,6 +47,10 @@ class CumulativeReportTests(unittest.TestCase):
         self.assertEqual(report["closed_calls"][0]["buy_price"], 100)
         self.assertEqual(report["closed_calls"][0]["sell_price"], 105)
         self.assertEqual(report["rejected_readings"], 3)
+        self.assertEqual(report["duplicate_buy_readings"], 2)
+        self.assertEqual(report["unmatched_sell_readings"], 1)
+        self.assertEqual(report["gross_distinct_calls"], 2)
+        self.assertEqual(report["gross_open_calls"], 1)
 
     def test_repeated_index_buy_does_not_create_extra_calls(self):
         rows = [
