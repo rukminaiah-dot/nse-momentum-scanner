@@ -56,6 +56,14 @@ def compare_archive_keys(sqlite_path, pg_connection):
             for symbol, stamp in sorted(mismatched)[:10]
         ],
         "extra_archive_observations": len(extra),
+        "extra_archive_samples": [
+            {"symbol": symbol, "candle_time_ist": stamp}
+            for symbol, stamp in sorted(extra)[:10]
+        ],
+        "extra_archive_interpretation": (
+            "Archive-only rows may be valid retained history absent from current SQLite; "
+            "they are not automatically treated as corruption."
+        ),
         "historical_completeness_verified": False,
         "note": "Only currently available SQLite observations checked; lost prior history cannot be verified."
     }
