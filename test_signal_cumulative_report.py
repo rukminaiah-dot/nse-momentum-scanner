@@ -26,6 +26,9 @@ class CumulativeReportTests(unittest.TestCase):
         self.assertEqual(report["stock"]["wins"], 1)
         self.assertEqual(report["index"]["losses"], 1)
         self.assertEqual(report["daily_by_sell_date"]["2026-10-14"]["stock_closed"], 1)
+        self.assertEqual(report["daily_by_sell_date"]["2026-10-14"]["stock_wins"], 1)
+        self.assertEqual(report["daily_by_sell_date"]["2026-10-14"]["index_losses"], 1)
+        self.assertEqual(report["daily_by_sell_date"]["2026-10-14"]["stock_losses"], 0)
         self.assertIsNone(report["pnl_inr"])
         self.assertEqual(report["sell_readings"], 2)
 
