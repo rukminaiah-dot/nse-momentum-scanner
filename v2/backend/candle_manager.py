@@ -25,6 +25,7 @@ class CandleManager:
         if item is not None and minute < item["minute"]:
             return None
         if item is None or item["minute"] != minute:
+            closed = None
             if item:
                 if item["minute"].date() != minute.date():
                     # A new trading date must not inherit prior-session bars.
