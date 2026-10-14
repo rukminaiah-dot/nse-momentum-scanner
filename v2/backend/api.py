@@ -523,3 +523,16 @@ def get_signal_paper_pnl(
     result["through_date_ist"] = end_date
     result["order_execution_enabled"] = False
     return result
+
+
+@app.get("/api/v2/signal-accuracy/archive-health")
+def get_signal_archive_health():
+    """Read-only process-local delivery status; never asserts full coverage."""
+    import os
+    from .signal_archive_delivery_health import archive_delivery_health
+
+    result = archive_delivery_health()
+    result["archive_enabled"] = os.getenv("ENABLE_SIGNAL_ARCHIVE_POSTGRES") == "1"
+    result["mode"] = "OBSERVABILITY_ONLY"
+    result["order_execution_enabled"] = False
+    return result
