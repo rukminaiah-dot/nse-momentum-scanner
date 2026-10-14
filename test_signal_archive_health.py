@@ -31,6 +31,8 @@ class ArchiveHealthTests(unittest.TestCase):
             self.assertEqual(result["missing_from_archive"], 1)
             self.assertEqual(result["missing_samples"][0]["symbol"], "A")
             self.assertEqual(result["extra_archive_observations"], 1)
+            self.assertEqual(result["extra_archive_samples"][0]["symbol"], "OLD")
+            self.assertIn("retained history", result["extra_archive_interpretation"])
             self.assertFalse(result["historical_completeness_verified"])
             pg.rows.append(("A", datetime(2026, 10, 14, 10, 1), 101, "SELL"))
             self.assertEqual(compare_archive_keys(path, pg)["status"], "MATCHED_AVAILABLE_SOURCE")
