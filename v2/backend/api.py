@@ -486,3 +486,17 @@ def get_cumulative_signal_accuracy(end_date: str):
     result["through_date_ist"] = end_date
     result["order_execution_enabled"] = False
     return result
+
+
+@app.get("/api/v2/signal-accuracy/cumulative.csv")
+def download_cumulative_signal_accuracy(end_date: str):
+    """Download observed completed calls, not broker trade confirmations."""
+    from fastapi.responses import Response
+    from .signal_accuracy_csv import closed_calls_csv
+    report = get_cumulative_signal_accuracy(end_date)
+    return Response(
+        content=closed_calls_csv(report),
+        media_type="text/csv",
+        headers={"Content-Disposition":
+                 'attachment; filename="paper_signal_accuracy_' + end_date + '.csv"'},
+    )
