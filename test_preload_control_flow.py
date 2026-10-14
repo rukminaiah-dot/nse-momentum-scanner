@@ -72,10 +72,13 @@ class PreloadControlFlowTests(unittest.TestCase):
         calls = []
 
         class FakeApi:
+            fail_historical = False
             def __init__(self, client):
                 pass
             def get_historical_candle_data1(self, *args):
                 calls.append("historical")
+                if self.fail_historical:
+                    raise ConnectionError("simulated historical outage")
                 return SimpleNamespace(data=SimpleNamespace(candles=[]))
             def get_intra_day_candle_data(self, *args):
                 calls.append("intraday")
@@ -98,6 +101,18 @@ class PreloadControlFlowTests(unittest.TestCase):
                 ApiClient=lambda config: config, HistoryV3Api=FakeApi),
             os=os, Candle=FakeCandle, candles=manager,
             INDICES={}, NIFTY_200={"STOCK": "TEST_KEY"}, previous_closes={})
+        with patch.dict(os.environ, {"UPSTOX_ACCESS_TOKEN": "offline-test"}):
+            namespace["preload_history"]("TEST_KEY")
+        self.assertEqual(calls, ["historical", "intraday"])
+        self.assertEqual(len(manager.completed["TEST_KEY"]), 1)
+        self.assertEqual(manager.completed["TEST_KEY"][0].timestamp,
+                         completed.replace(tzinfo=None))
+
+        # Repeat with the previous-session API unavailable. Today's completed
+        # intraday candles must still warm the scanner without broker access.
+        calls.clear()
+        manager.completed.clear()
+        FakeApi.fail_historical = True
         with patch.dict(os.environ, {"UPSTOX_ACCESS_TOKEN": "offline-test"}):
             namespace["preload_history"]("TEST_KEY")
         self.assertEqual(calls, ["historical", "intraday"])
