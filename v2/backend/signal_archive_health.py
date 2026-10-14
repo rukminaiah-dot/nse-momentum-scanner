@@ -30,6 +30,8 @@ def compare_archive_keys(sqlite_path, pg_connection):
         key for key in source_keys & archive_keys
         if source_rows[key] != archive_rows[key]
     }
+    signal_mismatches = {key for key in mismatched if source_rows[key][1] != archive_rows[key][1]}
+    price_mismatches = {key for key in mismatched if source_rows[key][0] != archive_rows[key][0]}
     extra = archive_keys - source_keys
     if not source_keys:
         status = "NO_AVAILABLE_SQLITE_OBSERVATIONS"
@@ -49,6 +51,8 @@ def compare_archive_keys(sqlite_path, pg_connection):
             for symbol, stamp in sorted(missing)[:10]
         ],
         "mismatched_archive_values": len(mismatched),
+        "mismatched_signal_values": len(signal_mismatches),
+        "mismatched_price_values": len(price_mismatches),
         "mismatched_samples": [
             {"symbol": symbol, "candle_time_ist": stamp,
              "sqlite_signal": source_rows[(symbol, stamp)][1],
