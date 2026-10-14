@@ -48,8 +48,10 @@ def merge_verified_missing(existing, recovered, active_minute=None, limit=60):
     for minute, candle in sorted(recovered.items()):
         if getattr(candle, "timestamp", None) != minute:
             raise ValueError("recovered candle timestamp mismatch")
-        if (active_minute is not None and
-                (minute.date() != active_minute.date() or minute >= active_minute)):
+        # Never introduce a candle from another session or at/after the
+        # live minute. Callers must provide an active-minute boundary.
+        if (active_minute is None or minute.date() != active_minute.date()
+                or minute >= active_minute):
             continue
         if minute in by_minute:
             continue
