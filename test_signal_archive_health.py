@@ -87,6 +87,8 @@ class ArchiveHealthTests(unittest.TestCase):
             result = compare_archive_keys(path, pg)
             self.assertEqual(result["missing_from_archive"], 0)
             self.assertEqual(result["mismatched_archive_values"], 2)
+            self.assertEqual(result["mismatched_signal_values"], 1)
+            self.assertEqual(result["mismatched_price_values"], 1)
             self.assertEqual(result["mismatched_samples"][0]["sqlite_signal"], "BUY")
             self.assertEqual(result["mismatched_samples"][0]["postgres_signal"], "HOLD")
             self.assertEqual(result["mismatched_samples"][1]["sqlite_price"], 101.0)
