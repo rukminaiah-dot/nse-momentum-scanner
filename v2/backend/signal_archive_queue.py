@@ -18,6 +18,8 @@ class SignalArchiveQueue:
         self.dropped = 0
         self.failed = 0
         self.delivered = 0
+        self._last_failed = None
+        self._last_dropped = None
 
     def start(self):
         with self._lock:
@@ -32,6 +34,7 @@ class SignalArchiveQueue:
         except queue.Full:
             with self._lock:
                 self.dropped += 1
+                self._last_dropped = (row[0], row[1])
             return False
         with self._lock:
             self.accepted += 1
@@ -49,9 +52,11 @@ class SignalArchiveQueue:
                         self.delivered += 1
                     else:
                         self.failed += 1
+                        self._last_failed = (row[0], row[1])
             except Exception:
                 with self._lock:
                     self.failed += 1
+                    self._last_failed = (row[0], row[1])
             finally:
                 self.pending.task_done()
 
@@ -60,4 +65,6 @@ class SignalArchiveQueue:
             return {"accepted": self.accepted, "delivered": self.delivered,
                     "failed": self.failed, "dropped": self.dropped,
                     "pending": self.pending.qsize(),
+                    "last_failed_key": self._last_failed,
+                    "last_dropped_key": self._last_dropped,
                     "running": self._thread is not None and self._thread.is_alive()}
