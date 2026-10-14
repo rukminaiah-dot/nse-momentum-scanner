@@ -18,6 +18,12 @@ class SignalArchiveCliTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 main(["report"])
 
+    def test_verify_requires_database_url(self):
+        output = io.StringIO()
+        with patch.dict(os.environ, {}, clear=True), contextlib.redirect_stderr(output):
+            status = main(["verify"])
+        self.assertEqual(status, 2)
+
     def test_init_rejects_report_date(self):
         with contextlib.redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit):
