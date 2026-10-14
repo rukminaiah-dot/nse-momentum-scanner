@@ -1,48 +1,69 @@
 name: Manual Upstox Read-Only Integration Probe
 
-# Manually dispatched only; never runs on push, PR, or schedule.
+# Manual-only: never runs on push, PR, schedule or production deploy.
 on:
   workflow_dispatch:
+    inputs:
+      instrument_key:
+        description: 'Authorized Upstox instrument key to test (not a credential)'
+        required: false
+        default: 'NSE_EQ|INE974X01010'
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: manual-upstox-read-only-probe
+  group: manual-upstox-probe
   cancel-in-progress: false
 
 jobs:
   probe:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/feature/verified-gap-recovery'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
-      - name: Checkout reviewed Fix 10 probe commit (not production scanner)
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          ref: 01ee9c127a72be19a7c6152355bc781f5113e65d
           persist-credentials: false
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Offline regression gate before any broker API call
-        run: python -m unittest -v test_verified_gap_recovery test_gap_recovery_worker test_recovery_trigger test_recovery_integration test_preload_control_flow test_upstox_probe
-      - name: Offline websocket preflight safety tests (no credentials needed)
-        run: python -m unittest -v tests/test_websocket_preflight.py
-      - name: Offline mocked websocket smoke tests (no broker connection)
-        run: python -m unittest -v test_websocket_smoke
-      - name: Install Upstox SDK (read-only request)
+      - name: Confirm feature branch checkout is isolated
+        run: |
+          test "$GITHUB_REF" = 'refs/heads/feature/verified-gap-recovery'
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: Record isolated acceptance revision
+        run: |
+          echo "Acceptance commit: $GITHUB_SHA"
+          echo "Acceptance ref: $GITHUB_REF"
+      - name: Run offline recovery and websocket regression tests
+        run: |
+          python -m compileall -q isolated_controlled_gap_acceptance.py preflight_upstox_websocket.py probe_upstox_websocket_smoke.py isolated_live_tick_candles.py isolated_stream_recovery.py isolated_upstox_history.py v2/backend
+          python -m unittest -v tests/test_websocket_preflight.py test_websocket_smoke test_isolated_live_tick_candles test_isolated_stream_recovery test_gap_recovery_worker test_verified_gap_recovery test_isolated_upstox_history test_isolated_controlled_gap_acceptance
+      - name: Install read-only SDK
         run: python -m pip install upstox-python-sdk
-      - name: Verify Actions secret exists without printing it
+      - name: Verify secret presence without printing its value
         env:
           UPSTOX_ACCESS_TOKEN: ${{ secrets.UPSTOX_ACCESS_TOKEN }}
         run: |
           if [ -z "$UPSTOX_ACCESS_TOKEN" ]; then
-            echo "BLOCKED: UPSTOX_ACCESS_TOKEN Actions secret is unavailable"
+            echo "BLOCKED: repository Actions secret UPSTOX_ACCESS_TOKEN is unavailable"
             exit 2
           fi
-      - name: Validate authenticated one-minute candles without orders
+      - name: Probe authenticated intraday candles (no orders)
         env:
           UPSTOX_ACCESS_TOKEN: ${{ secrets.UPSTOX_ACCESS_TOKEN }}
-        run: python probe_upstox_recovery.py --instrument-key 'NSE_EQ|INE974X01010'
+          INSTRUMENT_KEY: ${{ inputs.instrument_key || 'NSE_EQ|INE974X01010' }}
+        run: python probe_upstox_recovery.py --instrument-key "$INSTRUMENT_KEY"
+
+      - name: Test isolated live websocket recovery (no orders)
+        env:
+          UPSTOX_ACCESS_TOKEN: ${{ secrets.UPSTOX_ACCESS_TOKEN }}
+          FIX10_TEST_INSTRUMENT_KEY: ${{ inputs.instrument_key || 'NSE_EQ|INE974X01010' }}
+          FIX10_NONPRODUCTION_ACK: I_AM_IN_AN_ISOLATED_TEST
+          FIX10_LIVE_STREAM_ACK: READ_ONLY_STREAM_TEST
+          FIX10_ISOLATED_RECOVERY_ACK: READ_ONLY_HISTORY
+          FIX10_CONTROLLED_GAP_ACK: BROKER_BACKED_MEMORY_ONLY
+          ENABLE_VERIFIED_GAP_RECOVERY: 'false'
+        run: python probe_upstox_websocket_smoke.py
