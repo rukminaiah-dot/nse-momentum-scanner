@@ -48,10 +48,11 @@ class GapRecoveryWorker:
             self._pending.add(key)
             self._last_attempt[key] = now
             self._stats["requested"] += 1
-        thread = threading.Thread(target=self._run, args=(key,), daemon=True)
-        with self._lock:
-            self._threads.add(thread)
+        thread = None
         try:
+            thread = threading.Thread(target=self._run, args=(key,), daemon=True)
+            with self._lock:
+                self._threads.add(thread)
             thread.start()
         except Exception:
             with self._lock:
