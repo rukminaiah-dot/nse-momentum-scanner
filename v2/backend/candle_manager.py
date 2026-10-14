@@ -25,6 +25,9 @@ class CandleManager:
         if item is not None and minute < item["minute"]:
             return None
         if item is None or item["minute"] != minute:
+            if item is None:
+                # A fresh session must not inherit retained bars from an old feed.
+                self.completed.pop(key, None)
             closed = None
             if item:
                 if item["minute"].date() != minute.date():
