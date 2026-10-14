@@ -457,3 +457,32 @@ def get_daily_signal_accuracy(date: str):
     result["order_execution_enabled"] = False
     result["mode"] = "OBSERVED_SIGNALS_PAPER_ONLY"
     return result
+
+
+@app.get("/api/v2/signal-accuracy/cumulative")
+def get_cumulative_signal_accuracy(end_date: str):
+    """Read-only cumulative observed signal cycles through an IST date."""
+    import os
+    from datetime import date as date_type
+    from fastapi import HTTPException
+    from .market_config import INDICES
+    from .signal_cumulative_report import cumulative_report, fetch_cumulative_archive
+
+    try:
+        date_type.fromisoformat(end_date)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="end_date must be YYYY-MM-DD")
+    url = os.environ.get("DATABASE_URL")
+    if not url:
+        raise HTTPException(status_code=503, detail="PostgreSQL archive not configured")
+    try:
+        import psycopg
+        with psycopg.connect(url, connect_timeout=5) as pg:
+            rows = fetch_cumulative_archive(pg, end_date=end_date)
+    except psycopg.Error as exc:
+        print("SIGNAL_ARCHIVE_READ_ERROR:", type(exc).__name__, flush=True)
+        raise HTTPException(status_code=503, detail="PostgreSQL signal archive unavailable") from exc
+    result = cumulative_report(rows, index_symbols=set(INDICES))
+    result["through_date_ist"] = end_date
+    result["order_execution_enabled"] = False
+    return result
