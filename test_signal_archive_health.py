@@ -15,6 +15,21 @@ class Pg:
         return self.rows
 
 class ArchiveHealthTests(unittest.TestCase):
+    def test_missing_sqlite_database_is_not_created_by_verification(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "not-present.db"
+            with self.assertRaises(sqlite3.OperationalError):
+                compare_archive_keys(path, Pg([]))
+            self.assertFalse(path.exists())
+
+    def test_missing_signal_history_table_is_an_error(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "signals.db"
+            with sqlite3.connect(path) as con:
+                con.execute("CREATE TABLE unrelated (id INTEGER)")
+            with self.assertRaises(sqlite3.OperationalError):
+                compare_archive_keys(path, Pg([]))
+
     def test_empty_sqlite_source_is_inconclusive_even_if_postgres_has_history(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "signals.db"
