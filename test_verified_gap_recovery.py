@@ -229,6 +229,25 @@ class GapRecoveryTests(unittest.TestCase):
         recovered = validated_completed_rows([row(41)], NOW)
         self.assertEqual(manager.merge_recovered(key, recovered, datetime(2026, 10, 13, 11, 43)), 0)
 
+    def test_new_trading_day_clears_multiple_prior_completed_bars(self):
+        manager = CandleManager(log_closed_candles=False)
+        key = "SESSION_BOUNDARY"
+        for minute in (27, 28, 29):
+            stamp = datetime(2026, 10, 13, 15, minute, tzinfo=IST)
+            manager.update(key, 100 + minute, int(stamp.timestamp() * 1000))
+        before, _ = manager.recovery_snapshot(key)
+        self.assertEqual([c.timestamp.minute for c in before], [27, 28])
+        next_day = datetime(2026, 10, 14, 9, 15, tzinfo=IST)
+        self.assertIsNone(manager.update(key, 105, int(next_day.timestamp() * 1000)))
+        history, active = manager.recovery_snapshot(key)
+        self.assertEqual(history, [])
+        self.assertEqual(active, next_day.replace(tzinfo=None))
+        following = datetime(2026, 10, 14, 9, 16, tzinfo=IST)
+        manager.update(key, 106, int(following.timestamp() * 1000))
+        history, _ = manager.recovery_snapshot(key)
+        self.assertEqual([c.timestamp for c in history],
+                         [next_day.replace(tzinfo=None)])
+
     def test_first_tick_discards_orphaned_completed_history(self):
         manager = CandleManager(log_closed_candles=False)
         key = "REINITIALIZED"
