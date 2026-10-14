@@ -45,6 +45,10 @@ def cumulative_report(rows, *, index_symbols=()):
         "mode": "PAPER_SIGNALS_ONLY",
         "buy_readings": readings["BUY"], "sell_readings": readings["SELL"],
         "gross_closed_calls": len(ledger.closed),
+        "observed_signal_readings": readings["BUY"] + readings["SELL"],
+        "observation_status": "NO_ARCHIVED_BUY_SELL_READINGS" if not normalized else (
+            "NO_COMPLETED_CALLS" if not ledger.closed else "COMPLETED_CALLS_OBSERVED"
+        ),
         "gross_open_calls": len(ledger.open),
         "gross_distinct_calls": len(ledger.closed) + len(ledger.open),
         "call_count_rule": "One BUY opens a call per instrument; repeated BUY readings do not open more calls; first subsequent SELL closes it.",
