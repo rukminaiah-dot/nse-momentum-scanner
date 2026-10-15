@@ -57,16 +57,22 @@ class OfflineScannerSessionPolicyTests(unittest.TestCase):
                     "STOCK_TEST", ms(10, 0), None, eligible, CALENDAR,
                     DAY, DAY, "Synthetic calendar", True), "REJECT")
 
-    def test_offline_policy_not_wired_into_live_scanner(self):
+    def test_calendar_entrypoint_exists_but_live_feed_stays_on_legacy_path(self):
         root = Path(__file__).resolve().parents[1]
         scanner = ast.parse((root / "v2/backend/scanner.py").read_text())
-        names = {n.id for n in ast.walk(scanner) if isinstance(n, ast.Name)}
-        self.assertNotIn("classify_scanner_tick", names)
-        self.assertNotIn("dispatch_offline_scanner_tick", names)
-        imports = [n.module for n in ast.walk(scanner)
-                   if isinstance(n, ast.ImportFrom)]
-        self.assertNotIn("v2.backend.offline_scanner_session_policy", imports)
-        self.assertNotIn("v2.backend.offline_scanner_session_dispatch", imports)
+        functions = {n.name: n for n in scanner.body
+                     if isinstance(n, ast.FunctionDef)}
+        self.assertIn("on_tick_with_verified_calendar", functions)
+        live_tick = ast.unparse(functions["on_tick"])
+        self.assertNotIn("dispatch_offline_scanner_tick", live_tick)
+        self.assertNotIn("on_tick_with_verified_calendar", live_tick)
+        entry = ast.unparse(functions["on_tick_with_verified_calendar"])
+        self.assertIn("dispatch_offline_scanner_tick", entry)
+        main = next(n for n in scanner.body if isinstance(n, ast.If)
+                    and "__main__" in ast.unparse(n.test))
+        self.assertIn("UpstoxLiveV3(on_tick=on_tick)", ast.unparse(main))
+        self.assertNotIn("on_tick_with_verified_calendar", ast.unparse(main))
+
 
 if __name__ == "__main__":
     unittest.main()
