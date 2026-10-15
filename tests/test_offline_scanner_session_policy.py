@@ -48,5 +48,12 @@ class OfflineScannerSessionPolicyTests(unittest.TestCase):
         self.assertEqual(decide("STOCK_TEST", ms(10, 0), schedule={DAY: None}), "REJECT")
 
 
+    def test_malformed_instrument_allowlists_fail_closed(self):
+        for eligible in ("STOCK_TEST,INDEX_TEST", None, {"STOCK_TEST": True}, 12):
+            with self.subTest(eligible=eligible):
+                self.assertEqual(classify_scanner_tick(
+                    "STOCK_TEST", ms(10, 0), None, eligible, CALENDAR,
+                    DAY, DAY, "Synthetic calendar", True), "REJECT")
+
 if __name__ == "__main__":
     unittest.main()
