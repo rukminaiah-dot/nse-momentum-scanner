@@ -57,6 +57,27 @@ class CandleManager:
             item["candle"].update(price, volume)
             return None
 
+    def finalize_last_regular_minute(self, key, timestamp_ms):
+        """Opt-in, idempotent 15:29 candle finalization; never starts a new bar.
+
+        Callers must explicitly invoke this method. Normal update() behavior
+        is unchanged until a separately reviewed session gate is integrated.
+        """
+        from .session_guard import session_tick_action
+        with self.lock:
+            item = self.current.get(key)
+            active = item["minute"] if item else None
+            if session_tick_action(timestamp_ms, active) != "FINALIZE_LAST_MINUTE":
+                return None
+            candle = item["candle"]
+            candle.timestamp = active
+            self.completed.setdefault(key, []).append(candle)
+            self.completed[key] = self.completed[key][-60:]
+            self.current.pop(key, None)
+            if self.log_closed_candles:
+                print("CANDLE_CLOSED_SESSION_END", key, candle.__dict__)
+            return candle
+
     def recovery_snapshot(self, key):
         with self.lock:
             item = self.current.get(key)
