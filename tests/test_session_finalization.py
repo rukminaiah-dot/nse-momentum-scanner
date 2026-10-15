@@ -48,6 +48,14 @@ class SessionFinalizationTests(unittest.TestCase):
         self.assertIsNone(manager.finalize_last_regular_minute("TEST", ms(15, 30)))
         self.assertEqual(len(manager.completed.get("TEST", [])), 0)
 
+    def test_overnight_tick_cannot_finalize_yesterday(self):
+        manager = CandleManager(log_closed_candles=False)
+        manager.update("TEST", 100, ms(15, 29), 5)
+        overnight = int(datetime(2026, 10, 16, 0, 1, tzinfo=IST).timestamp() * 1000)
+        self.assertIsNone(manager.finalize_last_regular_minute("TEST", overnight))
+        self.assertIn("TEST", manager.current)
+        self.assertNotIn("TEST", manager.completed)
+
     def test_does_not_finalize_during_session(self):
         manager = CandleManager(log_closed_candles=False)
         manager.update("TEST", 100, ms(15, 29), 5)
