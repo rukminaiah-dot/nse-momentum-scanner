@@ -77,6 +77,18 @@ class VerifiedSessionScheduleTests(unittest.TestCase):
         self.assertIsNone(accepted_calendar_minute(
             ms(2026, 10, 16, 10, 0), schedule, day, day, "NSE notice", True))
 
+    def test_malformed_timestamps_fail_closed(self):
+        day = date(2026, 10, 15)
+        schedule = {day: (time(9, 15), time(15, 30))}
+        for tick in (None, "not-a-timestamp", float("nan"), float("inf"),
+                     float("-inf"), [], {}):
+            with self.subTest(tick=repr(tick)):
+                self.assertIsNone(verified_session_minute(tick, schedule))
+                self.assertIsNone(verified_range_session_minute(
+                    tick, schedule, day, day))
+                self.assertIsNone(accepted_calendar_minute(
+                    tick, schedule, day, day, "NSE notice", True))
+
     def test_missing_date_fails_closed(self):
         self.assertIsNone(verified_session_minute(ms(2026, 10, 15, 10, 0), {}))
 
