@@ -60,6 +60,10 @@ class RegularSessionMinuteTests(unittest.TestCase):
         self.assertEqual(session_tick_action(
             epoch_ms(2026, 10, 16, 9, 15), active), "UPDATE")
 
+    def test_boolean_timestamps_return_reject_action(self):
+        self.assertEqual(session_tick_action(True), "REJECT")
+        self.assertEqual(session_tick_action(False), "REJECT")
+
     def test_weekend_rejected(self):
         self.assertIsNone(regular_session_minute(epoch_ms(2026, 10, 17, 10, 0)))
 
