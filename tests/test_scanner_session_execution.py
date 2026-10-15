@@ -262,10 +262,13 @@ class ScannerSessionExecutionTests(unittest.TestCase):
         self.assertEqual(calls, ["quality"])
         self.assertEqual(state["_last_accepted_tick_ms"], {})
         self.assertEqual(state["last_cumulative_volumes"], {})
+        # A delayed same-minute tick cannot recreate a finalized candle.
         manager.update(key, 101, milliseconds(15, 29), 5)
         self.assertFalse(finalize(key, milliseconds(15, 36), schedule, day,
                                   day, "Synthetic test calendar", True))
-        self.assertIn(key, manager.current)
+        self.assertNotIn(key, manager.current)
+        self.assertEqual(len(manager.completed[key]), 1)
+        self.assertEqual(manager.completed[key][0].close, 100)
         self.assertEqual(calls, ["quality"])
 
     def test_no_tick_finalizer_rejects_unknown_key_and_unverified_calendar(self):
