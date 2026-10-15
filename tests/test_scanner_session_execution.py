@@ -57,6 +57,21 @@ class ScannerSessionExecutionTests(unittest.TestCase):
         self.assertEqual(state["_last_accepted_tick_ms"], {})
         self.assertEqual(len(manager.current), 0)
 
+    def test_repeated_after_hours_ticks_cannot_reopen_finalized_candle(self):
+        on_tick, manager, state, calls = isolated_scanner(milliseconds(15, 55))
+        key = "NSE_EQ|TEST"
+        manager.update(key, 100, milliseconds(15, 29), 5)
+        on_tick(key, {"ltp": 125, "ltt": milliseconds(15, 30), "vtt": 500})
+        on_tick(key, {"ltp": 130, "ltt": milliseconds(15, 40), "vtt": 600})
+        on_tick(key, {"ltp": 140, "ltt": milliseconds(15, 55), "vtt": 700})
+        self.assertEqual(calls, ["quality"])
+        self.assertNotIn(key, manager.current)
+        self.assertEqual(len(manager.completed[key]), 1)
+        self.assertEqual(manager.completed[key][0].close, 100)
+        self.assertEqual(manager.completed[key][0].volume, 5)
+        self.assertEqual(state["last_cumulative_volumes"], {})
+        self.assertEqual(state["_last_accepted_tick_ms"], {})
+
     def test_close_tick_finalizes_without_trade_or_signal(self):
         on_tick, manager, state, calls = isolated_scanner(milliseconds(15, 30))
         manager.update("NSE_EQ|TEST", 100, milliseconds(15, 29), 5)
