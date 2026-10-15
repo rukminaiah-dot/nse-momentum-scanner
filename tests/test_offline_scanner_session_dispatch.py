@@ -163,5 +163,21 @@ class OfflineScannerDispatchTests(unittest.TestCase):
         self.assertEqual(result, "REJECT")
         self.assertEqual(self.state, before)
 
+    def test_rejected_tick_does_not_evaluate_callback_properties(self):
+        # Callback arguments are evaluated before dispatch; verify neither
+        # supplied handler is invoked on a rejected decision.
+        invoked = []
+        def update():
+            invoked.append("update")
+        def finalize():
+            invoked.append("finalize")
+        action = dispatch_offline_scanner_tick(
+            "UNKNOWN", ms(10, 0), None, KEYS, CALENDAR, DAY, DAY,
+            "Synthetic calendar", True,
+            on_update=update, on_finalize=finalize,
+        )
+        self.assertEqual(action, "REJECT")
+        self.assertEqual(invoked, [])
+
 if __name__ == "__main__":
     unittest.main()
