@@ -26,7 +26,7 @@ class SignalArchiveCliFailureTests(unittest.TestCase):
         with patch.dict(sys.modules, {"psycopg": fake_psycopg}), \
              patch.dict(os.environ, {"DATABASE_URL": "placeholder-not-a-real-url"}), \
              patch("v2.backend.signal_archive_sync.sync_observed_signals", side_effect=sync) if isinstance(sync, Exception) else patch("v2.backend.signal_archive_sync.sync_observed_signals", return_value=sync), \
-             patch("v2.backend.signal_archive_health.compare_archive_keys", return_value=verify), \
+             patch("v2.backend.signal_archive_health.compare_archive_keys", side_effect=verify) if isinstance(verify, Exception) else patch("v2.backend.signal_archive_health.compare_archive_keys", return_value=verify), \
              contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
             code = main([action])
         return code, stdout.getvalue(), stderr.getvalue()
@@ -44,6 +44,16 @@ class SignalArchiveCliFailureTests(unittest.TestCase):
         self.assertEqual(out, "")
         self.assertIn("sqlite", err.lower())
         self.assertNotIn("placeholder-not-a-real-url", err)
+
+    def test_malformed_source_verification_exits_nonzero(self):
+        for detail in ("invalid SQLite signal price", "invalid SQLite candle timestamp",
+                       "invalid SQLite signal candle key"):
+            with self.subTest(detail=detail):
+                code, out, err = self._run("verify", verify=ValueError(detail))
+                self.assertEqual(code, 1)
+                self.assertEqual(out, "")
+                self.assertIn("ValueError", err)
+                self.assertNotIn("placeholder-not-a-real-url", err)
 
     def test_inconclusive_verification_exit_nonzero(self):
         result = {"available_source_reconciliation_verified": False,
