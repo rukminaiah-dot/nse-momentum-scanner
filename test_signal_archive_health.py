@@ -83,6 +83,31 @@ class ArchiveHealthTests(unittest.TestCase):
             self.assertEqual(result["conflicting_sqlite_candle_keys"], 1)
             self.assertFalse(result["available_source_reconciliation_verified"])
 
+    def test_fractional_seconds_remain_distinct_archive_keys(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "signals.db"
+            with sqlite3.connect(path) as con:
+                con.execute("CREATE TABLE scanner_signal_history (symbol TEXT,candle_time TEXT,price REAL,signal TEXT)")
+                con.executemany("INSERT INTO scanner_signal_history VALUES (?,?,?,?)", [
+                    ("A", "2026-10-14 10:00:00.100000", 100, "BUY"),
+                    ("A", "2026-10-14 10:00:00.200000", 101, "SELL"),
+                ])
+            pg = Pg([
+                ("A", datetime(2026, 10, 14, 10, 0, 0, 100000), 100, "BUY"),
+                ("A", datetime(2026, 10, 14, 10, 0, 0, 200000), 101, "SELL"),
+            ])
+            result = compare_archive_keys(path, pg)
+            self.assertEqual(result["status"], "MATCHED_AVAILABLE_SOURCE")
+            self.assertEqual(result["sqlite_available_observations"], 2)
+            self.assertEqual(result["postgres_archive_observations"], 2)
+            self.assertEqual(result["duplicate_sqlite_candle_keys"], 0)
+            self.assertTrue(result["available_source_reconciliation_verified"])
+            pg.rows.pop()
+            result = compare_archive_keys(path, pg)
+            self.assertEqual(result["status"], "MISSING_ARCHIVE_ROWS")
+            self.assertEqual(result["missing_from_archive"], 1)
+            self.assertFalse(result["available_source_reconciliation_verified"])
+
     def test_duplicate_sqlite_keys_are_not_silently_accepted(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "signals.db"
