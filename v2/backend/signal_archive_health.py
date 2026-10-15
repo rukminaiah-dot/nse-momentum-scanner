@@ -46,6 +46,7 @@ def compare_archive_keys(sqlite_path, pg_connection):
                 source_rows[key] = value
     archive_rows = {}
     duplicate_archive_keys = set()
+    conflicting_archive_keys = set()
     archive_rows_scanned = 0
     for symbol, stamp, price, signal in pg_connection.execute(
         "SELECT symbol,candle_time_ist,price,signal FROM scanner_signal_archive"
@@ -64,6 +65,8 @@ def compare_archive_keys(sqlite_path, pg_connection):
         key = (symbol, _timestamp(stamp))
         if key in archive_rows:
             duplicate_archive_keys.add(key)
+            if archive_rows[key] != (numeric_price, signal):
+                conflicting_archive_keys.add(key)
         else:
             archive_rows[key] = (numeric_price, signal)
     source_keys, archive_keys = set(source_rows), set(archive_rows)
@@ -94,6 +97,11 @@ def compare_archive_keys(sqlite_path, pg_connection):
         "sqlite_available_observations": len(source_keys),
         "sqlite_source_rows_scanned": source_rows_scanned,
         "duplicate_archive_candle_keys": len(duplicate_archive_keys),
+        "conflicting_archive_candle_keys": len(conflicting_archive_keys),
+        "conflicting_archive_samples": [
+            {"symbol": symbol, "candle_time_ist": stamp}
+            for symbol, stamp in sorted(conflicting_archive_keys)[:10]
+        ],
         "duplicate_archive_samples": [
             {"symbol": symbol, "candle_time_ist": stamp}
             for symbol, stamp in sorted(duplicate_archive_keys)[:10]
