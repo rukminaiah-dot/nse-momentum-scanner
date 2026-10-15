@@ -32,6 +32,7 @@ class PaperLedger:
 
     def record(self, signal: Signal) -> Optional[ClosedCall]:
         if (not isinstance(signal.timestamp, datetime) or
+            signal.timestamp.tzinfo is not None or
             signal.kind not in ("stock", "index") or
             signal.side not in ("BUY", "SELL") or
             not isinstance(signal.instrument, str) or not signal.instrument.strip() or
