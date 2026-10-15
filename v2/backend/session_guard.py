@@ -156,3 +156,35 @@ def accepted_calendar_minute(timestamp_ms, schedule, start_date, end_date,
         return None
     return verified_range_session_minute(
         timestamp_ms, accepted, start_date, end_date)
+
+
+def accepted_calendar_tick_action(timestamp_ms, active_minute, schedule,
+                                  start_date, end_date, source, verified):
+    """Classify a verified-calendar tick, including final-minute closure.
+
+    Only a same-date, final scheduled minute can be finalized after close.
+    Does not mutate candles or scanner state.
+    """
+    accepted = accept_verified_calendar(
+        schedule, start_date, end_date, source, verified)
+    if accepted is None or isinstance(timestamp_ms, bool):
+        return "REJECT"
+    try:
+        stamp = datetime.fromtimestamp(float(timestamp_ms) / 1000, IST)
+    except (TypeError, ValueError, OverflowError, OSError):
+        return "REJECT"
+    if not start_date <= stamp.date() <= end_date:
+        return "REJECT"
+    if verified_session_minute(timestamp_ms, accepted) is not None:
+        return "UPDATE"
+    bounds = accepted.get(stamp.date())
+    if bounds is None:
+        return "REJECT"
+    start, end = bounds
+    final_minute = datetime.combine(stamp.date(), end) - timedelta(minutes=1)
+    if (isinstance(active_minute, datetime)
+            and active_minute.tzinfo is None
+            and active_minute == final_minute
+            and stamp.time() >= end):
+        return "FINALIZE_LAST_MINUTE"
+    return "REJECT"
