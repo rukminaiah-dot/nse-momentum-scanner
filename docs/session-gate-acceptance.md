@@ -7,6 +7,7 @@
 1. **Do not enable the weekday-only scanner gate in production.** It does not consult official NSE holidays or special trading sessions, and could reject valid weekend/special-session ticks or accept holiday ticks.
 2. **Do not treat the explicit-calendar helpers as integrated.** They remain offline-only until a verified exchange calendar and reviewed scanner/candle-manager wiring are supplied.
 3. **Do not equate green CI with real-feed acceptance.** Actual Upstox tick-time evidence and session-boundary observation are still required.
+4. **Do not silently lose the last candle when no closing tick arrives.** The current tick-driven finalization only closes an active 15:29 candle when an eligible later tick arrives; the next day's first tick safely discards stale state, but cannot reconstruct that missing close. Design and test an authorized, idempotent end-of-session finalization or verified historical reconciliation, including process downtime and restart. Do not add a speculative live timer.
 
 ## Evidence required before rollout
 
