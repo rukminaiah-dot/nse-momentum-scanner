@@ -166,6 +166,17 @@ class VerifiedSessionScheduleTests(unittest.TestCase):
                     tick, active, schedule, day, day, "NSE notice", True),
                     expected)
 
+    def test_invalid_close_grace_configuration_fails_closed(self):
+        day = date(2026, 10, 15)
+        schedule = {day: (time(9, 15), time(15, 30))}
+        active = datetime(2026, 10, 15, 15, 29)
+        for grace in (None, True, False, "5", -1, 61,
+                      float("nan"), float("inf"), float("-inf")):
+            with self.subTest(grace=repr(grace)):
+                self.assertEqual(accepted_calendar_tick_action(
+                    ms(2026, 10, 15, 15, 30), active, schedule,
+                    day, day, "NSE notice", True, grace), "REJECT")
+
     def test_missing_date_fails_closed(self):
         self.assertIsNone(verified_session_minute(ms(2026, 10, 15, 10, 0), {}))
 
