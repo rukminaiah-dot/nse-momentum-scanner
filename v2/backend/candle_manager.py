@@ -49,6 +49,9 @@ class CandleManager:
                     closed = item["candle"]
                     closed.timestamp = item["minute"]
                     self.completed.setdefault(key, []).append(closed)
+                    # Match preload/recovery/finalization retention on the
+                    # ordinary live rollover path as well.
+                    self.completed[key] = self.completed[key][-60:]
                     if self.log_closed_candles:
                         print("CANDLE_CLOSED", key, closed.__dict__)
             self.current[key] = {"minute": minute, "candle": Candle(price, volume)}
