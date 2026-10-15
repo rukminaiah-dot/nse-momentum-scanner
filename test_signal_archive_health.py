@@ -75,6 +75,8 @@ class ArchiveHealthTests(unittest.TestCase):
             result = compare_archive_keys(path, pg)
             self.assertEqual(result["status"], "DUPLICATE_SQLITE_OBSERVATIONS")
             self.assertEqual(result["duplicate_sqlite_candle_keys"], 1)
+            self.assertEqual(result["sqlite_source_rows_scanned"], 2)
+            self.assertEqual(result["sqlite_available_observations"], 1)
             self.assertFalse(result["available_source_reconciliation_verified"])
             with sqlite3.connect(path) as con:
                 con.execute("UPDATE scanner_signal_history SET price=101 WHERE rowid=2")
