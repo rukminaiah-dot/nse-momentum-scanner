@@ -3,7 +3,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
-from v2.backend.quality_metrics import observed_history_gaps
+from v2.backend.quality_metrics import observed_history_gaps, summarize_observed_history
 
 
 class ObservedHistoryGapTests(unittest.TestCase):
@@ -43,6 +43,33 @@ class ObservedHistoryGapTests(unittest.TestCase):
                     [SimpleNamespace(timestamp=stamp)], self.today)
                 self.assertIsNone(result["observed_history_gap_minutes"])
                 self.assertFalse(result["observed_history_order_valid"])
+
+    def test_summary_healthy_gapped_and_invalid(self):
+        rows = {
+            "HEALTHY": {"observed_history_gap_minutes": 0,
+                        "observed_history_order_valid": True},
+            "GAPPED": {"observed_history_gap_minutes": 3,
+                       "observed_history_order_valid": True},
+            "INVALID": {"observed_history_gap_minutes": None,
+                        "observed_history_order_valid": False},
+        }
+        self.assertEqual(summarize_observed_history(rows), {
+            "stocks_with_observed_history_gaps": 1,
+            "observed_history_gap_minutes_total": 3,
+            "stocks_with_unknown_observed_history": 1,
+        })
+
+    def test_summary_ignores_invalid_gap_values(self):
+        rows = {
+            "BOOLEAN": {"observed_history_gap_minutes": True},
+            "NEGATIVE": {"observed_history_gap_minutes": -2},
+            "MISSING": {},
+        }
+        self.assertEqual(summarize_observed_history(rows), {
+            "stocks_with_observed_history_gaps": 0,
+            "observed_history_gap_minutes_total": 0,
+            "stocks_with_unknown_observed_history": 0,
+        })
 
     def test_overnight_not_counted(self):
         yesterday = SimpleNamespace(timestamp=self.start - timedelta(days=1))
