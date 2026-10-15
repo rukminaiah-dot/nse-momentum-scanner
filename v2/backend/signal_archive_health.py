@@ -79,6 +79,10 @@ def compare_archive_keys(sqlite_path, pg_connection):
         "status": status,
         "sqlite_available_observations": len(source_keys),
         "duplicate_archive_candle_keys": len(duplicate_archive_keys),
+        "duplicate_archive_samples": [
+            {"symbol": symbol, "candle_time_ist": stamp}
+            for symbol, stamp in sorted(duplicate_archive_keys)[:10]
+        ],
         "duplicate_sqlite_candle_keys": len(duplicate_source_keys),
         "conflicting_sqlite_candle_keys": len(conflicting_source_keys),
         "duplicate_sqlite_samples": [
