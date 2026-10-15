@@ -51,3 +51,31 @@ class TimestampObserver:
             {"status": status, "regular_hours_window": window, "count": count}
             for (status, window), count in sorted(self.counts.items())
         ]
+
+
+def observe_message_timing(raw_ltt, current_ts, arrival_ms, *, market_status=None):
+    """Compare broker trade/envelope timestamps against local receipt time.
+
+    Market status is reduced to an allowlisted classification: never echo raw
+    payloads, symbols, prices, or arbitrary broker-provided strings.
+    """
+    trade = observe_ltt(raw_ltt, arrival_ms)
+    envelope = inspect_tick_timestamp(current_ts, arrival_ms)
+    allowed = {"PRE_OPEN", "NORMAL", "CLOSING_AUCTION", "CLOSED"}
+    status = market_status if isinstance(market_status, str) and market_status in allowed else "UNKNOWN"
+    result = {
+        "trade_status": trade["status"],
+        "envelope_status": envelope["status"],
+        "regular_hours_window": trade.get("regular_hours_window", "UNKNOWN"),
+        "market_status": status,
+        "session": "UNKNOWN",
+    }
+    if trade["status"] != "INVALID":
+        result["trade_arrival_skew_ms"] = trade["arrival_minus_event_ms"]
+    if envelope["status"] != "INVALID":
+        result["envelope_arrival_skew_ms"] = envelope["arrival_minus_event_ms"]
+    if trade["status"] != "INVALID" and envelope["status"] != "INVALID":
+        result["envelope_minus_trade_ms"] = (
+            trade["arrival_minus_event_ms"] - envelope["arrival_minus_event_ms"]
+        )
+    return result
