@@ -83,6 +83,7 @@ class ArchiveHealthTests(unittest.TestCase):
             result = compare_archive_keys(path, pg)
             self.assertEqual(result["status"], "CONFLICTING_SQLITE_OBSERVATIONS")
             self.assertEqual(result["conflicting_sqlite_candle_keys"], 1)
+            self.assertEqual(result["duplicate_sqlite_candle_keys"], 1)
             self.assertEqual(result["conflicting_sqlite_samples"], [
                 {"symbol": "A", "candle_time_ist": "2026-10-14 10:00:00"}])
             self.assertFalse(result["available_source_reconciliation_verified"])
