@@ -35,7 +35,8 @@ def observed_history_gaps(history, today):
 def _result(gaps, count, ordered):
     return {"observed_history_gap_minutes": gaps,
             "observed_history_candles_today": count,
-            "observed_history_order_valid": ordered}
+            "observed_history_order_valid": ordered,
+            "observed_history_insufficient": count < 6}
 
 
 def summarize_observed_history(rows):
@@ -47,6 +48,8 @@ def summarize_observed_history(rows):
             and v["observed_history_gap_minutes"] >= 0]
     return {
         "stocks_with_observed_history_gaps": sum(n > 0 for n in gaps),
+        "stocks_with_insufficient_observed_history": sum(
+            v.get("observed_history_insufficient") is True for v in valid),
         "observed_history_gap_minutes_total": sum(gaps),
         "stocks_with_unknown_observed_history": sum(
             v.get("observed_history_order_valid") is False for v in valid),
