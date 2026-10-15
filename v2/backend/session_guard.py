@@ -116,3 +116,19 @@ def accept_verified_calendar(schedule, start_date, end_date, source, verified):
                 schedule, start_date, end_date)):
         return None
     return dict(schedule)
+
+
+def verified_range_session_minute(timestamp_ms, sessions, start_date, end_date):
+    """Fail closed outside a completely covered, explicitly bounded period.
+
+    Calendar provenance must be verified separately before this is used.
+    """
+    if not validate_session_coverage(sessions, start_date, end_date):
+        return None
+    try:
+        stamp = datetime.fromtimestamp(float(timestamp_ms) / 1000, IST)
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
+    if not start_date <= stamp.date() <= end_date:
+        return None
+    return verified_session_minute(timestamp_ms, sessions)
