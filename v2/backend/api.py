@@ -208,28 +208,8 @@ def candle_feed_quality():
         recovery = data.get("gap_recovery")
         if isinstance(recovery, dict):
             result["gap_recovery"] = recovery
-        # Observed-history metrics describe retained candles only, not
-        # complete market-session coverage. Unknown counts are kept separate.
-        result["stocks_with_observed_history_gaps"] = sum(
-            isinstance(v, dict)
-            and isinstance(v.get("observed_history_gap_minutes"), int)
-            and not isinstance(v.get("observed_history_gap_minutes"), bool)
-            and v["observed_history_gap_minutes"] > 0
-            for v in rows.values()
-        )
-        result["observed_history_gap_minutes_total"] = sum(
-            v["observed_history_gap_minutes"]
-            for v in rows.values()
-            if isinstance(v, dict)
-            and isinstance(v.get("observed_history_gap_minutes"), int)
-            and not isinstance(v.get("observed_history_gap_minutes"), bool)
-            and v["observed_history_gap_minutes"] >= 0
-        )
-        result["stocks_with_unknown_observed_history"] = sum(
-            isinstance(v, dict)
-            and v.get("observed_history_order_valid") is False
-            for v in rows.values()
-        )
+        from .quality_metrics import summarize_observed_history
+        result.update(summarize_observed_history(rows))
         result["stocks_six_consecutive_today"] = sum(
             v.get("six_consecutive_today") is True for v in rows.values()
         )
