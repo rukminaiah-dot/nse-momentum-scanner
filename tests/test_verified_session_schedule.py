@@ -101,6 +101,20 @@ class VerifiedSessionScheduleTests(unittest.TestCase):
         self.assertEqual(action(13, 0, datetime(2026, 10, 15, 12, 59), False),
                          "REJECT")
 
+    def test_calendar_close_rejects_previous_day_active_candle(self):
+        day, previous = date(2026, 10, 15), date(2026, 10, 14)
+        schedule = {previous: (time(9, 15), time(15, 30)),
+                    day: (time(9, 15), time(15, 30))}
+        self.assertEqual(accepted_calendar_tick_action(
+            ms(2026, 10, 15, 15, 30),
+            datetime(2026, 10, 14, 15, 29),
+            schedule, previous, day, "NSE notice", True), "REJECT")
+        self.assertEqual(accepted_calendar_tick_action(
+            ms(2026, 10, 15, 15, 30),
+            datetime(2026, 10, 15, 15, 29),
+            schedule, previous, day, "NSE notice", True),
+            "FINALIZE_LAST_MINUTE")
+
     def test_missing_date_fails_closed(self):
         self.assertIsNone(verified_session_minute(ms(2026, 10, 15, 10, 0), {}))
 
