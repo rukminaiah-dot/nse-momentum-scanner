@@ -211,5 +211,33 @@ class ScannerSessionExecutionTests(unittest.TestCase):
         self.assertEqual(len(manager.completed[key]), 1)
         self.assertEqual(calls.count("health"), 1)
 
+    def test_explicit_calendar_entrypoint_gates_index_ticks_too(self):
+        day = date(2026, 10, 15)
+        key = "NSE_INDEX|TEST"
+        on_tick, manager, state, calls = isolated_scanner(milliseconds(15, 30))
+        state["INDICES"] = {"TEST": key}
+        state["SESSION_CANDLE_GATE_ENABLED"] = False
+        tree = ast.parse(SOURCE.read_text())
+        wrapper = next(n for n in tree.body if isinstance(n, ast.FunctionDef)
+                       and n.name == "on_tick_with_verified_calendar")
+        exec(compile(ast.Module(body=[wrapper], type_ignores=[]),
+                     str(SOURCE), "exec"), state)
+        gated = state["on_tick_with_verified_calendar"]
+        schedule = {day: (time(9, 15), time(15, 30))}
+        def tick(hour, minute, verified=True):
+            return gated(key, {"ltp": 100, "ltt": milliseconds(hour, minute),
+                               "vtt": 500}, schedule, day, day,
+                         "Synthetic test calendar", verified)
+        self.assertEqual(tick(15, 45), "REJECT")
+        self.assertEqual(tick(15, 29, False), "REJECT")
+        self.assertEqual(calls, [])
+        self.assertEqual(manager.current, {})
+        self.assertEqual(tick(15, 29), "UPDATE")
+        self.assertIn(key, manager.current)
+        self.assertEqual(tick(15, 30), "FINALIZE_LAST_MINUTE")
+        self.assertEqual(len(manager.completed[key]), 1)
+        self.assertEqual(tick(15, 36), "REJECT")
+        self.assertEqual(calls.count("health"), 1)
+
 if __name__ == "__main__":
     unittest.main()
