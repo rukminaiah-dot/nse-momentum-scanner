@@ -80,3 +80,5 @@ jobs:
         run: python -m unittest discover -s tests -p test_upstox_timestamp_extraction.py -v
       - name: Live rollover bounded-history regression tests
         run: python -m unittest discover -s tests -p test_live_rollover_retention.py -v
+      - name: Offline scanner stock and index calendar policy tests
+        run: python -m unittest discover -s tests -p test_offline_scanner_session_policy.py -v
