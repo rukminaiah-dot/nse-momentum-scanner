@@ -621,27 +621,29 @@ def on_tick_with_verified_calendar(key, data, schedule, start_date, end_date,
     last_accepted = _last_accepted_tick_ms.get(key)
     if last_accepted is not None and stamp < last_accepted:
         return "REJECT"
-    # A late in-session tick may still be fresh by wall clock after a
-    # clock-driven close. Reject before trade, health or volume side effects.
-    if candles.is_verified_finalized_or_older(key, stamp):
-        return "REJECT"
+    # Serialize calendar classification and scanner effects against the
+    # explicit clock-driven finalizer. Both use the candle manager's RLock.
+    # Without this lock a close could race between the watermark check and
+    # on_tick, incorrectly reporting UPDATE after the candle was finalized.
     with candles.lock:
+        if candles.is_verified_finalized_or_older(key, stamp):
+            return "REJECT"
         item = candles.current.get(key)
         active_minute = item["minute"] if item else None
 
-    def finalize():
-        if candles.finalize_verified_session_end(
-                key, stamp, schedule, start_date, end_date, source, verified,
-                close_grace_minutes) is not None:
-            write_candle_quality()
+        def finalize():
+            if candles.finalize_verified_session_end(
+                    key, stamp, schedule, start_date, end_date, source, verified,
+                    close_grace_minutes) is not None:
+                write_candle_quality()
 
-    return dispatch_offline_scanner_tick(
-        key, stamp, active_minute,
-        frozenset(NIFTY_200.values()) | frozenset(INDICES.values()),
-        schedule, start_date, end_date, source, verified,
-        on_update=lambda: on_tick(key, data),
-        on_finalize=finalize, close_grace_minutes=close_grace_minutes,
-    )
+        return dispatch_offline_scanner_tick(
+            key, stamp, active_minute,
+            frozenset(NIFTY_200.values()) | frozenset(INDICES.values()),
+            schedule, start_date, end_date, source, verified,
+            on_update=lambda: on_tick(key, data),
+            on_finalize=finalize, close_grace_minutes=close_grace_minutes,
+        )
 
 
 if __name__ == "__main__":
