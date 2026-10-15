@@ -15,6 +15,21 @@ class Pg:
         return self.rows
 
 class ArchiveHealthTests(unittest.TestCase):
+    def test_reconciliation_rejects_sqlite_without_history_table_without_modifying_it(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "signals.db"
+            with sqlite3.connect(path) as con:
+                con.execute("CREATE TABLE unrelated (id INTEGER)")
+            original_bytes = path.read_bytes()
+            with self.assertRaisesRegex(sqlite3.OperationalError, "no such table"):
+                compare_archive_keys(path, Pg([]))
+            self.assertEqual(path.read_bytes(), original_bytes)
+            with sqlite3.connect(path) as con:
+                self.assertEqual(
+                    con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall(),
+                    [("unrelated",)],
+                )
+
     def test_reconciliation_does_not_create_missing_sqlite_parent_directory(self):
         with tempfile.TemporaryDirectory() as folder:
             parent = Path(folder) / "absent" / "nested"
