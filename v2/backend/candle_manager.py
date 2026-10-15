@@ -57,6 +57,19 @@ class CandleManager:
             item["candle"].update(price, volume)
             return None
 
+    def update_regular_session(self, key, price, timestamp_ms, volume=0):
+        """Opt-in gated update: never create candles outside regular hours."""
+        from .session_guard import session_tick_action
+        with self.lock:
+            item = self.current.get(key)
+            active = item["minute"] if item else None
+            action = session_tick_action(timestamp_ms, active)
+            if action == "UPDATE":
+                return self._update_locked(key, price, timestamp_ms, volume)
+            if action == "FINALIZE_LAST_MINUTE":
+                return self.finalize_last_regular_minute(key, timestamp_ms)
+            return None
+
     def finalize_last_regular_minute(self, key, timestamp_ms):
         """Opt-in, idempotent 15:29 candle finalization; never starts a new bar.
 
