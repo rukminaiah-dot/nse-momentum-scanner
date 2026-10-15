@@ -30,6 +30,15 @@ class PaperLedgerTests(unittest.TestCase):
         l.record(s("A", "stock", "SELL", 100, 3))
         self.assertEqual(l.summary()["flat"], 1)
 
+    def test_boolean_price_is_rejected_without_recording_a_signal(self):
+        ledger = PaperLedger()
+        for price in (True, False):
+            with self.subTest(price=price):
+                with self.assertRaises(ValueError):
+                    ledger.record(s("A", "stock", "BUY", price, 0))
+        self.assertEqual(ledger.events, [])
+        self.assertEqual(ledger.summary()["open_calls"], 0)
+
     def test_invalid_price_and_timestamp_order(self):
         l = PaperLedger()
         with self.assertRaises(ValueError):
