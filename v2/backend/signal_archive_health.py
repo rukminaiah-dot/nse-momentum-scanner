@@ -8,7 +8,7 @@ from datetime import datetime
 from math import isfinite
 
 def _timestamp(value):
-    return value.strftime("%Y-%m-%d %H:%M:%S") if hasattr(value, "strftime") else str(value)
+    return value.isoformat(sep=" ") if isinstance(value, datetime) else str(value)
 
 def compare_archive_keys(sqlite_path, pg_connection):
     """Compare observation keys AND signal/price values without modifying databases."""
