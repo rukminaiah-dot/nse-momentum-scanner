@@ -63,6 +63,7 @@ class OfflineScannerSessionPolicyTests(unittest.TestCase):
         functions = {n.name: n for n in scanner.body
                      if isinstance(n, ast.FunctionDef)}
         self.assertIn("on_tick_with_verified_calendar", functions)
+        self.assertIn("finalize_verified_calendar_without_tick", functions)
         live_tick = ast.unparse(functions["on_tick"])
         self.assertNotIn("dispatch_offline_scanner_tick", live_tick)
         self.assertNotIn("on_tick_with_verified_calendar", live_tick)
@@ -72,6 +73,7 @@ class OfflineScannerSessionPolicyTests(unittest.TestCase):
                     and "__main__" in ast.unparse(n.test))
         self.assertIn("UpstoxLiveV3(on_tick=on_tick)", ast.unparse(main))
         self.assertNotIn("on_tick_with_verified_calendar", ast.unparse(main))
+        self.assertNotIn("finalize_verified_calendar_without_tick", ast.unparse(main))
 
 
 if __name__ == "__main__":
