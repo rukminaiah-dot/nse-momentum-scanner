@@ -23,6 +23,8 @@ def isolated_scanner(now_ms):
     calls = []
     manager = CandleManager(log_closed_candles=False)
     namespace = {
+        "__name__": "v2.backend.scanner_isolated_test",
+        "__package__": "v2.backend",
         "SESSION_CANDLE_GATE_ENABLED": True,
         "NIFTY_200": {"TEST": "NSE_EQ|TEST"},
         "candles": manager,
