@@ -58,6 +58,24 @@ class SyncTests(unittest.TestCase):
                     sync_observed_signals(db, pg, batch_size=1)
                 self.assertEqual(pg.keys, set())
 
+    def test_invalid_candle_keys_rejected_before_postgres_writes(self):
+        for symbol, stamp in ((None, "2026-10-14 09:16:00"),
+                              ("", "2026-10-14 09:16:00"),
+                              ("   ", "2026-10-14 09:16:00"),
+                              ("B", None), ("B", "")):
+            with self.subTest(symbol=symbol, stamp=stamp), tempfile.TemporaryDirectory() as folder:
+                db = Path(folder) / "history.db"
+                with sqlite3.connect(db) as con:
+                    con.execute("CREATE TABLE scanner_signal_history (symbol TEXT,candle_time TEXT,price REAL,signal TEXT)")
+                    con.executemany("INSERT INTO scanner_signal_history VALUES (?,?,?,?)", [
+                        ("A", "2026-10-14 09:15:00", 100, "BUY"),
+                        (symbol, stamp, 101, "SELL"),
+                    ])
+                pg = FakePg()
+                with self.assertRaisesRegex(ValueError, "invalid SQLite signal candle key"):
+                    sync_observed_signals(db, pg, batch_size=1)
+                self.assertEqual(pg.keys, set())
+
     def test_duplicate_candle_rejected_before_postgres_writes(self):
         with tempfile.TemporaryDirectory() as folder:
             db = Path(folder) / "history.db"
