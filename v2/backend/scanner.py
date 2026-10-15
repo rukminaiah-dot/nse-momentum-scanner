@@ -610,6 +610,10 @@ def on_tick_with_verified_calendar(key, data, schedule, start_date, end_date,
             stamp *= 1000
     except (TypeError, ValueError, OverflowError):
         return "REJECT"
+    # A late in-session tick may still be fresh by wall clock after a
+    # clock-driven close. Reject before trade, health or volume side effects.
+    if candles.is_verified_finalized_or_older(key, stamp):
+        return "REJECT"
     with candles.lock:
         item = candles.current.get(key)
         active_minute = item["minute"] if item else None
