@@ -603,7 +603,14 @@ def on_tick_with_verified_calendar(key, data, schedule, start_date, end_date,
         return "REJECT"
     # on_tick silently drops ticks without a price. The explicit offline
     # wrapper must not report UPDATE when no scanner update can occur.
-    if data.get("ltp") is None:
+    price = data.get("ltp")
+    # The scanner compares prices with numeric trade thresholds and stores
+    # them in OHLC candles. Fail closed on nonnumeric/nonfinite input before
+    # trade, health, volume, or candle mutations.
+    if isinstance(price, bool) or not isinstance(price, (int, float)):
+        return "REJECT"
+    from math import isfinite
+    if not isfinite(price) or price <= 0:
         return "REJECT"
     stamp = data.get("ltt")
     if isinstance(stamp, bool):
