@@ -30,6 +30,15 @@ class PaperLedgerTests(unittest.TestCase):
         l.record(s("A", "stock", "SELL", 100, 3))
         self.assertEqual(l.summary()["flat"], 1)
 
+    def test_instrument_must_be_a_nonblank_string(self):
+        ledger = PaperLedger()
+        for instrument in ("", "   ", None, 123):
+            with self.subTest(instrument=instrument):
+                with self.assertRaises(ValueError):
+                    ledger.record(s(instrument, "stock", "BUY", 100, 0))
+        self.assertEqual(ledger.events, [])
+        self.assertEqual(ledger.summary()["open_calls"], 0)
+
     def test_boolean_price_is_rejected_without_recording_a_signal(self):
         ledger = PaperLedger()
         for price in (True, False):
