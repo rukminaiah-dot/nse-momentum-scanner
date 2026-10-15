@@ -69,6 +69,8 @@ def verified_session_minute(timestamp_ms, sessions):
             or not all(isinstance(t, time) and t.tzinfo is None for t in bounds)):
         return None
     start, end = bounds
-    if start >= end or not start <= stamp.time() < end:
+    # Session boundaries must be minute-aligned, strictly ordered and same-day.
+    if (start.second or start.microsecond or end.second or end.microsecond
+            or start >= end or not start <= stamp.time() < end):
         return None
     return stamp.replace(second=0, microsecond=0, tzinfo=None)
