@@ -239,5 +239,34 @@ class ScannerSessionExecutionTests(unittest.TestCase):
         self.assertEqual(tick(15, 36), "REJECT")
         self.assertEqual(calls.count("health"), 1)
 
+    def test_explicit_no_tick_finalizer_is_idempotent_and_bounded(self):
+        key = "NSE_EQ|TEST"
+        day = date(2026, 10, 15)
+        schedule = {day: (time(9, 15), time(15, 30))}
+        on_tick, manager, state, calls = isolated_scanner(milliseconds(15, 30))
+        state["INDICES"] = {"INDEX": "NSE_INDEX|TEST"}
+        state["SESSION_CANDLE_GATE_ENABLED"] = False
+        tree = ast.parse(SOURCE.read_text())
+        fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef)
+                  and n.name == "finalize_verified_calendar_without_tick")
+        exec(compile(ast.Module(body=[fn], type_ignores=[]),
+                     str(SOURCE), "exec"), state)
+        finalize = state["finalize_verified_calendar_without_tick"]
+        manager.update(key, 100, milliseconds(15, 29), 5)
+        args = (key, milliseconds(15, 30), schedule, day, day,
+                "Synthetic test calendar", True)
+        self.assertTrue(finalize(*args))
+        self.assertFalse(finalize(*args))
+        self.assertEqual(len(manager.completed[key]), 1)
+        self.assertEqual(manager.completed[key][0].close, 100)
+        self.assertEqual(calls, ["quality"])
+        self.assertEqual(state["_last_accepted_tick_ms"], {})
+        self.assertEqual(state["last_cumulative_volumes"], {})
+        manager.update(key, 101, milliseconds(15, 29), 5)
+        self.assertFalse(finalize(key, milliseconds(15, 36), schedule, day,
+                                  day, "Synthetic test calendar", True))
+        self.assertIn(key, manager.current)
+        self.assertEqual(calls, ["quality"])
+
 if __name__ == "__main__":
     unittest.main()
