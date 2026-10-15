@@ -157,7 +157,7 @@ def accepted_calendar_minute(timestamp_ms, schedule, start_date, end_date,
 
 
 def accepted_calendar_tick_action(timestamp_ms, active_minute, schedule,
-                                  start_date, end_date, source, verified):
+                                  start_date, end_date, source, verified, close_grace_minutes=5):
     """Classify a verified-calendar tick, including final-minute closure.
 
     Only a same-date, final scheduled minute can be finalized after close.
@@ -165,7 +165,10 @@ def accepted_calendar_tick_action(timestamp_ms, active_minute, schedule,
     """
     accepted = accept_verified_calendar(
         schedule, start_date, end_date, source, verified)
-    if accepted is None or isinstance(timestamp_ms, bool):
+    if (accepted is None or isinstance(timestamp_ms, bool)
+            or isinstance(close_grace_minutes, bool)
+            or not isinstance(close_grace_minutes, (int, float))
+            or not 0 <= close_grace_minutes <= 60):
         return "REJECT"
     try:
         stamp = datetime.fromtimestamp(float(timestamp_ms) / 1000, IST)
@@ -183,6 +186,7 @@ def accepted_calendar_tick_action(timestamp_ms, active_minute, schedule,
     if (isinstance(active_minute, datetime)
             and active_minute.tzinfo is None
             and active_minute == final_minute
-            and stamp.time() >= end):
+            and datetime.combine(stamp.date(), end, IST) <= stamp
+            <= datetime.combine(stamp.date(), end, IST) + timedelta(minutes=close_grace_minutes)):
         return "FINALIZE_LAST_MINUTE"
     return "REJECT"
