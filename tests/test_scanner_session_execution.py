@@ -189,6 +189,7 @@ class ScannerSessionExecutionTests(unittest.TestCase):
         schedule = {day: (time(9, 15), time(15, 30))}
         on_tick, manager, state, calls = isolated_scanner(milliseconds(15, 30))
         state["INDICES"] = {"INDEX": "NSE_INDEX|TEST"}
+        state["SESSION_CANDLE_GATE_ENABLED"] = False
         tree = ast.parse(SOURCE.read_text())
         wrapper = next(n for n in tree.body if isinstance(n, ast.FunctionDef)
                        and n.name == "on_tick_with_verified_calendar")
