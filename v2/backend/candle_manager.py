@@ -9,9 +9,20 @@ class CandleManager:
         self.lock = threading.RLock()
         self.current = {}
         self.completed = {}
+        # Per-instrument watermark for explicit verified-calendar finalization.
+        # A delayed in-session tick must never recreate an already closed bar.
+        # Legacy paths are unchanged until an explicit finalizer is invoked.
+        self._verified_finalized_minute = {}
 
     def minute_key(self, ts):
         return datetime.fromtimestamp(float(ts) / 1000, ZoneInfo("Asia/Kolkata")).replace(second=0, microsecond=0, tzinfo=None)
+
+    def is_verified_finalized_or_older(self, key, timestamp_ms):
+        """Return whether a tick would reopen a finalized calendar session."""
+        with self.lock:
+            finalized = self._verified_finalized_minute.get(key)
+            return (finalized is not None
+                    and self.minute_key(timestamp_ms) <= finalized)
 
     def update(self, key, price, ts, volume=0):
         with self.lock:
@@ -19,6 +30,14 @@ class CandleManager:
 
     def _update_locked(self, key, price, ts, volume=0):
         minute = self.minute_key(ts)
+        finalized = self._verified_finalized_minute.get(key)
+        if finalized is not None:
+            if minute <= finalized:
+                # The same or an older minute must not be recreated.
+                return None
+            if minute.date() > finalized.date():
+                # Bound the watermark to the most recent completed date.
+                self._verified_finalized_minute.pop(key, None)
         item = self.current.get(key)
 
         # Never roll the active candle backwards on delayed/out-of-order ticks.
@@ -115,6 +134,7 @@ class CandleManager:
             self.completed.setdefault(key, []).append(candle)
             self.completed[key] = self.completed[key][-60:]
             self.current.pop(key, None)
+            self._verified_finalized_minute[key] = active
             if self.log_closed_candles:
                 print("CANDLE_CLOSED_VERIFIED_SESSION_END", key, candle.__dict__)
             return candle
