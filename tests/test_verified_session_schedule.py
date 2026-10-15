@@ -3,7 +3,7 @@ import unittest
 from datetime import date, datetime, time
 from zoneinfo import ZoneInfo
 
-from v2.backend.session_guard import verified_session_minute
+from v2.backend.session_guard import verified_session_minute, validate_session_coverage
 
 IST = ZoneInfo("Asia/Kolkata")
 
@@ -13,6 +13,20 @@ def ms(y, m, d, h, minute):
 
 
 class VerifiedSessionScheduleTests(unittest.TestCase):
+    def test_complete_calendar_requires_explicit_closed_days(self):
+        friday, saturday, sunday = date(2026, 10, 16), date(2026, 10, 17), date(2026, 10, 18)
+        sessions = {friday: (time(9, 15), time(15, 30)), saturday: None}
+        self.assertFalse(validate_session_coverage(sessions, friday, sunday))
+        sessions[sunday] = None
+        self.assertTrue(validate_session_coverage(sessions, friday, sunday))
+
+    def test_calendar_coverage_rejects_invalid_ranges_and_bounds(self):
+        day = date(2026, 10, 15)
+        self.assertFalse(validate_session_coverage({day: None}, date(2026, 10, 16), day))
+        self.assertFalse(validate_session_coverage({day: ("09:15", "15:30")}, day, day))
+        self.assertFalse(validate_session_coverage({day: (time(15, 30), time(9, 15))}, day, day))
+        self.assertFalse(validate_session_coverage({}, day, day))
+
     def test_missing_date_fails_closed(self):
         self.assertIsNone(verified_session_minute(ms(2026, 10, 15, 10, 0), {}))
 
