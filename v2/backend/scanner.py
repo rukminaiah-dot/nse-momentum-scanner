@@ -563,6 +563,32 @@ def on_tick(key, data):
         analyse(key)
 
 
+def finalize_verified_calendar_without_tick(key, now_ms, schedule,
+                                            start_date, end_date, source,
+                                            verified, close_grace_minutes=5):
+    """Explicit offline/test-callable no-tick finalization; no timer is started.
+
+    The caller supplies its own clock and independently reviewed calendar.
+    No feed callback, network request, or background scheduler is installed.
+    """
+    if SESSION_CANDLE_GATE_ENABLED or key not in (
+            frozenset(NIFTY_200.values()) | frozenset(INDICES.values())):
+        return False
+    if isinstance(now_ms, bool):
+        return False
+    try:
+        stamp = int(float(now_ms))
+    except (TypeError, ValueError, OverflowError):
+        return False
+    closed = candles.finalize_verified_session_end(
+        key, stamp, schedule, start_date, end_date, source, verified,
+        close_grace_minutes)
+    if closed is None:
+        return False
+    write_candle_quality()
+    return True
+
+
 def on_tick_with_verified_calendar(key, data, schedule, start_date, end_date,
                                    source, verified, close_grace_minutes=5):
     """Explicitly invoked calendar-aware scanner entrypoint (NOT live-wired).
