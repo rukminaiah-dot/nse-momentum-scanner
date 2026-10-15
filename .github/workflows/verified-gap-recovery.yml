@@ -28,6 +28,8 @@ on:
       - 'test_signal_archive_health_api.py'
       - 'test_signal_daily_accuracy_csv.py'
       - 'probe_upstox_recovery.py'
+      - 'tests/test_database_backup_scaffold.py'
+      - 'database/scripts/**'
       - 'tests/test_quality_metrics.py'
       - 'tests/test_session_guard.py'
       - 'tests/test_session_finalization.py'
@@ -84,3 +86,6 @@ jobs:
         run: python -m unittest discover -s tests -p test_offline_scanner_session_policy.py -v
       - name: Offline calendar-first scanner dispatch tests
         run: python -m unittest discover -s tests -p test_offline_scanner_session_dispatch.py -v
+
+      - name: Offline database backup safety tests
+        run: python -m unittest discover -s tests -p test_database_backup_scaffold.py -v
