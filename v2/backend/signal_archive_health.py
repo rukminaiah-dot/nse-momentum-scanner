@@ -44,9 +44,11 @@ def compare_archive_keys(sqlite_path, pg_connection):
                 source_rows[key] = value
     archive_rows = {}
     duplicate_archive_keys = set()
+    archive_rows_scanned = 0
     for symbol, stamp, price, signal in pg_connection.execute(
         "SELECT symbol,candle_time_ist,price,signal FROM scanner_signal_archive"
     ).fetchall():
+        archive_rows_scanned += 1
         if not isinstance(symbol, str) or not symbol.strip() or not isinstance(stamp, datetime) or stamp.tzinfo is not None:
             raise ValueError("invalid PostgreSQL archive candle key")
         if signal not in ("BUY", "SELL", "HOLD"):
@@ -100,6 +102,7 @@ def compare_archive_keys(sqlite_path, pg_connection):
             for symbol, stamp in sorted(duplicate_source_keys)[:10]
         ],
         "postgres_archive_observations": len(archive_keys),
+        "postgres_archive_rows_scanned": archive_rows_scanned,
         "missing_from_archive": len(missing),
         "missing_samples": [
             {"symbol": symbol, "candle_time_ist": stamp}
