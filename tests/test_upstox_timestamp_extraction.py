@@ -26,6 +26,18 @@ class ExtractionTests(unittest.TestCase):
         self.assertNotIn("SECRET_A", str(result))
         self.assertNotIn("999", str(result))
 
+    def test_malformed_direct_feed_falls_back_to_nested(self):
+        payload = {"currentTs": ms(15, 58), "feeds": {
+            "A": {"ltpc": {}, "ff": {"marketFF": {"ltpc": {"ltt": ms(15, 28)}}}},
+            "B": {"ltpc": "bad", "ff": [], "fullFeed": {
+                "indexFF": {"ltpc": {"ltt": ms(15, 29)}}}},
+            "C": {"ltpc": None, "ff": {"marketFF": None},
+                  "fullFeed": {"marketFF": {"ltpc": {"ltt": ms(15, 28)}}}},
+        }}
+        records = inspect_decoded_message(payload, ms(15, 58))
+        self.assertEqual(len(records), 3)
+        self.assertTrue(all(row["trade_status"] == "STALE" for row in records))
+
     def test_malformed_payload_is_ignored(self):
         self.assertEqual(inspect_decoded_message(None, ms(10, 0)), [])
         self.assertEqual(inspect_decoded_message({"feeds": []}, ms(10, 0)), [])
