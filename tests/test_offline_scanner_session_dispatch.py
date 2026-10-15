@@ -179,5 +179,21 @@ class OfflineScannerDispatchTests(unittest.TestCase):
         self.assertEqual(action, "REJECT")
         self.assertEqual(invoked, [])
 
+    def test_finalize_callback_failure_does_not_fall_through_to_update(self):
+        def failed_finalize():
+            self.events.append("FINALIZE_FAILED")
+            raise RuntimeError("synthetic finalize failure")
+
+        with self.assertRaisesRegex(RuntimeError, "synthetic finalize failure"):
+            dispatch_offline_scanner_tick(
+                "INDEX", ms(15, 30), datetime(2026, 10, 15, 15, 29),
+                KEYS, CALENDAR, DAY, DAY, "Synthetic calendar", True,
+                on_update=self.update, on_finalize=failed_finalize,
+            )
+        self.assertEqual(self.events, ["FINALIZE_FAILED"])
+        self.assertEqual(self.state["candles"], 0)
+        self.assertEqual(self.state["health"], 0)
+        self.assertEqual(self.state["signals"], 0)
+
 if __name__ == "__main__":
     unittest.main()
