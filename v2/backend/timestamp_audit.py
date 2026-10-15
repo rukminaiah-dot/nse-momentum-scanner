@@ -1,5 +1,6 @@
 """Offline timestamp diagnostics. No logging, network, or scanner integration."""
 from datetime import datetime
+import math
 from zoneinfo import ZoneInfo
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -14,11 +15,21 @@ def inspect_tick_timestamp(raw_ltt, arrival_ms, *, session_action=None):
     if isinstance(raw_ltt, bool) or isinstance(arrival_ms, bool):
         return {"status": "INVALID"}
     try:
-        event_ms = int(float(raw_ltt))
-        arrival_ms = int(float(arrival_ms))
-        if event_ms < 10**11:
+        # Reject fractional, non-finite and ambiguous-magnitude timestamps.
+        # Epoch seconds are 10 digits; epoch milliseconds are 13 digits for
+        # modern trading dates. Do not silently reinterpret other magnitudes.
+        event_number = float(raw_ltt)
+        arrival_number = float(arrival_ms)
+        if (not math.isfinite(event_number) or not math.isfinite(arrival_number)
+                or not event_number.is_integer() or not arrival_number.is_integer()):
+            return {"status": "INVALID"}
+        event_ms = int(event_number)
+        arrival_ms = int(arrival_number)
+        if 10**9 <= event_ms < 10**10:
             event_ms *= 1000
-        if event_ms <= 0 or arrival_ms <= 0:
+        elif not 10**12 <= event_ms < 10**13:
+            return {"status": "INVALID"}
+        if not 10**12 <= arrival_ms < 10**13:
             return {"status": "INVALID"}
         event = datetime.fromtimestamp(event_ms / 1000, IST)
         arrival = datetime.fromtimestamp(arrival_ms / 1000, IST)
