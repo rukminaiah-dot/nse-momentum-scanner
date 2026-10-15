@@ -114,5 +114,30 @@ class OfflineScannerDispatchTests(unittest.TestCase):
             on_update=unexpected, on_finalize=unexpected,
         ), "REJECT")
 
+    def test_explicit_weekend_special_session_updates_only_in_window(self):
+        special_day = date(2026, 10, 17)
+        special_schedule = {special_day: (time(18, 0), time(19, 0))}
+        def weekend_ms(hour, minute):
+            return int(datetime(2026, 10, 17, hour, minute,
+                                tzinfo=IST).timestamp() * 1000)
+
+        for key in KEYS:
+            result = dispatch_offline_scanner_tick(
+                key, weekend_ms(18, 30), None, KEYS, special_schedule,
+                special_day, special_day, "Synthetic special session", True,
+                on_update=self.update, on_finalize=self.finalize,
+            )
+            self.assertEqual(result, "UPDATE")
+        before = dict(self.state)
+        for key in KEYS:
+            result = dispatch_offline_scanner_tick(
+                key, weekend_ms(19, 10), None, KEYS, special_schedule,
+                special_day, special_day, "Synthetic special session", True,
+                on_update=self.update, on_finalize=self.finalize,
+            )
+            self.assertEqual(result, "REJECT")
+        self.assertEqual(self.state, before)
+        self.assertEqual(self.state["candles"], 2)
+
 if __name__ == "__main__":
     unittest.main()
