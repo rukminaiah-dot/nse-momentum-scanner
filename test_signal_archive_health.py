@@ -122,6 +122,8 @@ class ArchiveHealthTests(unittest.TestCase):
             result = compare_archive_keys(path, pg)
             self.assertEqual(result["status"], "DUPLICATE_ARCHIVE_OBSERVATIONS")
             self.assertEqual(result["duplicate_archive_candle_keys"], 1)
+            self.assertEqual(result["duplicate_archive_samples"], [
+                {"symbol": "A", "candle_time_ist": "2026-10-14 10:00:00"}])
             self.assertFalse(result["available_source_reconciliation_verified"])
 
     def test_duplicate_sqlite_keys_are_not_silently_accepted(self):
