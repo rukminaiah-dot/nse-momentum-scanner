@@ -91,6 +91,31 @@ class CandleManager:
                 print("CANDLE_CLOSED_SESSION_END", key, candle.__dict__)
             return candle
 
+    def finalize_verified_session_end(self, key, now_ms, schedule,
+                                      start_date, end_date, source, verified,
+                                      close_grace_minutes=5):
+        """Offline-only explicit-calendar finalization; no timer or feed wiring.
+
+        The caller supplies a verified bounded calendar and current event time.
+        Never creates a candle, and repeated calls cannot finalize twice.
+        """
+        from .session_guard import accepted_calendar_tick_action
+        with self.lock:
+            item = self.current.get(key)
+            active = item["minute"] if item else None
+            if accepted_calendar_tick_action(
+                    now_ms, active, schedule, start_date, end_date,
+                    source, verified, close_grace_minutes) != "FINALIZE_LAST_MINUTE":
+                return None
+            candle = item["candle"]
+            candle.timestamp = active
+            self.completed.setdefault(key, []).append(candle)
+            self.completed[key] = self.completed[key][-60:]
+            self.current.pop(key, None)
+            if self.log_closed_candles:
+                print("CANDLE_CLOSED_VERIFIED_SESSION_END", key, candle.__dict__)
+            return candle
+
     def recovery_snapshot(self, key):
         with self.lock:
             item = self.current.get(key)
