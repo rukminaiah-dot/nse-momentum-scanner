@@ -1,6 +1,6 @@
 # Calendar-aware scanner integration: offline implementation design
 
-Status: **design only; not authorized for live wiring or deployment**.
+Status: **offline feature-branch integration implemented and CI-tested; not authorized for live feed wiring or deployment**. The explicit `on_tick_with_verified_calendar(...)` entrypoint in `v2/backend/scanner.py` delegates to the existing scanner tick handler only after a calendar decision. The `UpstoxLiveV3(on_tick=on_tick)` startup callback is unchanged.
 This document complements `scanner-session-boundary-integration-audit.md`.
 
 ## Separation of responsibilities
@@ -26,11 +26,9 @@ This document complements `scanner-session-boundary-integration-audit.md`.
 5. **Make feed health explicit.** Track raw receipt and accepted-trade
    activity separately; a session rejection is not proof of an outage.
 
-## Required integration tests before any wiring
+## Offline integration verification and remaining test work
 
-- Exercise the **real `on_tick` function** with AST-isolated fake dependencies
-  (the existing `test_scanner_session_execution.py` pattern), not only the
-  independent policy/dispatch helper.
+- **Implemented and CI-tested:** AST-isolated real `on_tick` execution and explicit calendar entrypoint with synthetic stock/index ticks (`test_scanner_session_execution.py`).
 - Assert no accepted timestamp, trade update, health write, volume baseline,
   candle, recovery request, or signal changes for a rejected stock **and**
   rejected index event.
@@ -38,8 +36,8 @@ This document complements `scanner-session-boundary-integration-audit.md`.
   date-range expiry, invalid calendar provenance, malformed timestamps,
   out-of-order events, and repeated finalization.
 - Check the live disabled-by-default path remains behaviorally unchanged.
-- Keep the offline isolation guard in place until a separately reviewed,
-  explicitly authorized integration replaces it.
+- **Implemented and CI-tested:** AST guard asserts live startup remains on the legacy `on_tick` callback; calendar entrypoint is not feed-wired.
+- **Still required:** exhaustive side-effect assertions for indices and stocks across all exceptional timestamp/calendar conditions, independent calendar provenance verification, and no-tick clock-finalization design.
 
 ## Rollout blockers
 
@@ -50,5 +48,10 @@ This document complements `scanner-session-boundary-integration-audit.md`.
 - Production enablement, deployment, merge, or live feed access is not
   authorized.
 
-**Decision:** continue offline tests and review only; do not enable the
-weekday-only `ENABLE_NSE_SESSION_CANDLE_GATE` flag.
+## Tomorrow's controlled test readiness
+
+- **Ready now:** synthetic offline stock/index calendar-gating and finalization tests; both feature-branch CI workflows passed on commit `fb8a3ca` (270 offline tests and 105 WebSocket preflight tests).
+- **Manual input needed for realistic tests:** independently authenticated, complete NSE dated calendar covering the test date(s); authorized isolated Upstox V3 timestamp samples and explicit permission before any real feed connection.
+- **Not ready:** production or live-feed tests, unattended no-tick close handling, and deployment. Do not treat a green synthetic suite as proof of live-market correctness.
+
+**Decision:** continue offline review only; do not enable the weekday-only `ENABLE_NSE_SESSION_CANDLE_GATE` flag or replace the live Upstox callback without separate approval.
