@@ -147,6 +147,28 @@ class ArchiveHealthTests(unittest.TestCase):
             self.assertEqual(result["duplicate_archive_samples"][-1]["candle_time_ist"], "2026-10-14 10:09:00")
             self.assertFalse(result["available_source_reconciliation_verified"])
 
+    def test_conflicting_archive_samples_are_bounded_and_sorted(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "signals.db"
+            with sqlite3.connect(path) as con:
+                con.execute("CREATE TABLE scanner_signal_history (symbol TEXT,candle_time TEXT,price REAL,signal TEXT)")
+                con.execute("INSERT INTO scanner_signal_history VALUES (?,?,?,?)",
+                            ("A", "2026-10-14 09:00:00", 100, "BUY"))
+            rows = [("A", datetime(2026, 10, 14, 9), 100, "BUY")]
+            for minute in reversed(range(12)):
+                rows.extend([
+                    ("OLD", datetime(2026, 10, 13, 10, minute), 99, "SELL"),
+                    ("OLD", datetime(2026, 10, 13, 10, minute), 101, "BUY"),
+                ])
+            result = compare_archive_keys(path, Pg(rows))
+            self.assertEqual(result["status"], "DUPLICATE_ARCHIVE_OBSERVATIONS")
+            self.assertEqual(result["duplicate_archive_candle_keys"], 12)
+            self.assertEqual(result["conflicting_archive_candle_keys"], 12)
+            self.assertEqual(len(result["conflicting_archive_samples"]), 10)
+            self.assertEqual(result["conflicting_archive_samples"][0]["candle_time_ist"], "2026-10-13 10:00:00")
+            self.assertEqual(result["conflicting_archive_samples"][-1]["candle_time_ist"], "2026-10-13 10:09:00")
+            self.assertFalse(result["available_source_reconciliation_verified"])
+
     def test_conflicting_archive_duplicates_are_reported_separately(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "signals.db"
