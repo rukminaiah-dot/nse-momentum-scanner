@@ -34,6 +34,16 @@ def sync_observed_signals(sqlite_path, pg_connection, *, batch_size=500):
         ).fetchone()
         if invalid is not None:
             raise ValueError("invalid SQLite signal price; resolve before manual archive sync")
+        invalid_key = source.execute(
+            """SELECT symbol,candle_time FROM scanner_signal_history
+               WHERE signal IN ('BUY','SELL','HOLD')
+                 AND (symbol IS NULL OR typeof(symbol) != 'text'
+                      OR trim(symbol) = '' OR candle_time IS NULL
+                      OR typeof(candle_time) != 'text' OR trim(candle_time) = '')
+               LIMIT 1"""
+        ).fetchone()
+        if invalid_key is not None:
+            raise ValueError("invalid SQLite signal candle key; resolve before manual archive sync")
         cursor = source.execute(
             """SELECT symbol,candle_time,price,signal
                FROM scanner_signal_history
