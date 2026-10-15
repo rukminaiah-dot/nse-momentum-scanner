@@ -14,6 +14,11 @@ class SignalArchiveCliFailureTests(unittest.TestCase):
     def _run(self, action, *, sync=None, verify=None):
         """Exercise CLI exit status with a fake connection, never a real database."""
         class FakeConnection:
+            def execute(self, sql):
+                if sql != "SET TRANSACTION READ ONLY":
+                    raise AssertionError("unexpected SQL before verification")
+                self.read_only_enabled = True
+                return self
             def __enter__(self):
                 return self
             def __exit__(self, *args):
@@ -70,6 +75,14 @@ class SignalArchiveCliFailureTests(unittest.TestCase):
         code, out, err = self._run("verify", verify=result)
         self.assertEqual(code, 3)
         self.assertIn('"duplicate_sqlite_candle_keys": 1', out)
+        self.assertEqual(err, "")
+
+    def test_verify_enables_read_only_before_comparison(self):
+        result = {"available_source_reconciliation_verified": True,
+                  "missing_from_archive": 0, "mismatched_archive_values": 0}
+        code, out, err = self._run("verify", verify=result)
+        self.assertEqual(code, 0)
+        self.assertIn('"available_source_reconciliation_verified": true', out)
         self.assertEqual(err, "")
 
     def test_verified_reconciliation_exits_zero(self):
