@@ -19,7 +19,9 @@ def classify_scanner_tick(
     REJECT: do not mutate any trading, candle, volume, or accepted-health state.
     """
     try:
-        if (not isinstance(key, str) or not key\n                or not isinstance(eligible_keys, (set, frozenset, tuple, list))\n                or key not in eligible_keys):
+        if (not isinstance(key, str) or not key
+                or not isinstance(eligible_keys, (set, frozenset, tuple, list))
+                or key not in eligible_keys):
             return "REJECT"
     except (TypeError, ValueError):
         return "REJECT"
