@@ -31,6 +31,15 @@ class VerifiedSessionScheduleTests(unittest.TestCase):
         schedule = {date(2026, 10, 15): (time(9, 15), time(13, 0))}
         self.assertIsNone(verified_session_minute(ms(2026, 10, 15, 13, 0), schedule))
 
+    def test_non_minute_aligned_boundaries_fail_closed(self):
+        for bounds in ((time(9, 15, 1), time(15, 30)),
+                       (time(9, 15), time(15, 30, 1)),
+                       (time(9, 15, 0, 1), time(15, 30))):
+            with self.subTest(bounds=bounds):
+                self.assertIsNone(verified_session_minute(
+                    ms(2026, 10, 15, 10, 0),
+                    {date(2026, 10, 15): bounds}))
+
     def test_malformed_schedule_fails_closed(self):
         for schedule in (None, [], {date(2026, 10, 15): (time(15), time(9))},
                          {date(2026, 10, 15): ("09:15", "15:30")}):
