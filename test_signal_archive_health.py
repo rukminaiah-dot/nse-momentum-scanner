@@ -147,6 +147,28 @@ class ArchiveHealthTests(unittest.TestCase):
             self.assertEqual(result["duplicate_archive_samples"][-1]["candle_time_ist"], "2026-10-14 10:09:00")
             self.assertFalse(result["available_source_reconciliation_verified"])
 
+    def test_extra_archive_samples_are_bounded_and_sorted(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "signals.db"
+            with sqlite3.connect(path) as con:
+                con.execute("CREATE TABLE scanner_signal_history (symbol TEXT,candle_time TEXT,price REAL,signal TEXT)")
+                con.execute("INSERT INTO scanner_signal_history VALUES (?,?,?,?)",
+                            ("A", "2026-10-14 09:00:00", 100, "BUY"))
+            pg = Pg(
+                [("A", datetime(2026, 10, 14, 9), 100, "BUY")]
+                + [("OLD", datetime(2026, 10, 13, 10, minute), 99, "SELL")
+                   for minute in reversed(range(12))]
+            )
+            result = compare_archive_keys(path, pg)
+            self.assertEqual(result["status"], "MATCHED_AVAILABLE_SOURCE")
+            self.assertTrue(result["archive_only_rows_present"])
+            self.assertEqual(result["extra_archive_observations"], 12)
+            self.assertEqual(len(result["extra_archive_samples"]), 10)
+            self.assertEqual(result["extra_archive_samples"][0]["candle_time_ist"], "2026-10-13 10:00:00")
+            self.assertEqual(result["extra_archive_samples"][-1]["candle_time_ist"], "2026-10-13 10:09:00")
+            self.assertTrue(result["available_source_reconciliation_verified"])
+            self.assertFalse(result["historical_completeness_verified"])
+
     def test_missing_archive_samples_are_bounded_and_sorted(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "signals.db"
