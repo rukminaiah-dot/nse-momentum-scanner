@@ -34,7 +34,7 @@ def compare_archive_keys(sqlite_path, pg_connection):
                 raise ValueError("invalid SQLite signal price") from None
             if not isinstance(price, (int, float)) or not isfinite(numeric_price) or numeric_price <= 0:
                 raise ValueError("invalid SQLite signal price")
-            key = (symbol, _timestamp(stamp))
+            key = (symbol, _timestamp(parsed))
             value = (numeric_price, signal)
             if key in source_rows:
                 duplicate_source_keys.add(key)
