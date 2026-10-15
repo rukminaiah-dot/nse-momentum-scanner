@@ -4,6 +4,8 @@ Only currently available SQLite history can be checked. Previously lost rows
 cannot be reconstructed or certified by a successful comparison.
 """
 import sqlite3
+from datetime import datetime
+from math import isfinite
 
 def _timestamp(value):
     return value.strftime("%Y-%m-%d %H:%M:%S") if hasattr(value, "strftime") else str(value)
@@ -16,10 +18,24 @@ def compare_archive_keys(sqlite_path, pg_connection):
     with sqlite3.connect(f"file:{sqlite_path}?mode=ro", uri=True, timeout=10) as source:
         for symbol, stamp, price, signal in source.execute(
             """SELECT symbol,candle_time,price,signal FROM scanner_signal_history
-               WHERE signal IN ('BUY','SELL','HOLD') AND price IS NOT NULL"""
+               WHERE signal IN ('BUY','SELL','HOLD')"""
         ):
+            if not isinstance(symbol, str) or not symbol.strip() or not isinstance(stamp, str) or not stamp.strip():
+                raise ValueError("invalid SQLite signal candle key")
+            try:
+                parsed = datetime.fromisoformat(stamp)
+            except ValueError:
+                raise ValueError("invalid SQLite candle timestamp") from None
+            if parsed.tzinfo is not None:
+                raise ValueError("invalid SQLite candle timestamp; expected naive IST")
+            try:
+                numeric_price = float(price)
+            except (TypeError, ValueError, OverflowError):
+                raise ValueError("invalid SQLite signal price") from None
+            if not isinstance(price, (int, float)) or not isfinite(numeric_price) or numeric_price <= 0:
+                raise ValueError("invalid SQLite signal price")
             key = (symbol, _timestamp(stamp))
-            value = (float(price), signal)
+            value = (numeric_price, signal)
             if key in source_rows:
                 duplicate_source_keys.add(key)
                 if source_rows[key] != value:
