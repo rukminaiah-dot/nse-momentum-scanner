@@ -36,6 +36,7 @@ on:
       - 'tests/test_verified_session_schedule.py'
       - 'tests/test_verified_session_finalization.py'
       - 'tests/test_timestamp_audit.py'
+      - 'tests/test_nonproduction_timestamp_observer.py'
 
 permissions:
   contents: read
@@ -71,3 +72,5 @@ jobs:
         run: python -m unittest discover -s tests -p test_verified_session_finalization.py -v
       - name: Explicit session schedule tests
         run: python -m unittest discover -s tests -p test_verified_session_schedule.py -v
+      - name: Nonproduction timestamp observer tests
+        run: python -m unittest discover -s tests -p test_nonproduction_timestamp_observer.py -v
