@@ -1,7 +1,7 @@
 import sqlite3
 import tempfile
 import unittest
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from v2.backend.signal_archive_health import compare_archive_keys
 
@@ -113,6 +113,8 @@ class ArchiveHealthTests(unittest.TestCase):
             (None, datetime(2026, 10, 14, 10), 100, "BUY"),
             (" ", datetime(2026, 10, 14, 10), 100, "BUY"),
             ("A", None, 100, "BUY"),
+            ("A", "2026-10-14 10:00:00", 100, "BUY"),
+            ("A", datetime(2026, 10, 14, 10, tzinfo=timezone.utc), 100, "BUY"),
             ("A", datetime(2026, 10, 14, 10), 0, "BUY"),
             ("A", datetime(2026, 10, 14, 10), float("inf"), "BUY"),
             ("A", datetime(2026, 10, 14, 10), 100, "UNKNOWN"),
