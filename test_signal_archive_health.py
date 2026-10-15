@@ -172,6 +172,7 @@ class ArchiveHealthTests(unittest.TestCase):
             self.assertEqual(result["status"], "MISSING_ARCHIVE_ROWS")
             self.assertEqual(result["missing_from_archive"], 1)
             self.assertEqual(result["extra_archive_observations"], 1)
+            self.assertTrue(result["archive_only_rows_present"])
             self.assertFalse(result["available_source_reconciliation_verified"])
 
     def test_fractional_seconds_remain_distinct_archive_keys(self):
