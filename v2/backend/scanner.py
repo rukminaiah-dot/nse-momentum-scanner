@@ -601,6 +601,10 @@ def on_tick_with_verified_calendar(key, data, schedule, start_date, end_date,
 
     if SESSION_CANDLE_GATE_ENABLED or not isinstance(data, dict):
         return "REJECT"
+    # on_tick silently drops ticks without a price. The explicit offline
+    # wrapper must not report UPDATE when no scanner update can occur.
+    if data.get("ltp") is None:
+        return "REJECT"
     stamp = data.get("ltt")
     if isinstance(stamp, bool):
         return "REJECT"
