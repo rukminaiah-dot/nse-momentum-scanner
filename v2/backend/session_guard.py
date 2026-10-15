@@ -39,8 +39,6 @@ def session_tick_action(timestamp_ms, active_minute=None):
     if minute is not None:
         return "UPDATE"
     if isinstance(timestamp_ms, bool):
-        return None
-    if isinstance(timestamp_ms, bool):
         return "REJECT"
     try:
         stamp = datetime.fromtimestamp(float(timestamp_ms) / 1000, IST)
