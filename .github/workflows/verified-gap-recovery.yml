@@ -31,6 +31,7 @@ on:
       - 'tests/test_quality_metrics.py'
       - 'tests/test_session_guard.py'
       - 'tests/test_session_finalization.py'
+      - 'tests/test_scanner_session_guard.py'
 
 permissions:
   contents: read
@@ -56,3 +57,5 @@ jobs:
         run: python -m unittest discover -s tests -p test_session_guard.py -v
       - name: Market session finalization tests
         run: python -m unittest discover -s tests -p test_session_finalization.py -v
+      - name: Scanner session guard ordering tests
+        run: python -m unittest discover -s tests -p test_scanner_session_guard.py -v
