@@ -12,6 +12,7 @@ from .signal_engine import generate_signal
 from .market_regime import index_signal
 from .trade_engine import buy, update_state, sell
 from .database import DB_PATH, init_db, reset_scanner_results
+from .quality_metrics import observed_history_gaps
 
 from .gap_recovery_worker import GapRecoveryWorker
 
@@ -101,23 +102,7 @@ def write_candle_quality():
             recent[i].timestamp - recent[i-1].timestamp == timedelta(minutes=1)
             for i in range(1, 6)
         )
-        # Count gaps only between observed, ordered candles from today's session.
-        # This is a bounded in-memory history metric, not a full-session audit.
-        today_minutes = [
-            c.timestamp for c in history
-            if getattr(c, "timestamp", None) is not None
-            and c.timestamp.date() == today
-        ]
-        observed_gap_minutes = 0
-        history_order_valid = all(
-            b > a for a, b in zip(today_minutes, today_minutes[1:])
-        )
-        if history_order_valid:
-            observed_gap_minutes = sum(
-                int((b - a) / timedelta(minutes=1)) - 1
-                for a, b in zip(today_minutes, today_minutes[1:])
-                if b - a > timedelta(minutes=1)
-            )
+        gap_metrics = observed_history_gaps(history, today)
         last = history[-1] if history else None
         if len(recent) < 6:
             reason = "WARMUP"
@@ -128,9 +113,7 @@ def write_candle_quality():
         else:
             reason = None
         rows[instrument_symbols.get(key, key)] = {
-            "observed_history_gap_minutes": observed_gap_minutes if history_order_valid else None,
-            "observed_history_candles_today": len(today_minutes),
-            "observed_history_order_valid": history_order_valid,
+            **gap_metrics,
             "six_consecutive_today": consecutive,
             "continuity_reason": reason,
             "last_closed_candle_ist": last.timestamp.isoformat() if last else None,
