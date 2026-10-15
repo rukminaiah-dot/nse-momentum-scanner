@@ -14,12 +14,14 @@ def compare_archive_keys(sqlite_path, pg_connection):
     """Compare observation keys AND signal/price values without modifying databases."""
     source_rows = {}
     duplicate_source_keys = set()
+    source_rows_scanned = 0
     conflicting_source_keys = set()
     with sqlite3.connect(f"file:{sqlite_path}?mode=ro", uri=True, timeout=10) as source:
         for symbol, stamp, price, signal in source.execute(
             """SELECT symbol,candle_time,price,signal FROM scanner_signal_history
                WHERE signal IN ('BUY','SELL','HOLD')"""
         ):
+            source_rows_scanned += 1
             if not isinstance(symbol, str) or not symbol.strip() or not isinstance(stamp, str) or not stamp.strip():
                 raise ValueError("invalid SQLite signal candle key")
             try:
@@ -90,6 +92,7 @@ def compare_archive_keys(sqlite_path, pg_connection):
     return {
         "status": status,
         "sqlite_available_observations": len(source_keys),
+        "sqlite_source_rows_scanned": source_rows_scanned,
         "duplicate_archive_candle_keys": len(duplicate_archive_keys),
         "duplicate_archive_samples": [
             {"symbol": symbol, "candle_time_ist": stamp}
