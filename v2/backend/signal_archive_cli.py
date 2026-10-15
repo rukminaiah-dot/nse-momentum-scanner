@@ -52,7 +52,8 @@ def main(argv=None):
                 result = compare_archive_keys(DB_PATH, pg)
                 print(json.dumps(result, sort_keys=True))
                 if (not result["available_source_reconciliation_verified"]
-                        or result["missing_from_archive"] or result["mismatched_archive_values"]\n                        or result.get("duplicate_sqlite_candle_keys", 0)):
+                        or result["missing_from_archive"] or result["mismatched_archive_values"]
+                        or result.get("duplicate_sqlite_candle_keys", 0)):
                     return 3
             else:
                 rows = fetch_cumulative_archive(pg, end_date=args.end_date)
