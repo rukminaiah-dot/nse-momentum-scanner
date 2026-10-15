@@ -26,6 +26,9 @@ The separate WebSocket Preflight workflow checks its own offline regressions.
 | Scenario | Required result |
 | --- | --- |
 | Valid stock or index synthetic session tick | Calendar entrypoint allows UPDATE; real scanner handler runs with fake dependencies |
+| Missing, nonnumeric, nonfinite, zero, or negative tick price | REJECT before any candle, trade, volume, or feed-health side effect |
+| Stale, future, or out-of-order exchange timestamp | REJECT before any scanner mutation; wrapper must not report a false UPDATE |
+| Concurrent tick and clock-driven finalization | Serialized against candle manager lock; finalized candle cannot reopen |
 | Unverified, incomplete, closed-day or expired date calendar | REJECT; no scanner health, volume, trade or candle mutation |
 | Last-minute candle with first close-boundary tick | FINALIZE_LAST_MINUTE exactly once, no new close-minute candle |
 | Last-minute candle with no post-close feed event | Explicit `finalize_verified_calendar_without_tick` can close it once within grace |
