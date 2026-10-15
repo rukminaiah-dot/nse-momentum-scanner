@@ -53,6 +53,15 @@ class SignalArchiveCliFailureTests(unittest.TestCase):
         self.assertIn('"available_source_reconciliation_verified": false', out)
         self.assertEqual(err, "")
 
+    def test_duplicate_source_verification_exits_nonzero(self):
+        result = {"available_source_reconciliation_verified": True,
+                  "missing_from_archive": 0, "mismatched_archive_values": 0,
+                  "duplicate_sqlite_candle_keys": 1}
+        code, out, err = self._run("verify", verify=result)
+        self.assertEqual(code, 3)
+        self.assertIn('"duplicate_sqlite_candle_keys": 1', out)
+        self.assertEqual(err, "")
+
     def test_verified_reconciliation_exits_zero(self):
         result = {"available_source_reconciliation_verified": True,
                   "missing_from_archive": [], "mismatched_archive_values": []}
