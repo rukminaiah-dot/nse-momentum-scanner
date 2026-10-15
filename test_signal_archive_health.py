@@ -88,6 +88,26 @@ class ArchiveHealthTests(unittest.TestCase):
                 {"symbol": "A", "candle_time_ist": "2026-10-14 10:00:00"}])
             self.assertFalse(result["available_source_reconciliation_verified"])
 
+    def test_duplicate_sqlite_samples_are_bounded_and_sorted(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "signals.db"
+            with sqlite3.connect(path) as con:
+                con.execute("CREATE TABLE scanner_signal_history (symbol TEXT,candle_time TEXT,price REAL,signal TEXT)")
+                rows = []
+                for minute in reversed(range(12)):
+                    stamp = f"2026-10-14 10:{minute:02d}:00"
+                    rows.extend([("A", stamp, 100, "BUY"), ("A", stamp.replace(" ", "T"), 100, "BUY")])
+                con.executemany("INSERT INTO scanner_signal_history VALUES (?,?,?,?)", rows)
+            result = compare_archive_keys(path, Pg([]))
+            self.assertEqual(result["status"], "DUPLICATE_SQLITE_OBSERVATIONS")
+            self.assertEqual(result["duplicate_sqlite_candle_keys"], 12)
+            self.assertEqual(result["sqlite_source_rows_scanned"], 24)
+            self.assertEqual(result["sqlite_available_observations"], 12)
+            self.assertEqual(len(result["duplicate_sqlite_samples"]), 10)
+            self.assertEqual(result["duplicate_sqlite_samples"][0]["candle_time_ist"], "2026-10-14 10:00:00")
+            self.assertEqual(result["duplicate_sqlite_samples"][-1]["candle_time_ist"], "2026-10-14 10:09:00")
+            self.assertFalse(result["available_source_reconciliation_verified"])
+
     def test_duplicate_archive_samples_are_bounded_and_sorted(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "signals.db"
