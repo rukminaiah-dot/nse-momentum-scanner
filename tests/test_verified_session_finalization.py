@@ -46,6 +46,16 @@ class VerifiedSessionFinalizationTests(unittest.TestCase):
         self.assertIsNone(self.finalize(15, 36))
         self.assertIn(self.key, self.manager.current)
 
+    def test_early_close_uses_calendar_final_minute(self):
+        schedule = {DAY: (time(9, 15), time(13, 0))}
+        self.manager.current[self.key]["minute"] = datetime(2026, 10, 15, 12, 59)
+        self.assertIsNone(self.finalize(12, 59, schedule=schedule))
+        closed = self.finalize(13, 0, schedule=schedule)
+        self.assertIsNotNone(closed)
+        self.assertEqual(closed.timestamp, datetime(2026, 10, 15, 12, 59))
+        self.assertIsNone(self.finalize(13, 1, schedule=schedule))
+        self.assertEqual(len(self.manager.completed[self.key]), 1)
+
     def test_prior_day_candle_cannot_finalize_on_current_close(self):
         previous = datetime(2026, 10, 14, 15, 29)
         self.manager.current[self.key]["minute"] = previous
