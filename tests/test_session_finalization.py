@@ -24,6 +24,24 @@ class SessionFinalizationTests(unittest.TestCase):
                          datetime(2026, 10, 15, 15, 29))
         self.assertNotIn(key, manager.current)
 
+    def test_gated_update_rejects_after_hours_without_new_bar(self):
+        manager = CandleManager(log_closed_candles=False)
+        key = "TEST"
+        manager.update_regular_session(key, 100, ms(15, 29), 5)
+        closed = manager.update_regular_session(key, 200, ms(15, 30), 999)
+        self.assertIsNotNone(closed)
+        self.assertEqual(closed.close, 100)
+        self.assertEqual(closed.volume, 5)
+        self.assertIsNone(manager.update_regular_session(key, 300, ms(15, 55), 999))
+        self.assertNotIn(key, manager.current)
+        self.assertEqual(len(manager.completed[key]), 1)
+
+    def test_gated_update_never_starts_after_hours_bar(self):
+        manager = CandleManager(log_closed_candles=False)
+        self.assertIsNone(manager.update_regular_session(
+            "TEST", 100, ms(15, 50), 5))
+        self.assertNotIn("TEST", manager.current)
+
     def test_does_not_finalize_earlier_minute(self):
         manager = CandleManager(log_closed_candles=False)
         manager.update("TEST", 100, ms(15, 28), 5)
