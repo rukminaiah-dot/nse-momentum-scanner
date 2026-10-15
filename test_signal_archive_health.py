@@ -108,6 +108,22 @@ class ArchiveHealthTests(unittest.TestCase):
             self.assertEqual(result["missing_from_archive"], 1)
             self.assertFalse(result["available_source_reconciliation_verified"])
 
+    def test_duplicate_archive_rows_cannot_verify_as_matched(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "signals.db"
+            with sqlite3.connect(path) as con:
+                con.execute("CREATE TABLE scanner_signal_history (symbol TEXT,candle_time TEXT,price REAL,signal TEXT)")
+                con.execute("INSERT INTO scanner_signal_history VALUES (?,?,?,?)",
+                            ("A", "2026-10-14 10:00:00", 100, "BUY"))
+            pg = Pg([
+                ("A", datetime(2026, 10, 14, 10), 100, "BUY"),
+                ("A", datetime(2026, 10, 14, 10), 101, "SELL"),
+            ])
+            result = compare_archive_keys(path, pg)
+            self.assertEqual(result["status"], "DUPLICATE_ARCHIVE_OBSERVATIONS")
+            self.assertEqual(result["duplicate_archive_candle_keys"], 1)
+            self.assertFalse(result["available_source_reconciliation_verified"])
+
     def test_duplicate_sqlite_keys_are_not_silently_accepted(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "signals.db"
