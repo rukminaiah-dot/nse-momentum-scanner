@@ -93,3 +93,29 @@ variable edit, or database operation was performed.
 - Review environment variable *names* and secret management without exposing
   values; do not copy production credentials into staging.
 - Production `main` auto-deploy must be considered before any eventual merge.
+
+## Authorized offline staging service (2026-10-15)
+
+Operator authorized creation of a separate nonproduction service and read-only
+Upstox market-data verification, with trading disabled and no production changes.
+
+- Render service: `nse-gap-recovery-offline-staging`, ID
+  `srv-db8h6divcj2c73ad25n0`; Singapore, free plan.
+- Branch: `feature/verified-gap-recovery`; auto-deploy **off**.
+- Build: `python -m py_compile v2/backend/staging_health.py probe_upstox_recovery.py`.
+- Start: `python -m v2.backend.staging_health`.
+- Environment: `STAGING_OFFLINE_ONLY=1`. No database URL or Upstox
+  credential was supplied to this service.
+- Health-only service exposes `GET /health`; no scanner, orders, feed, or
+  database connection is initiated. Its reported offline status is a static
+  declaration, not proof of any live feed integration.
+- Commit `342e177`: 285/285 offline tests and 105/105 WebSocket tests passed.
+- Initial staging deploy `dep-db8h6e2vcj2c73ad26n0` was still
+  `build_in_progress` at last inspection; check its final status.
+
+**Still required for actual read-only Upstox verification:** authorized
+short-lived token supplied through a secure operator-managed environment,
+approved instrument key, a market session confirmed from an authoritative NSE
+calendar, and a deliberately invoked isolated read-only probe. No live feed
+has been connected. Do not run `start_v2.sh` in staging: it starts the
+scanner and a database initialization module. No production deploy or merge.
