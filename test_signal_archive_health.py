@@ -15,6 +15,27 @@ class Pg:
         return self.rows
 
 class ArchiveHealthTests(unittest.TestCase):
+    def test_invalid_source_observation_cannot_verify_as_matched(self):
+        invalid_rows = [
+            (None, "2026-10-14 10:01:00", 101, "SELL"),
+            ("B", None, 101, "SELL"),
+            ("B", "not-a-timestamp", 101, "SELL"),
+            ("B", "2026-10-14T10:01:00+05:30", 101, "SELL"),
+            ("B", "2026-10-14 10:01:00", None, "SELL"),
+            ("B", "2026-10-14 10:01:00", "bad", "SELL"),
+        ]
+        for bad_row in invalid_rows:
+            with self.subTest(row=bad_row), tempfile.TemporaryDirectory() as folder:
+                path = Path(folder) / "signals.db"
+                with sqlite3.connect(path) as con:
+                    con.execute("CREATE TABLE scanner_signal_history (symbol TEXT,candle_time TEXT,price REAL,signal TEXT)")
+                    con.executemany("INSERT INTO scanner_signal_history VALUES (?,?,?,?)", [
+                        ("A", "2026-10-14 10:00:00", 100, "BUY"), bad_row,
+                    ])
+                pg = Pg([("A", datetime(2026, 10, 14, 10), 100, "BUY")])
+                with self.assertRaisesRegex(ValueError, "invalid SQLite"):
+                    compare_archive_keys(path, pg)
+
     def test_duplicate_sqlite_keys_are_not_silently_accepted(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "signals.db"
