@@ -71,5 +71,24 @@ class OfflineScannerDispatchTests(unittest.TestCase):
         self.assertEqual(self.events, ["FINALIZE"])
 
 
+    def test_explicit_early_close_blocks_after_hours_without_state_changes(self):
+        early = {DAY: (time(9, 15), time(13, 0))}
+        self.assertEqual(self.dispatch("STOCK", ms(12, 59), schedule=early), "UPDATE")
+        before = dict(self.state)
+        self.assertEqual(self.dispatch("STOCK", ms(13, 1), schedule=early), "REJECT")
+        self.assertEqual(self.state, before)
+
+    def test_expired_calendar_rejects_next_day(self):
+        next_day = int(datetime(2026, 10, 16, 10, 0, tzinfo=IST).timestamp() * 1000)
+        before = dict(self.state)
+        self.assertEqual(self.dispatch("INDEX", next_day), "REJECT")
+        self.assertEqual(self.state, before)
+
+    def test_close_grace_expiry_does_not_finalize_or_update(self):
+        active = datetime(2026, 10, 15, 15, 29)
+        before = dict(self.state)
+        self.assertEqual(self.dispatch("STOCK", ms(15, 36), active), "REJECT")
+        self.assertEqual(self.state, before)
+
 if __name__ == "__main__":
     unittest.main()
