@@ -22,15 +22,21 @@ def inspect_decoded_message(message, arrival_ms):
     for feed in feeds.values():
         if not isinstance(feed, dict):
             continue
-        nested = feed.get("ff") or feed.get("fullFeed") or {}
-        if not isinstance(nested, dict):
-            nested = {}
         ltpc = feed.get("ltpc")
-        if not isinstance(ltpc, dict):
-            for kind in ("marketFF", "indexFF"):
-                candidate = nested.get(kind)
-                if isinstance(candidate, dict) and isinstance(candidate.get("ltpc"), dict):
-                    ltpc = candidate["ltpc"]
+        if not isinstance(ltpc, dict) or not ltpc.get("ltt"):
+            ltpc = None
+            for container in ("ff", "fullFeed"):
+                nested = feed.get(container)
+                if not isinstance(nested, dict):
+                    continue
+                for kind in ("marketFF", "indexFF"):
+                    candidate = nested.get(kind)
+                    if isinstance(candidate, dict):
+                        value = candidate.get("ltpc")
+                        if isinstance(value, dict) and value.get("ltt"):
+                            ltpc = value
+                            break
+                if ltpc is not None:
                     break
         if not isinstance(ltpc, dict):
             continue
