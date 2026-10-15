@@ -46,8 +46,9 @@ def sync_observed_signals(sqlite_path, pg_connection, *, batch_size=500):
             raise ValueError("invalid SQLite signal candle key; resolve before manual archive sync")
         # Validate every source timestamp before the first archive write.
         # A malformed late row must not leave earlier batches inserted.
-        for (stamp,) in source.execute(
-            """SELECT candle_time FROM scanner_signal_history
+        normalized_keys = set()
+        for symbol, stamp in source.execute(
+            """SELECT symbol,candle_time FROM scanner_signal_history
                WHERE signal IN ('BUY','SELL','HOLD')"""
         ):
             try:
@@ -56,6 +57,10 @@ def sync_observed_signals(sqlite_path, pg_connection, *, batch_size=500):
                 raise ValueError("invalid SQLite candle timestamp; resolve before manual archive sync") from None
             if parsed.tzinfo is not None:
                 raise ValueError("invalid SQLite candle timestamp; expected naive IST")
+            normalized_key = (symbol, parsed)
+            if normalized_key in normalized_keys:
+                raise ValueError("duplicate SQLite candle keys after timestamp normalization")
+            normalized_keys.add(normalized_key)
         cursor = source.execute(
             """SELECT symbol,candle_time,price,signal
                FROM scanner_signal_history
