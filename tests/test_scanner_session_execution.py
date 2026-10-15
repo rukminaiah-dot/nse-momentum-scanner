@@ -162,5 +162,26 @@ class ScannerSessionExecutionTests(unittest.TestCase):
         self.assertEqual(calls.count("health"), 1)
         self.assertEqual(calls.count("analyse"), 0)
 
+    def test_calendar_dispatch_rejects_closed_day_without_scanner_side_effects(self):
+        key = "NSE_EQ|TEST"
+        day = date(2026, 10, 15)
+        on_tick, manager, state, calls = isolated_scanner(milliseconds(10, 0))
+        state["SESSION_CANDLE_GATE_ENABLED"] = False
+        invoked = []
+        result = dispatch_offline_scanner_tick(
+            key, milliseconds(10, 0), None, frozenset((key,)),
+            {day: None}, day, day, "Synthetic closed date", True,
+            on_update=lambda: (invoked.append("update"),
+                               on_tick(key, {"ltp": 100,
+                                             "ltt": milliseconds(10, 0)})),
+            on_finalize=lambda: invoked.append("finalize"),
+        )
+        self.assertEqual(result, "REJECT")
+        self.assertEqual(invoked, [])
+        self.assertEqual(calls, [])
+        self.assertEqual(state["_last_accepted_tick_ms"], {})
+        self.assertEqual(state["last_cumulative_volumes"], {})
+        self.assertEqual(manager.current, {})
+
 if __name__ == "__main__":
     unittest.main()
