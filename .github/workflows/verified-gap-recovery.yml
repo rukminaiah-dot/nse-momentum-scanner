@@ -32,6 +32,7 @@ on:
       - 'tests/test_session_guard.py'
       - 'tests/test_session_finalization.py'
       - 'tests/test_scanner_session_guard.py'
+      - 'tests/test_scanner_session_execution.py'
 
 permissions:
   contents: read
@@ -59,3 +60,5 @@ jobs:
         run: python -m unittest discover -s tests -p test_session_finalization.py -v
       - name: Scanner session guard ordering tests
         run: python -m unittest discover -s tests -p test_scanner_session_guard.py -v
+      - name: Scanner session mocked execution tests
+        run: python -m unittest discover -s tests -p test_scanner_session_execution.py -v
