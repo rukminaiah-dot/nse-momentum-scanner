@@ -46,6 +46,19 @@ class VerifiedSessionFinalizationTests(unittest.TestCase):
         self.assertIsNone(self.finalize(15, 36))
         self.assertIn(self.key, self.manager.current)
 
+    def test_weekend_special_session_uses_explicit_calendar(self):
+        saturday = date(2026, 10, 17)
+        schedule = {saturday: (time(18, 0), time(19, 0))}
+        self.manager.current[self.key]["minute"] = datetime(2026, 10, 17, 18, 59)
+        closing_tick = int(datetime(2026, 10, 17, 19, 0,
+                                    tzinfo=IST).timestamp() * 1000)
+        closed = self.manager.finalize_verified_session_end(
+            self.key, closing_tick, schedule, saturday, saturday,
+            "Illustrative special-session notice", True)
+        self.assertIsNotNone(closed)
+        self.assertEqual(closed.timestamp, datetime(2026, 10, 17, 18, 59))
+        self.assertNotIn(self.key, self.manager.current)
+
     def test_early_close_uses_calendar_final_minute(self):
         schedule = {DAY: (time(9, 15), time(13, 0))}
         self.manager.current[self.key]["minute"] = datetime(2026, 10, 15, 12, 59)
