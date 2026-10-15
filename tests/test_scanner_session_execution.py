@@ -63,6 +63,19 @@ class ScannerSessionExecutionTests(unittest.TestCase):
         self.assertEqual(calls.count("quality"), 1)
         self.assertEqual(calls.count("analyse"), 1)
 
+    def test_out_of_order_regular_tick_cannot_rewind_state(self):
+        key = "NSE_EQ|TEST"
+        on_tick, manager, state, calls = isolated_scanner(milliseconds(10, 1))
+        on_tick(key, {"ltp": 101, "ltt": milliseconds(10, 1), "vtt": 508})
+        before = list(calls)
+        on_tick(key, {"ltp": 90, "ltt": milliseconds(10, 0), "vtt": 600})
+        self.assertEqual(calls, before)
+        self.assertEqual(state["_last_accepted_tick_ms"][key],
+                         milliseconds(10, 1))
+        self.assertEqual(state["last_cumulative_volumes"][key], 508)
+        self.assertEqual(manager.current[key]["candle"].close, 101)
+        self.assertEqual(len(manager.completed.get(key, [])), 0)
+
     def test_after_hours_tick_does_not_mutate_trade_volume_or_health(self):
         on_tick, manager, state, calls = isolated_scanner(milliseconds(15, 55))
         on_tick("NSE_EQ|TEST", {"ltp": 125, "ltt": milliseconds(15, 55),
