@@ -18,6 +18,8 @@ def regular_session_minute(timestamp_ms):
     This is a weekday/time-of-day check, not an NSE holiday calendar.
     No market data, candle state, or order execution is modified.
     """
+    if isinstance(timestamp_ms, bool):
+        return None
     try:
         stamp = datetime.fromtimestamp(float(timestamp_ms) / 1000, IST)
     except (TypeError, ValueError, OverflowError, OSError):
@@ -36,6 +38,10 @@ def session_tick_action(timestamp_ms, active_minute=None):
     minute = regular_session_minute(timestamp_ms)
     if minute is not None:
         return "UPDATE"
+    if isinstance(timestamp_ms, bool):
+        return None
+    if isinstance(timestamp_ms, bool):
+        return "REJECT"
     try:
         stamp = datetime.fromtimestamp(float(timestamp_ms) / 1000, IST)
     except (TypeError, ValueError, OverflowError, OSError):
@@ -58,6 +64,8 @@ def verified_session_minute(timestamp_ms, sessions):
     exchange calendar; this helper does not download or infer holidays.
     Weekend special sessions may be represented explicitly.
     """
+    if isinstance(timestamp_ms, bool):
+        return None
     try:
         stamp = datetime.fromtimestamp(float(timestamp_ms) / 1000, IST)
     except (TypeError, ValueError, OverflowError, OSError):
@@ -124,6 +132,8 @@ def verified_range_session_minute(timestamp_ms, sessions, start_date, end_date):
     Calendar provenance must be verified separately before this is used.
     """
     if not validate_session_coverage(sessions, start_date, end_date):
+        return None
+    if isinstance(timestamp_ms, bool):
         return None
     try:
         stamp = datetime.fromtimestamp(float(timestamp_ms) / 1000, IST)
