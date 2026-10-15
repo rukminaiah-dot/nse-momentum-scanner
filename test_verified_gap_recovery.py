@@ -36,6 +36,16 @@ class GapRecoveryTests(unittest.TestCase):
             stamp = int((base + timedelta(minutes=offset)).timestamp() * 1000)
             manager.update(key, 100 + offset, stamp)
         before, active = manager.recovery_snapshot(key)
+        self.assertEqual(len(before), 60)
+        # Simulate an oversized same-day history injected by an external
+        # preload/recovery path; idempotent recovery must normalize it.
+        extra = []
+        for offset in range(14):
+            candle = Candle(100, 0)
+            candle.timestamp = (base + timedelta(minutes=offset)).replace(tzinfo=None)
+            extra.append(candle)
+        manager.completed[key] = extra + before
+        before, active = manager.recovery_snapshot(key)
         self.assertEqual(len(before), 74)
         self.assertEqual(manager.merge_recovered(key, {}, active), 0)
         after, still_active = manager.recovery_snapshot(key)
