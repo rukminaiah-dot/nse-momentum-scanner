@@ -139,5 +139,29 @@ class OfflineScannerDispatchTests(unittest.TestCase):
         self.assertEqual(self.state, before)
         self.assertEqual(self.state["candles"], 2)
 
+    def test_weekend_special_session_finalizes_last_minute_only(self):
+        special_day = date(2026, 10, 17)
+        schedule = {special_day: (time(18, 0), time(19, 0))}
+        def stamp(hour, minute):
+            return int(datetime(2026, 10, 17, hour, minute,
+                                tzinfo=IST).timestamp() * 1000)
+        final_minute = datetime(2026, 10, 17, 18, 59)
+        result = dispatch_offline_scanner_tick(
+            "INDEX", stamp(19, 0), final_minute, KEYS, schedule,
+            special_day, special_day, "Synthetic special session", True,
+            on_update=self.update, on_finalize=self.finalize,
+        )
+        self.assertEqual(result, "FINALIZE_LAST_MINUTE")
+        self.assertEqual(self.events, ["FINALIZE"])
+        self.assertEqual(self.state["candles"], 0)
+        before = dict(self.state)
+        result = dispatch_offline_scanner_tick(
+            "INDEX", stamp(19, 6), final_minute, KEYS, schedule,
+            special_day, special_day, "Synthetic special session", True,
+            on_update=self.update, on_finalize=self.finalize,
+        )
+        self.assertEqual(result, "REJECT")
+        self.assertEqual(self.state, before)
+
 if __name__ == "__main__":
     unittest.main()
