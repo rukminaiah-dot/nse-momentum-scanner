@@ -35,6 +35,7 @@ class PaperLedger:
             signal.kind not in ("stock", "index") or
             signal.side not in ("BUY", "SELL") or
             not signal.instrument or
+            isinstance(signal.price, bool) or
             not isinstance(signal.price, (int, float))):
             raise ValueError("invalid signal")
         import math
