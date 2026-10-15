@@ -76,6 +76,22 @@ class SyncTests(unittest.TestCase):
                     sync_observed_signals(db, pg, batch_size=1)
                 self.assertEqual(pg.keys, set())
 
+    def test_malformed_or_aware_timestamp_rejected_before_writes(self):
+        for bad_stamp in ("not-a-timestamp", "2026-13-14 09:16:00",
+                          "2026-10-14T09:16:00+05:30"):
+            with self.subTest(stamp=bad_stamp), tempfile.TemporaryDirectory() as folder:
+                db = Path(folder) / "history.db"
+                with sqlite3.connect(db) as con:
+                    con.execute("CREATE TABLE scanner_signal_history (symbol TEXT,candle_time TEXT,price REAL,signal TEXT)")
+                    con.executemany("INSERT INTO scanner_signal_history VALUES (?,?,?,?)", [
+                        ("A", "2026-10-14 09:15:00", 100, "BUY"),
+                        ("B", bad_stamp, 101, "SELL"),
+                    ])
+                pg = FakePg()
+                with self.assertRaisesRegex(ValueError, "invalid SQLite candle timestamp"):
+                    sync_observed_signals(db, pg, batch_size=1)
+                self.assertEqual(pg.keys, set())
+
     def test_duplicate_candle_rejected_before_postgres_writes(self):
         with tempfile.TemporaryDirectory() as folder:
             db = Path(folder) / "history.db"
