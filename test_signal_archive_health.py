@@ -15,6 +15,16 @@ class Pg:
         return self.rows
 
 class ArchiveHealthTests(unittest.TestCase):
+    def test_reconciliation_does_not_create_missing_sqlite_parent_directory(self):
+        with tempfile.TemporaryDirectory() as folder:
+            parent = Path(folder) / "absent" / "nested"
+            path = parent / "signals.db"
+            self.assertFalse(parent.exists())
+            with self.assertRaises(sqlite3.OperationalError):
+                compare_archive_keys(path, Pg([]))
+            self.assertFalse(parent.exists())
+            self.assertFalse(path.exists())
+
     def test_reconciliation_does_not_create_missing_sqlite_database(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "missing.db"
