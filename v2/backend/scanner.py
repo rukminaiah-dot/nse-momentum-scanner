@@ -472,6 +472,21 @@ def on_tick(key, data):
     except (TypeError, ValueError, OverflowError):
         return
 
+    # Experimental guard: reject after-hours stock ticks before simulated
+    # trades, volume counters, health updates, or signal generation.
+    if SESSION_CANDLE_GATE_ENABLED and key in NIFTY_200.values():
+        from .session_guard import session_tick_action
+        with candles.lock:
+            active = candles.current.get(key)
+            active_minute = active["minute"] if active else None
+            session_action = session_tick_action(ts, active_minute)
+            if session_action == "FINALIZE_LAST_MINUTE":
+                if candles.finalize_last_regular_minute(key, ts) is not None:
+                    write_candle_quality()
+                return
+            if session_action != "UPDATE":
+                return
+
     # Reject out-of-order exchange ticks within the same minute as well.
     # Otherwise a delayed tick can corrupt OHLC, cumulative-volume deltas,
     # and simulated trade state even when its minute is not older.
