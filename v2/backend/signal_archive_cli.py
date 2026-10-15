@@ -49,6 +49,9 @@ def main(argv=None):
                 result = sync_observed_signals(DB_PATH, pg)
                 print(json.dumps(result, sort_keys=True))
             elif args.action == "verify":
+                # Enforce read-only semantics at the database transaction level.
+                # No SQL statement in this verification transaction may write.
+                pg.execute("SET TRANSACTION READ ONLY")
                 result = compare_archive_keys(DB_PATH, pg)
                 print(json.dumps(result, sort_keys=True))
                 if (not result["available_source_reconciliation_verified"]
