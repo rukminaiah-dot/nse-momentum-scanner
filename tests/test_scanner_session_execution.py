@@ -48,6 +48,21 @@ def isolated_scanner(now_ms):
 
 
 class ScannerSessionExecutionTests(unittest.TestCase):
+    def test_regular_session_ticks_update_candle_health_and_volume(self):
+        key = "NSE_EQ|TEST"
+        on_tick, manager, state, calls = isolated_scanner(milliseconds(10, 1))
+        on_tick(key, {"ltp": 100, "ltt": milliseconds(10, 0), "vtt": 500})
+        on_tick(key, {"ltp": 101, "ltt": milliseconds(10, 1), "vtt": 508})
+        self.assertEqual(state["_last_accepted_tick_ms"][key],
+                         milliseconds(10, 1))
+        self.assertEqual(state["last_cumulative_volumes"][key], 508)
+        self.assertEqual(len(manager.completed[key]), 1)
+        self.assertEqual(manager.completed[key][0].close, 100)
+        self.assertEqual(manager.current[key]["candle"].volume, 8)
+        self.assertEqual(calls.count("health"), 2)
+        self.assertEqual(calls.count("quality"), 1)
+        self.assertEqual(calls.count("analyse"), 1)
+
     def test_after_hours_tick_does_not_mutate_trade_volume_or_health(self):
         on_tick, manager, state, calls = isolated_scanner(milliseconds(15, 55))
         on_tick("NSE_EQ|TEST", {"ltp": 125, "ltt": milliseconds(15, 55),
