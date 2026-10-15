@@ -268,5 +268,28 @@ class ScannerSessionExecutionTests(unittest.TestCase):
         self.assertIn(key, manager.current)
         self.assertEqual(calls, ["quality"])
 
+    def test_no_tick_finalizer_rejects_unknown_key_and_unverified_calendar(self):
+        day = date(2026, 10, 15)
+        schedule = {day: (time(9, 15), time(15, 30))}
+        on_tick, manager, state, calls = isolated_scanner(milliseconds(15, 30))
+        state["INDICES"] = {"INDEX": "NSE_INDEX|TEST"}
+        state["SESSION_CANDLE_GATE_ENABLED"] = False
+        tree = ast.parse(SOURCE.read_text())
+        fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef)
+                  and n.name == "finalize_verified_calendar_without_tick")
+        exec(compile(ast.Module(body=[fn], type_ignores=[]),
+                     str(SOURCE), "exec"), state)
+        finalize = state["finalize_verified_calendar_without_tick"]
+        manager.update("NSE_EQ|TEST", 100, milliseconds(15, 29), 5)
+        self.assertFalse(finalize("UNKNOWN", milliseconds(15, 30),
+                                  schedule, day, day, "Synthetic", True))
+        self.assertFalse(finalize("NSE_EQ|TEST", milliseconds(15, 30),
+                                  schedule, day, day, "Synthetic", False))
+        self.assertFalse(finalize("NSE_EQ|TEST", True,
+                                  schedule, day, day, "Synthetic", True))
+        self.assertIn("NSE_EQ|TEST", manager.current)
+        self.assertEqual(manager.completed.get("NSE_EQ|TEST", []), [])
+        self.assertEqual(calls, [])
+
 if __name__ == "__main__":
     unittest.main()
