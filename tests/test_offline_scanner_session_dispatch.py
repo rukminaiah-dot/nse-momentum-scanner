@@ -90,5 +90,29 @@ class OfflineScannerDispatchTests(unittest.TestCase):
         self.assertEqual(self.dispatch("STOCK", ms(15, 36), active), "REJECT")
         self.assertEqual(self.state, before)
 
+    def test_callback_failure_propagates_without_running_other_handler(self):
+        def failed_update():
+            self.events.append("UPDATE_FAILED")
+            raise RuntimeError("synthetic update failure")
+
+        with self.assertRaisesRegex(RuntimeError, "synthetic update failure"):
+            dispatch_offline_scanner_tick(
+                "STOCK", ms(10, 0), None, KEYS, CALENDAR, DAY, DAY,
+                "Illustrative synthetic calendar", True,
+                on_update=failed_update, on_finalize=self.finalize,
+            )
+        self.assertEqual(self.events, ["UPDATE_FAILED"])
+        self.assertEqual(self.state["finalized"], 0)
+
+    def test_rejection_does_not_call_failing_callbacks(self):
+        def unexpected():
+            raise AssertionError("rejected event invoked callback")
+
+        self.assertEqual(dispatch_offline_scanner_tick(
+            "INDEX", ms(15, 45), None, KEYS, CALENDAR, DAY, DAY,
+            "Illustrative synthetic calendar", True,
+            on_update=unexpected, on_finalize=unexpected,
+        ), "REJECT")
+
 if __name__ == "__main__":
     unittest.main()
