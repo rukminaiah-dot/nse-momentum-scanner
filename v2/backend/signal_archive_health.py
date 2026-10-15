@@ -42,12 +42,16 @@ def compare_archive_keys(sqlite_path, pg_connection):
                     conflicting_source_keys.add(key)
             else:
                 source_rows[key] = value
-    archive_rows = {
-        (symbol, _timestamp(stamp)): (float(price), signal)
-        for symbol, stamp, price, signal in pg_connection.execute(
-            "SELECT symbol,candle_time_ist,price,signal FROM scanner_signal_archive"
-        ).fetchall()
-    }
+    archive_rows = {}
+    duplicate_archive_keys = set()
+    for symbol, stamp, price, signal in pg_connection.execute(
+        "SELECT symbol,candle_time_ist,price,signal FROM scanner_signal_archive"
+    ).fetchall():
+        key = (symbol, _timestamp(stamp))
+        if key in archive_rows:
+            duplicate_archive_keys.add(key)
+        else:
+            archive_rows[key] = (float(price), signal)
     source_keys, archive_keys = set(source_rows), set(archive_rows)
     missing = source_keys - archive_keys
     mismatched = {
@@ -57,7 +61,9 @@ def compare_archive_keys(sqlite_path, pg_connection):
     signal_mismatches = {key for key in mismatched if source_rows[key][1] != archive_rows[key][1]}
     price_mismatches = {key for key in mismatched if source_rows[key][0] != archive_rows[key][0]}
     extra = archive_keys - source_keys
-    if conflicting_source_keys:
+    if duplicate_archive_keys:
+        status = "DUPLICATE_ARCHIVE_OBSERVATIONS"
+    elif conflicting_source_keys:
         status = "CONFLICTING_SQLITE_OBSERVATIONS"
     elif duplicate_source_keys:
         status = "DUPLICATE_SQLITE_OBSERVATIONS"
@@ -72,6 +78,7 @@ def compare_archive_keys(sqlite_path, pg_connection):
     return {
         "status": status,
         "sqlite_available_observations": len(source_keys),
+        "duplicate_archive_candle_keys": len(duplicate_archive_keys),
         "duplicate_sqlite_candle_keys": len(duplicate_source_keys),
         "conflicting_sqlite_candle_keys": len(conflicting_source_keys),
         "duplicate_sqlite_samples": [
@@ -104,7 +111,7 @@ def compare_archive_keys(sqlite_path, pg_connection):
             "Archive-only rows may be valid retained history absent from current SQLite; "
             "they are not automatically treated as corruption."
         ),
-        "available_source_reconciliation_verified": bool(source_keys) and not (missing or mismatched or duplicate_source_keys),
+        "available_source_reconciliation_verified": bool(source_keys) and not (missing or mismatched or duplicate_source_keys or duplicate_archive_keys),
         "historical_completeness_verified": False,
         "verification_scope": "CURRENT_SQLITE_ROWS_ONLY",
         "historical_audit_status": "NOT_VERIFIABLE_FROM_CURRENT_SQLITE",
