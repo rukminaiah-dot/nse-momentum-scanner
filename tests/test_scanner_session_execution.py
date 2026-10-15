@@ -291,5 +291,38 @@ class ScannerSessionExecutionTests(unittest.TestCase):
         self.assertEqual(manager.completed.get("NSE_EQ|TEST", []), [])
         self.assertEqual(calls, [])
 
+    def test_delayed_in_session_tick_cannot_reopen_calendar_finalized_candle(self):
+        key = "NSE_EQ|TEST"
+        day = date(2026, 10, 15)
+        schedule = {day: (time(9, 15), time(15, 30))}
+        on_tick, manager, state, calls = isolated_scanner(milliseconds(15, 30))
+        state["INDICES"] = {"INDEX": "NSE_INDEX|TEST"}
+        state["SESSION_CANDLE_GATE_ENABLED"] = False
+        tree = ast.parse(SOURCE.read_text())
+        names = {"on_tick_with_verified_calendar",
+                 "finalize_verified_calendar_without_tick"}
+        nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef)
+                 and n.name in names]
+        exec(compile(ast.Module(body=nodes, type_ignores=[]),
+                     str(SOURCE), "exec"), state)
+        gated = state["on_tick_with_verified_calendar"]
+        finalize = state["finalize_verified_calendar_without_tick"]
+        args = (schedule, day, day, "Synthetic test calendar", True)
+        self.assertEqual(gated(key, {"ltp": 100, "ltt": milliseconds(15, 29),
+                                     "vtt": 500}, *args), "UPDATE")
+        self.assertTrue(finalize(key, milliseconds(15, 30), *args))
+        before = list(calls)
+        accepted_ms = dict(state["_last_accepted_tick_ms"])
+        volume = dict(state["last_cumulative_volumes"])
+        self.assertEqual(gated(key, {
+            "ltp": 200, "ltt": milliseconds(15, 29) + 30000,
+            "vtt": 800}, *args), "REJECT")
+        self.assertEqual(calls, before)
+        self.assertEqual(state["_last_accepted_tick_ms"], accepted_ms)
+        self.assertEqual(state["last_cumulative_volumes"], volume)
+        self.assertNotIn(key, manager.current)
+        self.assertEqual(len(manager.completed[key]), 1)
+        self.assertEqual(manager.completed[key][0].close, 100)
+
 if __name__ == "__main__":
     unittest.main()
