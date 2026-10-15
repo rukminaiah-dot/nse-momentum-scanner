@@ -2,7 +2,7 @@
 import unittest
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from v2.backend.upstox_timestamp_extraction import inspect_decoded_message
+from v2.backend.upstox_timestamp_extraction import inspect_decoded_message, summarize_decoded_messages
 
 IST = ZoneInfo("Asia/Kolkata")
 
@@ -37,6 +37,22 @@ class ExtractionTests(unittest.TestCase):
         records = inspect_decoded_message(payload, ms(15, 58))
         self.assertEqual(len(records), 3)
         self.assertTrue(all(row["trade_status"] == "STALE" for row in records))
+
+    def test_aggregate_snapshot_vs_envelope_and_redaction(self):
+        snapshot = {"currentTs": ms(15, 58), "feeds": {
+            "PRIVATE_KEY": {"ff": {"marketFF": {"ltpc": {
+                "ltt": ms(15, 28), "ltp": 8888}}}}}}
+        recent = {"currentTs": ms(15, 58), "feeds": {
+            "PRIVATE_KEY": {"ltpc": {"ltt": ms(15, 58), "ltp": 9999}}}}
+        summary = summarize_decoded_messages([
+            (snapshot, ms(15, 58)), (recent, ms(15, 58))])
+        self.assertEqual(sum(row["count"] for row in summary), 2)
+        self.assertEqual({row["trade_status"] for row in summary}, {"STALE", "FRESH"})
+        self.assertEqual({row["envelope_status"] for row in summary}, {"FRESH"})
+        self.assertNotIn("PRIVATE_KEY", str(summary))
+        self.assertNotIn("8888", str(summary))
+        self.assertNotIn("9999", str(summary))
+        self.assertNotIn("event_ist", str(summary))
 
     def test_malformed_payload_is_ignored(self):
         self.assertEqual(inspect_decoded_message(None, ms(10, 0)), [])
