@@ -1,6 +1,6 @@
 """Tests for bounded observed-history metrics (no Upstox connection needed)."""
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from v2.backend.quality_metrics import observed_history_gaps
@@ -30,6 +30,19 @@ class ObservedHistoryGapTests(unittest.TestCase):
             result = observed_history_gaps(self.candles(offsets), self.today)
             self.assertIsNone(result["observed_history_gap_minutes"])
             self.assertFalse(result["observed_history_order_valid"])
+
+    def test_invalid_timestamp_fails_closed(self):
+        invalid = [
+            "2026-10-15T09:15:00",
+            self.start.replace(tzinfo=timezone.utc),
+            self.start.replace(second=30),
+        ]
+        for stamp in invalid:
+            with self.subTest(stamp=stamp):
+                result = observed_history_gaps(
+                    [SimpleNamespace(timestamp=stamp)], self.today)
+                self.assertIsNone(result["observed_history_gap_minutes"])
+                self.assertFalse(result["observed_history_order_valid"])
 
     def test_overnight_not_counted(self):
         yesterday = SimpleNamespace(timestamp=self.start - timedelta(days=1))
