@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from v2.backend.paper_signal_ledger import PaperLedger, Signal
 
 T = datetime(2026, 10, 14, 10, 0)
@@ -29,6 +29,15 @@ class PaperLedgerTests(unittest.TestCase):
         self.assertEqual(l.summary()["closed_calls"], 0)
         l.record(s("A", "stock", "SELL", 100, 3))
         self.assertEqual(l.summary()["flat"], 1)
+
+    def test_timezone_aware_timestamp_is_rejected_without_mutation(self):
+        ledger = PaperLedger()
+        aware = Signal("A", "stock", "BUY", 100,
+                       datetime(2026, 10, 14, 10, 0, tzinfo=timezone.utc))
+        with self.assertRaises(ValueError):
+            ledger.record(aware)
+        self.assertEqual(ledger.events, [])
+        self.assertEqual(ledger.summary()["open_calls"], 0)
 
     def test_instrument_must_be_a_nonblank_string(self):
         ledger = PaperLedger()
