@@ -2,6 +2,12 @@
 
 **Status:** Offline-only development on draft PR #5. Do not enable the production flag or merge without explicit approval.
 
+## Hard release blockers
+
+1. **Do not enable the weekday-only scanner gate in production.** It does not consult official NSE holidays or special trading sessions, and could reject valid weekend/special-session ticks or accept holiday ticks.
+2. **Do not treat the explicit-calendar helpers as integrated.** They remain offline-only until a verified exchange calendar and reviewed scanner/candle-manager wiring are supplied.
+3. **Do not equate green CI with real-feed acceptance.** Actual Upstox tick-time evidence and session-boundary observation are still required.
+
 ## Evidence required before rollout
 
 - [ ] Independently verify NSE equity trading dates and session hours against official exchange circulars, including holidays, special sessions, early closes, and unscheduled changes. Record source URLs, retrieval time, covered dates, and reviewer.
