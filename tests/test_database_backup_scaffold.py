@@ -27,8 +27,10 @@ class BackupScaffoldTests(unittest.TestCase):
 
     def test_successful_dump_uses_private_atomic_file(self):
         with tempfile.TemporaryDirectory() as directory:
-            def fake_run(args, *, stdout, stderr, check):
+            def fake_run(args, *, stdout, stderr, check, env):
                 self.assertEqual(args[1:4], ["--format=custom", "--no-owner", "--no-privileges"])
+                self.assertNotIn("synthetic", " ".join(args))
+                self.assertEqual(env["PGDATABASE"], "synthetic")
                 stdout.write(b"PGDMP synthetic bytes")
             with patch.object(module.subprocess, "run", side_effect=fake_run):
                 path = module.backup(tier="daily", root=Path(directory), url="synthetic")
