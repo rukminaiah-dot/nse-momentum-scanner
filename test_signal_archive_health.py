@@ -147,6 +147,29 @@ class ArchiveHealthTests(unittest.TestCase):
             self.assertEqual(result["duplicate_archive_samples"][-1]["candle_time_ist"], "2026-10-14 10:09:00")
             self.assertFalse(result["available_source_reconciliation_verified"])
 
+    def test_signal_and_price_mismatch_counts_are_independent(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "signals.db"
+            with sqlite3.connect(path) as con:
+                con.execute("CREATE TABLE scanner_signal_history (symbol TEXT,candle_time TEXT,price REAL,signal TEXT)")
+                con.executemany("INSERT INTO scanner_signal_history VALUES (?,?,?,?)", [
+                    ("A", "2026-10-14 10:00:00", 100, "BUY"),
+                    ("B", "2026-10-14 10:01:00", 200, "SELL"),
+                    ("C", "2026-10-14 10:02:00", 300, "BUY"),
+                ])
+            pg = Pg([
+                ("A", datetime(2026, 10, 14, 10, 0), 100, "SELL"),
+                ("B", datetime(2026, 10, 14, 10, 1), 201, "SELL"),
+                ("C", datetime(2026, 10, 14, 10, 2), 301, "SELL"),
+            ])
+            result = compare_archive_keys(path, pg)
+            self.assertEqual(result["status"], "MISMATCHED_ARCHIVE_VALUES")
+            self.assertEqual(result["mismatched_archive_values"], 3)
+            self.assertEqual(result["mismatched_signal_values"], 2)
+            self.assertEqual(result["mismatched_price_values"], 2)
+            self.assertEqual(result["missing_from_archive"], 0)
+            self.assertFalse(result["available_source_reconciliation_verified"])
+
     def test_empty_source_and_archive_do_not_claim_verification(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "signals.db"
