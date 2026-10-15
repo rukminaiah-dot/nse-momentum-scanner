@@ -139,6 +139,20 @@ class VerifiedSessionScheduleTests(unittest.TestCase):
                     tick, active, {day: bounds}, day, day, "NSE notice", True),
                     "REJECT")
 
+    def test_calendar_close_grace_window(self):
+        day = date(2026, 10, 15)
+        schedule = {day: (time(9, 15), time(15, 30))}
+        active = datetime(2026, 10, 15, 15, 29)
+        def action(h, m, grace=5):
+            return accepted_calendar_tick_action(
+                ms(2026, 10, 15, h, m), active, schedule,
+                day, day, "NSE notice", True, grace)
+        self.assertEqual(action(15, 30), "FINALIZE_LAST_MINUTE")
+        self.assertEqual(action(15, 35), "FINALIZE_LAST_MINUTE")
+        self.assertEqual(action(15, 36), "REJECT")
+        self.assertEqual(action(15, 31, 0), "REJECT")
+        self.assertEqual(action(15, 30, -1), "REJECT")
+
     def test_missing_date_fails_closed(self):
         self.assertIsNone(verified_session_minute(ms(2026, 10, 15, 10, 0), {}))
 
