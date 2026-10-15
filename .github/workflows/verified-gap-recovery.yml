@@ -37,6 +37,7 @@ on:
       - 'tests/test_verified_session_finalization.py'
       - 'tests/test_timestamp_audit.py'
       - 'tests/test_nonproduction_timestamp_observer.py'
+      - 'tests/test_upstox_timestamp_extraction.py'
 
 permissions:
   contents: read
@@ -74,3 +75,5 @@ jobs:
         run: python -m unittest discover -s tests -p test_verified_session_schedule.py -v
       - name: Nonproduction timestamp observer tests
         run: python -m unittest discover -s tests -p test_nonproduction_timestamp_observer.py -v
+      - name: Offline Upstox decoded timestamp extraction tests
+        run: python -m unittest discover -s tests -p test_upstox_timestamp_extraction.py -v
