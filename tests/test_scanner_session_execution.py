@@ -131,7 +131,7 @@ class ScannerSessionExecutionTests(unittest.TestCase):
         key = "NSE_EQ|TEST"
         day = date(2026, 10, 15)
         schedule = {day: (time(9, 15), time(15, 30))}
-        on_tick, manager, state, calls = isolated_scanner(milliseconds(15, 45))
+        on_tick, manager, state, calls = isolated_scanner(milliseconds(15, 30))
         # In this isolated harness only, the real on_tick body runs behind
         # calendar dispatch. No live scanner module or broker is imported.
         state["SESSION_CANDLE_GATE_ENABLED"] = False
