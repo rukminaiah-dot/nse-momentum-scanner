@@ -15,6 +15,25 @@ class Pg:
         return self.rows
 
 class ArchiveHealthTests(unittest.TestCase):
+    def test_reconciliation_is_read_only_for_sqlite_and_postgres(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "signals.db"
+            with sqlite3.connect(path) as con:
+                con.execute("CREATE TABLE scanner_signal_history (symbol TEXT,candle_time TEXT,price REAL,signal TEXT)")
+                con.execute("INSERT INTO scanner_signal_history VALUES (?,?,?,?)",
+                            ("A", "2026-10-14 10:00:00", 100, "BUY"))
+            original_bytes = path.read_bytes()
+            pg = Pg([("A", datetime(2026, 10, 14, 10), 100, "BUY")])
+            result = compare_archive_keys(path, pg)
+            self.assertEqual(result["status"], "MATCHED_AVAILABLE_SOURCE")
+            self.assertEqual(path.read_bytes(), original_bytes)
+            self.assertEqual(
+                pg.sql,
+                "SELECT symbol,candle_time_ist,price,signal FROM scanner_signal_archive",
+            )
+            with sqlite3.connect(path) as con:
+                self.assertEqual(con.execute("SELECT COUNT(*) FROM scanner_signal_history").fetchone()[0], 1)
+
     def test_invalid_source_observation_cannot_verify_as_matched(self):
         invalid_rows = [
             (None, "2026-10-14 10:01:00", 101, "SELL"),
