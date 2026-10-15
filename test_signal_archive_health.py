@@ -15,6 +15,15 @@ class Pg:
         return self.rows
 
 class ArchiveHealthTests(unittest.TestCase):
+    def test_reconciliation_does_not_create_missing_sqlite_database(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "missing.db"
+            self.assertFalse(path.exists())
+            pg = Pg([])
+            with self.assertRaises(sqlite3.OperationalError):
+                compare_archive_keys(path, pg)
+            self.assertFalse(path.exists())
+
     def test_reconciliation_is_read_only_for_sqlite_and_postgres(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "signals.db"
