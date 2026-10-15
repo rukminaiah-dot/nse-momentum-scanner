@@ -46,6 +46,13 @@ class VerifiedSessionFinalizationTests(unittest.TestCase):
         self.assertIsNone(self.finalize(15, 36))
         self.assertIn(self.key, self.manager.current)
 
+    def test_prior_day_candle_cannot_finalize_on_current_close(self):
+        previous = datetime(2026, 10, 14, 15, 29)
+        self.manager.current[self.key]["minute"] = previous
+        self.assertIsNone(self.finalize(15, 30))
+        self.assertEqual(self.manager.current[self.key]["minute"], previous)
+        self.assertNotIn(self.key, self.manager.completed)
+
     def test_refuses_wrong_active_minute(self):
         self.manager.current[self.key]["minute"] = datetime(2026, 10, 15, 15, 28)
         self.assertIsNone(self.finalize(15, 30))
