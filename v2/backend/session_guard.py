@@ -102,3 +102,17 @@ def validate_session_coverage(schedule, start_date, end_date):
                 return False
         current += timedelta(days=1)
     return True
+
+
+def accept_verified_calendar(schedule, start_date, end_date, source, verified):
+    """Return a usable schedule only after explicit source verification.
+
+    The caller must independently verify the exchange notice and date range.
+    A source label is provenance metadata, not proof of authenticity.
+    This deliberately does not fetch, infer, or trust a calendar automatically.
+    """
+    if (verified is not True or not isinstance(source, str)
+            or not source.strip() or not validate_session_coverage(
+                schedule, start_date, end_date)):
+        return None
+    return dict(schedule)
