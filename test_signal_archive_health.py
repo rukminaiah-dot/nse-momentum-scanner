@@ -108,6 +108,25 @@ class ArchiveHealthTests(unittest.TestCase):
             self.assertEqual(result["missing_from_archive"], 1)
             self.assertFalse(result["available_source_reconciliation_verified"])
 
+    def test_invalid_archive_rows_cannot_verify_as_matched(self):
+        invalid_rows = [
+            (None, datetime(2026, 10, 14, 10), 100, "BUY"),
+            (" ", datetime(2026, 10, 14, 10), 100, "BUY"),
+            ("A", None, 100, "BUY"),
+            ("A", datetime(2026, 10, 14, 10), 0, "BUY"),
+            ("A", datetime(2026, 10, 14, 10), float("inf"), "BUY"),
+            ("A", datetime(2026, 10, 14, 10), 100, "UNKNOWN"),
+        ]
+        for bad_row in invalid_rows:
+            with self.subTest(row=bad_row), tempfile.TemporaryDirectory() as folder:
+                path = Path(folder) / "signals.db"
+                with sqlite3.connect(path) as con:
+                    con.execute("CREATE TABLE scanner_signal_history (symbol TEXT,candle_time TEXT,price REAL,signal TEXT)")
+                    con.execute("INSERT INTO scanner_signal_history VALUES (?,?,?,?)",
+                                ("A", "2026-10-14 10:00:00", 100, "BUY"))
+                with self.assertRaisesRegex(ValueError, "invalid PostgreSQL archive"):
+                    compare_archive_keys(path, Pg([bad_row]))
+
     def test_duplicate_archive_rows_cannot_verify_as_matched(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "signals.db"
