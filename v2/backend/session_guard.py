@@ -1,4 +1,9 @@
-"""Pure NSE equity regular-session timestamp checks (IST, no exchange calendar)."""
+"""Experimental NSE equity weekday/session-time checks (NOT an exchange calendar).
+
+Known limitations: NSE holidays, special sessions (e.g. Muhurat trading),
+unscheduled closures, and early closes are not represented. Do not enable
+in production without validating an authoritative session calendar.
+"""
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
 
@@ -10,7 +15,7 @@ CLOSE = time(15, 30)
 def regular_session_minute(timestamp_ms):
     """Return the IST minute for regular weekday trading, otherwise None.
 
-    This is a conservative time-of-day check, not an NSE holiday calendar.
+    This is a weekday/time-of-day check, not an NSE holiday calendar.
     No market data, candle state, or order execution is modified.
     """
     try:
