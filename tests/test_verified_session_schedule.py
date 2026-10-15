@@ -3,7 +3,7 @@ import unittest
 from datetime import date, datetime, time
 from zoneinfo import ZoneInfo
 
-from v2.backend.session_guard import verified_session_minute, validate_session_coverage, accept_verified_calendar, verified_range_session_minute, accepted_calendar_minute
+from v2.backend.session_guard import verified_session_minute, validate_session_coverage, accept_verified_calendar, verified_range_session_minute, accepted_calendar_minute, accepted_calendar_tick_action
 
 IST = ZoneInfo("Asia/Kolkata")
 
@@ -88,6 +88,18 @@ class VerifiedSessionScheduleTests(unittest.TestCase):
                     tick, schedule, day, day))
                 self.assertIsNone(accepted_calendar_minute(
                     tick, schedule, day, day, "NSE notice", True))
+
+    def test_calendar_close_finalizes_only_last_scheduled_minute(self):
+        day = date(2026, 10, 15)
+        schedule = {day: (time(9, 15), time(13, 0))}
+        action = lambda h, m, active, verified=True: accepted_calendar_tick_action(
+            ms(2026, 10, 15, h, m), active, schedule, day, day, "NSE notice", verified)
+        self.assertEqual(action(12, 59, None), "UPDATE")
+        self.assertEqual(action(13, 0, datetime(2026, 10, 15, 12, 59)),
+                         "FINALIZE_LAST_MINUTE")
+        self.assertEqual(action(13, 0, datetime(2026, 10, 15, 12, 58)), "REJECT")
+        self.assertEqual(action(13, 0, datetime(2026, 10, 15, 12, 59), False),
+                         "REJECT")
 
     def test_missing_date_fails_closed(self):
         self.assertIsNone(verified_session_minute(ms(2026, 10, 15, 10, 0), {}))
