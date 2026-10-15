@@ -24,10 +24,16 @@ def backup(*, tier: str, root: Path, url: str, executable: str = "pg_dump") -> P
     try:
         with temporary.open("xb") as stream:
             os.chmod(temporary, 0o600)
+            # Never place the connection URL in process arguments: local
+            # process listings and exception messages can expose argv.
+            # libpq accepts a connection URI via PGDATABASE.
+            environment = os.environ.copy()
+            environment["PGDATABASE"] = url
             subprocess.run(
                 [executable, "--format=custom", "--no-owner",
-                 "--no-privileges", "--dbname", url],
+                 "--no-privileges"],
                 stdout=stream, stderr=subprocess.PIPE, check=True,
+                env=environment,
             )
         if temporary.stat().st_size == 0:
             raise RuntimeError("pg_dump returned an empty backup")
