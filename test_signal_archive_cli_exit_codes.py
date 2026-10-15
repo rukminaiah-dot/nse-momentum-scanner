@@ -77,6 +77,34 @@ class SignalArchiveCliFailureTests(unittest.TestCase):
         self.assertIn('"duplicate_sqlite_candle_keys": 1', out)
         self.assertEqual(err, "")
 
+    def test_verify_fails_closed_if_read_only_transaction_cannot_be_enabled(self):
+        class ReadOnlyRejected(Exception):
+            pass
+
+        class RejectingConnection:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def execute(self, sql):
+                self.sql = sql
+                raise ReadOnlyRejected("transaction read-only setup rejected")
+
+        fake_psycopg = types.ModuleType("psycopg")
+        fake_psycopg.Error = ReadOnlyRejected
+        fake_psycopg.connect = lambda *args, **kwargs: RejectingConnection()
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with patch.dict(sys.modules, {"psycopg": fake_psycopg}), \
+             patch.dict(os.environ, {"DATABASE_URL": "placeholder-not-a-real-url"}), \
+             patch("v2.backend.signal_archive_health.compare_archive_keys") as compare, \
+             contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            code = main(["verify"])
+        self.assertEqual(code, 1)
+        compare.assert_not_called()
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertIn("signal archive operation failed", stderr.getvalue())
+        self.assertNotIn("placeholder-not-a-real-url", stderr.getvalue())
+
     def test_verify_enables_read_only_before_comparison(self):
         result = {"available_source_reconciliation_verified": True,
                   "missing_from_archive": 0, "mismatched_archive_values": 0}
