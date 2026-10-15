@@ -45,6 +45,21 @@ class RegularSessionMinuteTests(unittest.TestCase):
             epoch_ms(2026, 10, 15, 15, 30),
             datetime(2026, 10, 15, 15, 28)), "REJECT")
 
+    def test_overnight_cannot_finalize_previous_day(self):
+        active = datetime(2026, 10, 15, 15, 29)
+        self.assertEqual(session_tick_action(
+            epoch_ms(2026, 10, 16, 0, 1), active), "REJECT")
+
+    def test_weekend_cannot_finalize_friday(self):
+        active = datetime(2026, 10, 16, 15, 29)
+        self.assertEqual(session_tick_action(
+            epoch_ms(2026, 10, 17, 10, 0), active), "REJECT")
+
+    def test_next_session_open_is_normal_update(self):
+        active = datetime(2026, 10, 15, 15, 29)
+        self.assertEqual(session_tick_action(
+            epoch_ms(2026, 10, 16, 9, 15), active), "UPDATE")
+
     def test_weekend_rejected(self):
         self.assertIsNone(regular_session_minute(epoch_ms(2026, 10, 17, 10, 0)))
 
