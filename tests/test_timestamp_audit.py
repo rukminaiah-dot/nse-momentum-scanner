@@ -31,6 +31,14 @@ class TimestampAuditTests(unittest.TestCase):
         self.assertEqual(inspect_tick_timestamp(ms(10, 0), ms(10, 3))["status"], "STALE")
         self.assertEqual(inspect_tick_timestamp(ms(10, 0, 10), ms(10, 0))["status"], "FUTURE")
 
+    def test_ambiguous_and_fractional_magnitudes_fail_closed(self):
+        arrival = ms(10, 0)
+        for value in (12345678901, 123456789012, 12345678901234,
+                      arrival + 0.5, "1e309"):
+            self.assertEqual(inspect_tick_timestamp(value, arrival)["status"], "INVALID")
+        for value in (arrival // 1000, arrival + 0.5, float("inf")):
+            self.assertEqual(inspect_tick_timestamp(arrival, value)["status"], "INVALID")
+
     def test_invalid_values_fail_closed(self):
         for value in (None, True, "", "not-a-number", -1, float("nan"), float("inf")):
             self.assertEqual(inspect_tick_timestamp(value, ms(10, 0))["status"], "INVALID")
