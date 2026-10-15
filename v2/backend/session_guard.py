@@ -4,7 +4,7 @@ Known limitations: NSE holidays, special sessions (e.g. Muhurat trading),
 unscheduled closures, and early closes are not represented. Do not enable
 in production without validating an authoritative session calendar.
 """
-from datetime import datetime, time
+from datetime import datetime, time, timedelta, date
 from zoneinfo import ZoneInfo
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -74,3 +74,31 @@ def verified_session_minute(timestamp_ms, sessions):
             or start >= end or not start <= stamp.time() < end):
         return None
     return stamp.replace(second=0, microsecond=0, tzinfo=None)
+
+
+def validate_session_coverage(schedule, start_date, end_date):
+    """Check complete explicit date coverage; None means verified closed.
+
+    This checks structure and completeness, NOT the schedule's provenance.
+    All calendar dates, including weekends/holidays, must be represented.
+    """
+    if (not isinstance(schedule, dict)
+            or not isinstance(start_date, date) or isinstance(start_date, datetime)
+            or not isinstance(end_date, date) or isinstance(end_date, datetime)
+            or start_date > end_date or (end_date - start_date).days > 366):
+        return False
+    current = start_date
+    while current <= end_date:
+        if current not in schedule:
+            return False
+        bounds = schedule[current]
+        if bounds is not None:
+            if (not isinstance(bounds, tuple) or len(bounds) != 2
+                    or not all(isinstance(t, time) and t.tzinfo is None for t in bounds)):
+                return False
+            start, end = bounds
+            if (start.second or start.microsecond or end.second or end.microsecond
+                    or start >= end):
+                return False
+        current += timedelta(days=1)
+    return True
