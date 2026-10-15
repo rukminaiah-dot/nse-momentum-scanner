@@ -25,6 +25,15 @@ def sync_observed_signals(sqlite_path, pg_connection, *, batch_size=500):
         ).fetchone()
         if duplicates is not None:
             raise ValueError("duplicate SQLite candle keys; resolve before manual archive sync")
+        invalid = source.execute(
+            """SELECT symbol,candle_time FROM scanner_signal_history
+               WHERE signal IN ('BUY','SELL','HOLD')
+                 AND (price IS NULL OR typeof(price) NOT IN ('integer','real')
+                      OR price <= 0 OR price > 1e308)
+               LIMIT 1"""
+        ).fetchone()
+        if invalid is not None:
+            raise ValueError("invalid SQLite signal price; resolve before manual archive sync")
         cursor = source.execute(
             """SELECT symbol,candle_time,price,signal
                FROM scanner_signal_history
