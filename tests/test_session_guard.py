@@ -3,7 +3,7 @@ import unittest
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from v2.backend.session_guard import regular_session_minute
+from v2.backend.session_guard import regular_session_minute, session_tick_action
 
 IST = ZoneInfo("Asia/Kolkata")
 
@@ -26,6 +26,24 @@ class RegularSessionMinuteTests(unittest.TestCase):
             with self.subTest(hour=hour, minute=minute):
                 self.assertIsNone(regular_session_minute(
                     epoch_ms(2026, 10, 15, hour, minute)))
+
+    def test_close_boundary_finalizes_last_minute_without_new_bar(self):
+        active = datetime(2026, 10, 15, 15, 29)
+        self.assertEqual(session_tick_action(
+            epoch_ms(2026, 10, 15, 15, 30), active), "FINALIZE_LAST_MINUTE")
+        self.assertEqual(session_tick_action(
+            epoch_ms(2026, 10, 15, 15, 55), active), "FINALIZE_LAST_MINUTE")
+        self.assertEqual(session_tick_action(
+            epoch_ms(2026, 10, 15, 15, 30), None), "REJECT")
+
+    def test_regular_tick_still_updates(self):
+        self.assertEqual(session_tick_action(
+            epoch_ms(2026, 10, 15, 15, 29)), "UPDATE")
+
+    def test_close_boundary_does_not_finalize_older_bar(self):
+        self.assertEqual(session_tick_action(
+            epoch_ms(2026, 10, 15, 15, 30),
+            datetime(2026, 10, 15, 15, 28)), "REJECT")
 
     def test_weekend_rejected(self):
         self.assertIsNone(regular_session_minute(epoch_ms(2026, 10, 17, 10, 0)))
