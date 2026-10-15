@@ -432,5 +432,28 @@ class ScannerSessionExecutionTests(unittest.TestCase):
                         or len(manager.completed.get(key, [])) == 1)
         self.assertEqual(len(manager.completed[key]), 1)
 
+    def test_calendar_wrapper_rejects_missing_price_without_side_effects(self):
+        key = "NSE_EQ|TEST"
+        day = date(2026, 10, 15)
+        schedule = {day: (time(9, 15), time(15, 30))}
+        on_tick, manager, state, calls = isolated_scanner(milliseconds(10, 1))
+        state["INDICES"] = {"INDEX": "NSE_INDEX|TEST"}
+        state["SESSION_CANDLE_GATE_ENABLED"] = False
+        tree = ast.parse(SOURCE.read_text())
+        fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef)
+                  and n.name == "on_tick_with_verified_calendar")
+        exec(compile(ast.Module(body=[fn], type_ignores=[]),
+                     str(SOURCE), "exec"), state)
+        gated = state["on_tick_with_verified_calendar"]
+        args = (schedule, day, day, "Synthetic test calendar", True)
+        self.assertEqual(gated(key, {"ltt": milliseconds(10, 1),
+                                     "vtt": 500}, *args), "REJECT")
+        self.assertEqual(gated(key, {"ltp": None,
+                                     "ltt": milliseconds(10, 1)}, *args),
+                         "REJECT")
+        self.assertEqual(calls, [])
+        self.assertEqual(manager.current, {})
+        self.assertEqual(state["_last_accepted_tick_ms"], {})
+
 if __name__ == "__main__":
     unittest.main()
