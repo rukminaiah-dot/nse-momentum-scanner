@@ -563,6 +563,46 @@ def on_tick(key, data):
         analyse(key)
 
 
+def on_tick_with_verified_calendar(key, data, schedule, start_date, end_date,
+                                   source, verified, close_grace_minutes=5):
+    """Explicitly invoked calendar-aware scanner entrypoint (NOT live-wired).
+
+    Callers must supply independently verified, complete dated sessions.
+    This wrapper is not selected by the Upstox connector or environment.
+    The legacy weekday gate must remain off when exercising this path.
+    """
+    from .offline_scanner_session_dispatch import dispatch_offline_scanner_tick
+
+    if SESSION_CANDLE_GATE_ENABLED or not isinstance(data, dict):
+        return "REJECT"
+    stamp = data.get("ltt")
+    if isinstance(stamp, bool):
+        return "REJECT"
+    try:
+        stamp = int(float(stamp))
+        if stamp < 10**11:
+            stamp *= 1000
+    except (TypeError, ValueError, OverflowError):
+        return "REJECT"
+    with candles.lock:
+        item = candles.current.get(key)
+        active_minute = item["minute"] if item else None
+
+    def finalize():
+        if candles.finalize_verified_session_end(
+                key, stamp, schedule, start_date, end_date, source, verified,
+                close_grace_minutes) is not None:
+            write_candle_quality()
+
+    return dispatch_offline_scanner_tick(
+        key, stamp, active_minute,
+        frozenset(NIFTY_200.values()) | frozenset(INDICES.values()),
+        schedule, start_date, end_date, source, verified,
+        on_update=lambda: on_tick(key, data),
+        on_finalize=finalize, close_grace_minutes=close_grace_minutes,
+    )
+
+
 if __name__ == "__main__":
     init_db()
     reset_scanner_results()
