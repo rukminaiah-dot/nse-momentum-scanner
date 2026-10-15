@@ -3,7 +3,7 @@ import unittest
 from datetime import date, datetime, time
 from zoneinfo import ZoneInfo
 
-from v2.backend.session_guard import verified_session_minute, validate_session_coverage, accept_verified_calendar
+from v2.backend.session_guard import verified_session_minute, validate_session_coverage, accept_verified_calendar, verified_range_session_minute
 
 IST = ZoneInfo("Asia/Kolkata")
 
@@ -45,6 +45,22 @@ class VerifiedSessionScheduleTests(unittest.TestCase):
         accepted = accept_verified_calendar(sessions, day, day, "NSE notice", True)
         self.assertEqual(accepted, sessions)
         self.assertIsNot(accepted, sessions)
+
+    def test_range_lookup_rejects_dates_outside_approved_period(self):
+        day, next_day = date(2026, 10, 15), date(2026, 10, 16)
+        sessions = {day: (time(9, 15), time(15, 30)),
+                    next_day: (time(9, 15), time(15, 30))}
+        self.assertEqual(verified_range_session_minute(
+            ms(2026, 10, 15, 10, 0), sessions, day, day),
+            datetime(2026, 10, 15, 10, 0))
+        self.assertIsNone(verified_range_session_minute(
+            ms(2026, 10, 16, 10, 0), sessions, day, day))
+
+    def test_range_lookup_rejects_incomplete_calendar(self):
+        day, next_day = date(2026, 10, 15), date(2026, 10, 16)
+        sessions = {day: (time(9, 15), time(15, 30))}
+        self.assertIsNone(verified_range_session_minute(
+            ms(2026, 10, 15, 10, 0), sessions, day, next_day))
 
     def test_missing_date_fails_closed(self):
         self.assertIsNone(verified_session_minute(ms(2026, 10, 15, 10, 0), {}))
