@@ -82,5 +82,21 @@ class VerifiedSessionFinalizationTests(unittest.TestCase):
         self.assertIn(self.key, self.manager.current)
 
 
+    def test_finalized_last_minute_cannot_reopen_with_delayed_tick(self):
+        self.assertIsNotNone(self.finalize(15, 30))
+        self.assertTrue(self.manager.is_verified_finalized_or_older(
+            self.key, ms(15, 29) + 45000))
+        self.assertIsNone(self.manager.update(
+            self.key, 300, ms(15, 29) + 45000, 40))
+        self.assertNotIn(self.key, self.manager.current)
+        self.assertEqual(len(self.manager.completed[self.key]), 1)
+        self.assertEqual(self.manager.completed[self.key][0].close, 100)
+        next_day = int(datetime(2026, 10, 16, 9, 15,
+                                tzinfo=IST).timestamp() * 1000)
+        self.assertIsNone(self.manager.update(self.key, 101, next_day, 2))
+        self.assertEqual(self.manager.current[self.key]["candle"].close, 101)
+        self.assertFalse(self.manager.is_verified_finalized_or_older(
+            self.key, ms(15, 29)))
+
 if __name__ == "__main__":
     unittest.main()
