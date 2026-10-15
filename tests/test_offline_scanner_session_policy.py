@@ -1,5 +1,7 @@
 """Synthetic offline tests; never imports scanner or Upstox clients."""
 import unittest
+import ast
+from pathlib import Path
 from datetime import date, datetime, time
 from zoneinfo import ZoneInfo
 
@@ -54,6 +56,17 @@ class OfflineScannerSessionPolicyTests(unittest.TestCase):
                 self.assertEqual(classify_scanner_tick(
                     "STOCK_TEST", ms(10, 0), None, eligible, CALENDAR,
                     DAY, DAY, "Synthetic calendar", True), "REJECT")
+
+    def test_offline_policy_not_wired_into_live_scanner(self):
+        root = Path(__file__).resolve().parents[1]
+        scanner = ast.parse((root / "v2/backend/scanner.py").read_text())
+        names = {n.id for n in ast.walk(scanner) if isinstance(n, ast.Name)}
+        self.assertNotIn("classify_scanner_tick", names)
+        self.assertNotIn("dispatch_offline_scanner_tick", names)
+        imports = [n.module for n in ast.walk(scanner)
+                   if isinstance(n, ast.ImportFrom)]
+        self.assertNotIn("v2.backend.offline_scanner_session_policy", imports)
+        self.assertNotIn("v2.backend.offline_scanner_session_dispatch", imports)
 
 if __name__ == "__main__":
     unittest.main()
