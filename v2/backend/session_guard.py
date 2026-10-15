@@ -132,3 +132,17 @@ def verified_range_session_minute(timestamp_ms, sessions, start_date, end_date):
     if not start_date <= stamp.date() <= end_date:
         return None
     return verified_session_minute(timestamp_ms, sessions)
+
+
+def accepted_calendar_minute(timestamp_ms, schedule, start_date, end_date,
+                             source, verified):
+    """Only classify ticks with acknowledged provenance and full date coverage.
+
+    Caller verification is an explicit prerequisite, not authentication.
+    """
+    accepted = accept_verified_calendar(
+        schedule, start_date, end_date, source, verified)
+    if accepted is None:
+        return None
+    return verified_range_session_minute(
+        timestamp_ms, accepted, start_date, end_date)
