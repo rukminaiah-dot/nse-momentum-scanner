@@ -27,6 +27,15 @@ class VerifiedSessionScheduleTests(unittest.TestCase):
         self.assertFalse(validate_session_coverage({day: (time(15, 30), time(9, 15))}, day, day))
         self.assertFalse(validate_session_coverage({}, day, day))
 
+    def test_explicit_closed_day_rejects_all_ticks(self):
+        closed = {date(2026, 10, 15): None}
+        self.assertTrue(validate_session_coverage(
+            closed, date(2026, 10, 15), date(2026, 10, 15)))
+        for hour, minute in ((0, 0), (9, 15), (12, 0), (15, 29), (23, 59)):
+            with self.subTest(hour=hour, minute=minute):
+                self.assertIsNone(verified_session_minute(
+                    ms(2026, 10, 15, hour, minute), closed))
+
     def test_missing_date_fails_closed(self):
         self.assertIsNone(verified_session_minute(ms(2026, 10, 15, 10, 0), {}))
 
