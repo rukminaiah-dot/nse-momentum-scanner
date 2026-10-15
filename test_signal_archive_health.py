@@ -88,6 +88,19 @@ class ArchiveHealthTests(unittest.TestCase):
                 {"symbol": "A", "candle_time_ist": "2026-10-14 10:00:00"}])
             self.assertFalse(result["available_source_reconciliation_verified"])
 
+    def test_fractional_second_timestamp_format_matches_postgres_datetime(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "signals.db"
+            with sqlite3.connect(path) as con:
+                con.execute("CREATE TABLE scanner_signal_history (symbol TEXT,candle_time TEXT,price REAL,signal TEXT)")
+                con.execute("INSERT INTO scanner_signal_history VALUES (?,?,?,?)",
+                            ("A", "2026-10-14T10:00:00.123456", 100, "BUY"))
+            pg = Pg([("A", datetime(2026, 10, 14, 10, 0, 0, 123456), 100, "BUY")])
+            result = compare_archive_keys(path, pg)
+            self.assertEqual(result["status"], "MATCHED_AVAILABLE_SOURCE")
+            self.assertEqual(result["missing_from_archive"], 0)
+            self.assertTrue(result["available_source_reconciliation_verified"])
+
     def test_fractional_second_mismatch_is_not_silently_matched(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "signals.db"
