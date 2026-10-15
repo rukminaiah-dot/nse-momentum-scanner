@@ -87,8 +87,6 @@ def compare_archive_keys(sqlite_path, pg_connection):
         status = "MISSING_ARCHIVE_ROWS"
     elif mismatched:
         status = "MISMATCHED_ARCHIVE_VALUES"
-    elif extra:
-        status = "MATCHED_AVAILABLE_SOURCE_WITH_EXTRA_ARCHIVE_ROWS"
     else:
         status = "MATCHED_AVAILABLE_SOURCE"
     return {
@@ -129,6 +127,7 @@ def compare_archive_keys(sqlite_path, pg_connection):
             for symbol, stamp in sorted(mismatched)[:10]
         ],
         "extra_archive_observations": len(extra),
+        "archive_only_rows_present": bool(extra),
         "extra_archive_samples": [
             {"symbol": symbol, "candle_time_ist": stamp}
             for symbol, stamp in sorted(extra)[:10]
