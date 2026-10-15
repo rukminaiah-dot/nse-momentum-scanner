@@ -49,3 +49,26 @@ def session_tick_action(timestamp_ms, active_minute=None):
             and stamp.time() >= CLOSE):
         return "FINALIZE_LAST_MINUTE"
     return "REJECT"
+
+
+def verified_session_minute(timestamp_ms, sessions):
+    """Validate a tick against an explicit date -> (open, close) schedule.
+
+    Missing dates fail closed. Sessions must come from a separately verified
+    exchange calendar; this helper does not download or infer holidays.
+    Weekend special sessions may be represented explicitly.
+    """
+    try:
+        stamp = datetime.fromtimestamp(float(timestamp_ms) / 1000, IST)
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
+    if not isinstance(sessions, dict):
+        return None
+    bounds = sessions.get(stamp.date())
+    if (not isinstance(bounds, tuple) or len(bounds) != 2
+            or not all(isinstance(t, time) and t.tzinfo is None for t in bounds)):
+        return None
+    start, end = bounds
+    if start >= end or not start <= stamp.time() < end:
+        return None
+    return stamp.replace(second=0, microsecond=0, tzinfo=None)
