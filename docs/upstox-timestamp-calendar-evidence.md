@@ -28,3 +28,16 @@ Source: https://www.nseindia.com/resources/exchange-communication-holidays
 5. Review results before wiring the calendar into scanner processing. Leave `ENABLE_NSE_SESSION_CANDLE_GATE` disabled until approval and verification.
 
 **Production logs from 2026-10-15 are not sufficient to establish whether Upstox supplied post-close `ltt` values.**
+
+## Additional official-source finding: post-15:30 activity
+
+NSE's equities timings page distinguishes the **normal/odd-lot market close at 15:30 IST** from closing-auction and closing-session activity. The current NSE holidays/timings resource describes closing-auction order matching 15:30–15:35 and a transition period 15:35–15:50, followed by a closing session 15:50–16:00. A separate NSE market-timings page describes a closing session starting at 15:40. **The two published pages differ**, so obtain the applicable dated circulars and product/segment details before treating either timeline as a verified per-day calendar.
+
+Upstox's CAS market-data announcement (effective September 4, 2026) confirms that V3 WebSocket feeds can carry closing-auction values. An after-15:30 event may be legitimate exchange activity but must not automatically update normal continuous-session candles.
+
+Sources:
+- https://www.nseindia.com/resources/exchange-communication-holidays
+- https://www.nseindia.com/static/market-data/market-timings
+- https://upstox.com/developer/api-documentation/announcements/market-quote-v3-full-quotes/
+
+**Required observer extension before real-feed use:** separately capture envelope `currentTs`, `ltpc.ltt`, local message-receipt time, and the relevant market-status/CAS fields; retain only redacted timing and status metadata. The current offline helper accepts only `ltt` and arrival time, and cannot establish which exchange session produced an event.
