@@ -78,7 +78,7 @@ class ScannerSessionExecutionTests(unittest.TestCase):
 
     def test_out_of_order_same_minute_tick_cannot_change_ohlc(self):
         key = "NSE_EQ|TEST"
-        on_tick, manager, state, calls = isolated_scanner(milliseconds(10, 1))
+        on_tick, manager, state, calls = isolated_scanner(milliseconds(10, 1) + 35000)
         newer = milliseconds(10, 1) + 30000
         older = milliseconds(10, 1) + 10000
         on_tick(key, {"ltp": 101, "ltt": newer, "vtt": 508})
