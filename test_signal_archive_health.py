@@ -147,6 +147,20 @@ class ArchiveHealthTests(unittest.TestCase):
             self.assertEqual(result["duplicate_archive_samples"][-1]["candle_time_ist"], "2026-10-14 10:09:00")
             self.assertFalse(result["available_source_reconciliation_verified"])
 
+    def test_archive_only_presence_false_when_archive_has_no_extra_keys(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "signals.db"
+            with sqlite3.connect(path) as con:
+                con.execute("CREATE TABLE scanner_signal_history (symbol TEXT,candle_time TEXT,price REAL,signal TEXT)")
+                con.execute("INSERT INTO scanner_signal_history VALUES (?,?,?,?)",
+                            ("A", "2026-10-14 10:00:00", 100, "BUY"))
+            pg = Pg([("A", datetime(2026, 10, 14, 10), 100, "BUY")])
+            result = compare_archive_keys(path, pg)
+            self.assertEqual(result["status"], "MATCHED_AVAILABLE_SOURCE")
+            self.assertFalse(result["archive_only_rows_present"])
+            self.assertEqual(result["extra_archive_observations"], 0)
+            self.assertTrue(result["available_source_reconciliation_verified"])
+
     def test_fractional_second_timestamp_format_matches_postgres_datetime(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "signals.db"
