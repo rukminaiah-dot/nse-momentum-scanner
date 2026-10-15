@@ -87,6 +87,8 @@ def compare_archive_keys(sqlite_path, pg_connection):
         status = "MISSING_ARCHIVE_ROWS"
     elif mismatched:
         status = "MISMATCHED_ARCHIVE_VALUES"
+    elif extra:
+        status = "MATCHED_AVAILABLE_SOURCE_WITH_EXTRA_ARCHIVE_ROWS"
     else:
         status = "MATCHED_AVAILABLE_SOURCE"
     return {
