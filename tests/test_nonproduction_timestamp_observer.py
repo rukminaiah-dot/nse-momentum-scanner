@@ -3,7 +3,7 @@ import unittest
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from v2.backend.nonproduction_timestamp_observer import TimestampObserver, observe_ltt
+from v2.backend.nonproduction_timestamp_observer import TimestampObserver, observe_ltt, observe_message_timing
 
 IST = ZoneInfo("Asia/Kolkata")
 
@@ -32,6 +32,23 @@ class ObserverTests(unittest.TestCase):
         self.assertEqual(sum(row["count"] for row in summary), 2)
         self.assertNotIn("event_ist", str(summary))
         self.assertNotIn("instrument_key", str(summary))
+
+    def test_three_clock_comparison(self):
+        result = observe_message_timing(millis(15, 28), millis(15, 58), millis(15, 58, 1),
+                                        market_status="CLOSING_AUCTION")
+        self.assertEqual(result["trade_status"], "STALE")
+        self.assertEqual(result["envelope_status"], "FRESH")
+        self.assertEqual(result["envelope_minus_trade_ms"], 1800000)
+        self.assertEqual(result["market_status"], "CLOSING_AUCTION")
+        self.assertEqual(result["session"], "UNKNOWN")
+
+    def test_untrusted_status_not_reflected(self):
+        result = observe_message_timing(None, None, millis(10, 0),
+                                        market_status="SECRET_INSTRUMENT_ID")
+        self.assertEqual(result["market_status"], "UNKNOWN")
+        self.assertEqual(result["trade_status"], "INVALID")
+        self.assertEqual(result["envelope_status"], "INVALID")
+        self.assertNotIn("SECRET_INSTRUMENT_ID", str(result))
 
     def test_close_boundary(self):
         self.assertEqual(observe_ltt(millis(15, 29), millis(15, 29))["regular_hours_window"],
