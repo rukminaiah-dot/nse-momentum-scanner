@@ -1,12 +1,13 @@
 """Execute scanner on_tick with isolated fake market inputs; no broker/database."""
 import ast
-from datetime import datetime
+from datetime import date, datetime, time
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
 from zoneinfo import ZoneInfo
 
 from v2.backend.candle_manager import CandleManager
+from v2.backend.offline_scanner_session_dispatch import dispatch_offline_scanner_tick
 
 SOURCE = Path(__file__).resolve().parents[1] / "v2/backend/scanner.py"
 IST = ZoneInfo("Asia/Kolkata")
@@ -125,6 +126,41 @@ class ScannerSessionExecutionTests(unittest.TestCase):
         self.assertNotIn("NSE_EQ|TEST", manager.current)
         self.assertEqual(len(manager.completed["NSE_EQ|TEST"]), 1)
 
+
+    def test_calendar_dispatch_wraps_real_scanner_function_without_live_wiring(self):
+        key = "NSE_EQ|TEST"
+        day = date(2026, 10, 15)
+        schedule = {day: (time(9, 15), time(15, 30))}
+        on_tick, manager, state, calls = isolated_scanner(milliseconds(15, 45))
+        # In this isolated harness only, the real on_tick body runs behind
+        # calendar dispatch. No live scanner module or broker is imported.
+        state["SESSION_CANDLE_GATE_ENABLED"] = False
+        def dispatch(stamp, price):
+            active = manager.current.get(key)
+            active_minute = active["minute"] if active else None
+            return dispatch_offline_scanner_tick(
+                key, stamp, active_minute, frozenset((key,)), schedule,
+                day, day, "Synthetic test calendar", True,
+                on_update=lambda: on_tick(key, {"ltp": price, "ltt": stamp,
+                                                "vtt": 500}),
+                on_finalize=lambda: manager.finalize_verified_session_end(
+                    key, stamp, schedule, day, day, "Synthetic test calendar",
+                    True),
+            )
+        self.assertEqual(dispatch(milliseconds(15, 45), 200), "REJECT")
+        self.assertEqual(calls, [])
+        self.assertEqual(state["_last_accepted_tick_ms"], {})
+        self.assertEqual(state["last_cumulative_volumes"], {})
+        self.assertEqual(manager.current, {})
+        self.assertEqual(dispatch(milliseconds(15, 29), 100), "UPDATE")
+        self.assertIn(key, manager.current)
+        self.assertEqual(dispatch(milliseconds(15, 30), 200),
+                         "FINALIZE_LAST_MINUTE")
+        self.assertNotIn(key, manager.current)
+        self.assertEqual(len(manager.completed[key]), 1)
+        self.assertEqual(manager.completed[key][0].close, 100)
+        self.assertEqual(calls.count("health"), 1)
+        self.assertEqual(calls.count("analyse"), 0)
 
 if __name__ == "__main__":
     unittest.main()
