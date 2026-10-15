@@ -147,6 +147,19 @@ class ArchiveHealthTests(unittest.TestCase):
             self.assertEqual(result["duplicate_archive_samples"][-1]["candle_time_ist"], "2026-10-14 10:09:00")
             self.assertFalse(result["available_source_reconciliation_verified"])
 
+    def test_archive_only_flag_true_when_sqlite_source_is_empty(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "signals.db"
+            with sqlite3.connect(path) as con:
+                con.execute("CREATE TABLE scanner_signal_history (symbol TEXT,candle_time TEXT,price REAL,signal TEXT)")
+            pg = Pg([("OLD", datetime(2026, 10, 13, 10), 99, "SELL")])
+            result = compare_archive_keys(path, pg)
+            self.assertEqual(result["status"], "NO_AVAILABLE_SQLITE_OBSERVATIONS")
+            self.assertTrue(result["archive_only_rows_present"])
+            self.assertEqual(result["extra_archive_observations"], 1)
+            self.assertFalse(result["available_source_reconciliation_verified"])
+            self.assertFalse(result["historical_completeness_verified"])
+
     def test_archive_only_history_does_not_invalidate_available_source_match(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "signals.db"
