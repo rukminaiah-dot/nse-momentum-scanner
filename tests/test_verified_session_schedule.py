@@ -80,7 +80,7 @@ class VerifiedSessionScheduleTests(unittest.TestCase):
     def test_malformed_timestamps_fail_closed(self):
         day = date(2026, 10, 15)
         schedule = {day: (time(9, 15), time(15, 30))}
-        for tick in (None, "not-a-timestamp", float("nan"), float("inf"),
+        for tick in (None, True, False, "not-a-timestamp", float("nan"), float("inf"),
                      float("-inf"), [], {}):
             with self.subTest(tick=repr(tick)):
                 self.assertIsNone(verified_session_minute(tick, schedule))
