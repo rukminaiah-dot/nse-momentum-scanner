@@ -381,5 +381,56 @@ class ScannerSessionExecutionTests(unittest.TestCase):
         self.assertEqual(state["last_cumulative_volumes"][key], 508)
         self.assertEqual(manager.current[key]["candle"].close, 101)
 
+    def test_calendar_wrapper_serializes_dispatch_with_finalizer(self):
+        key = "NSE_EQ|TEST"
+        day = date(2026, 10, 15)
+        schedule = {day: (time(9, 15), time(15, 30))}
+        on_tick, manager, state, calls = isolated_scanner(milliseconds(15, 29))
+        state["INDICES"] = {"INDEX": "NSE_INDEX|TEST"}
+        state["SESSION_CANDLE_GATE_ENABLED"] = False
+        tree = ast.parse(SOURCE.read_text())
+        names = {"on_tick_with_verified_calendar",
+                 "finalize_verified_calendar_without_tick"}
+        nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef)
+                 and n.name in names]
+        exec(compile(ast.Module(body=nodes, type_ignores=[]),
+                     str(SOURCE), "exec"), state)
+        gated = state["on_tick_with_verified_calendar"]
+        finalize = state["finalize_verified_calendar_without_tick"]
+        args = (schedule, day, day, "Synthetic test calendar", True)
+        self.assertEqual(gated(key, {"ltp": 100, "ltt": milliseconds(15, 29),
+                                     "vtt": 500}, *args), "UPDATE")
+
+        # Inject finalization at the dispatch boundary. The real scanner
+        # must hold the same RLock for classification and side effects.
+        from unittest.mock import patch
+        from v2.backend import offline_scanner_session_dispatch as dispatch
+        original = dispatch.dispatch_offline_scanner_tick
+        def interleaved(*a, **kw):
+            # Simulate another thread trying to finalize during dispatch.
+            from threading import Thread, Event
+            started = Event()
+            done = Event()
+            def close():
+                started.set()
+                finalize(key, milliseconds(15, 30), *args)
+                done.set()
+            worker = Thread(target=close)
+            worker.start()
+            self.assertTrue(started.wait(2))
+            self.assertFalse(done.wait(0.05))
+            result = original(*a, **kw)
+            worker.join(timeout=0.01)
+            return result
+        with patch.object(dispatch, "dispatch_offline_scanner_tick",
+                          side_effect=interleaved):
+            self.assertEqual(gated(key, {
+                "ltp": 101, "ltt": milliseconds(15, 29) + 1000,
+                "vtt": 501}, *args), "UPDATE")
+        # Finalizer can run after dispatch releases the manager lock.
+        self.assertTrue(finalize(key, milliseconds(15, 30), *args)
+                        or len(manager.completed.get(key, [])) == 1)
+        self.assertEqual(len(manager.completed[key]), 1)
+
 if __name__ == "__main__":
     unittest.main()
