@@ -128,6 +128,17 @@ class VerifiedSessionScheduleTests(unittest.TestCase):
             datetime(2026, 10, 15, 15, 29),
             schedule, day, next_day, "NSE notice", True), "REJECT")
 
+    def test_invalid_session_hours_cannot_finalize_candle(self):
+        day = date(2026, 10, 15)
+        tick = ms(2026, 10, 15, 15, 30)
+        active = datetime(2026, 10, 15, 15, 29)
+        for bounds in ((time(15, 30), time(15, 30)),
+                       (time(15, 30), time(9, 15))):
+            with self.subTest(bounds=bounds):
+                self.assertEqual(accepted_calendar_tick_action(
+                    tick, active, {day: bounds}, day, day, "NSE notice", True),
+                    "REJECT")
+
     def test_missing_date_fails_closed(self):
         self.assertIsNone(verified_session_minute(ms(2026, 10, 15, 10, 0), {}))
 
