@@ -36,3 +36,18 @@ def _result(gaps, count, ordered):
     return {"observed_history_gap_minutes": gaps,
             "observed_history_candles_today": count,
             "observed_history_order_valid": ordered}
+
+
+def summarize_observed_history(rows):
+    """Summarize bounded observed gaps without assuming full-session coverage."""
+    valid = [v for v in rows.values() if isinstance(v, dict)]
+    gaps = [v["observed_history_gap_minutes"] for v in valid
+            if isinstance(v.get("observed_history_gap_minutes"), int)
+            and not isinstance(v.get("observed_history_gap_minutes"), bool)
+            and v["observed_history_gap_minutes"] >= 0]
+    return {
+        "stocks_with_observed_history_gaps": sum(n > 0 for n in gaps),
+        "observed_history_gap_minutes_total": sum(gaps),
+        "stocks_with_unknown_observed_history": sum(
+            v.get("observed_history_order_valid") is False for v in valid),
+    }
