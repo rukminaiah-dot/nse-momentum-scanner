@@ -29,6 +29,7 @@ on:
       - 'test_signal_daily_accuracy_csv.py'
       - 'probe_upstox_recovery.py'
       - 'tests/test_quality_metrics.py'
+      - 'tests/test_session_guard.py'
 
 permissions:
   contents: read
@@ -50,3 +51,5 @@ jobs:
         run: python -m unittest -v test_verified_gap_recovery test_gap_recovery_worker test_recovery_trigger test_recovery_integration test_preload_control_flow test_upstox_probe test_paper_signal_ledger test_signal_accuracy_report test_signal_archive_postgres test_signal_archive_sync test_signal_cumulative_report test_signal_archive_cli test_signal_accuracy_csv test_signal_paper_pnl test_signal_paper_pnl_api test_signal_archive_health test_signal_archive_hook test_signal_archive_queue test_signal_archive_dispatch test_signal_archive_delivery_health test_signal_archive_health_api test_signal_daily_accuracy_csv
       - name: Candle quality metric tests
         run: python -m unittest discover -s tests -p test_quality_metrics.py -v
+      - name: Market session boundary tests
+        run: python -m unittest discover -s tests -p test_session_guard.py -v
