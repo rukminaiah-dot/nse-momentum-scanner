@@ -451,9 +451,16 @@ class ScannerSessionExecutionTests(unittest.TestCase):
         self.assertEqual(gated(key, {"ltp": None,
                                      "ltt": milliseconds(10, 1)}, *args),
                          "REJECT")
+        for bad_price in (True, False, 0, -1, float("nan"),
+                          float("inf"), -float("inf"), "100", [], {}):
+            with self.subTest(price=bad_price):
+                self.assertEqual(gated(key, {
+                    "ltp": bad_price, "ltt": milliseconds(10, 1),
+                    "vtt": 500}, *args), "REJECT")
         self.assertEqual(calls, [])
         self.assertEqual(manager.current, {})
         self.assertEqual(state["_last_accepted_tick_ms"], {})
+        self.assertEqual(state["last_cumulative_volumes"], {})
 
 if __name__ == "__main__":
     unittest.main()
