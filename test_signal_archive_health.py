@@ -15,6 +15,23 @@ class Pg:
         return self.rows
 
 class ArchiveHealthTests(unittest.TestCase):
+    def test_reconciliation_rejects_incomplete_sqlite_history_schema_without_modifying_it(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "signals.db"
+            with sqlite3.connect(path) as con:
+                con.execute("CREATE TABLE scanner_signal_history (symbol TEXT,candle_time TEXT,signal TEXT)")
+                con.execute("INSERT INTO scanner_signal_history VALUES (?,?,?)",
+                            ("A", "2026-10-14 10:00:00", "BUY"))
+            original_bytes = path.read_bytes()
+            with self.assertRaisesRegex(sqlite3.OperationalError, "no such column"):
+                compare_archive_keys(path, Pg([]))
+            self.assertEqual(path.read_bytes(), original_bytes)
+            with sqlite3.connect(path) as con:
+                self.assertEqual(
+                    [column[1] for column in con.execute("PRAGMA table_info(scanner_signal_history)")],
+                    ["symbol", "candle_time", "signal"],
+                )
+
     def test_reconciliation_rejects_sqlite_without_history_table_without_modifying_it(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "signals.db"
