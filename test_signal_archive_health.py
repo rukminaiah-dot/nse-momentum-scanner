@@ -36,6 +36,32 @@ class ArchiveHealthTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "invalid SQLite"):
                     compare_archive_keys(path, pg)
 
+    def test_nonpositive_and_nonfinite_source_prices_cannot_verify(self):
+        for bad_price in (0, -1, float("inf"), float("-inf")):
+            with self.subTest(price=bad_price), tempfile.TemporaryDirectory() as folder:
+                path = Path(folder) / "signals.db"
+                with sqlite3.connect(path) as con:
+                    con.execute("CREATE TABLE scanner_signal_history (symbol TEXT,candle_time TEXT,price REAL,signal TEXT)")
+                    con.executemany("INSERT INTO scanner_signal_history VALUES (?,?,?,?)", [
+                        ("A", "2026-10-14 10:00:00", 100, "BUY"),
+                        ("B", "2026-10-14 10:01:00", bad_price, "SELL"),
+                    ])
+                pg = Pg([("A", datetime(2026, 10, 14, 10), 100, "BUY")])
+                with self.assertRaisesRegex(ValueError, "invalid SQLite signal price"):
+                    compare_archive_keys(path, pg)
+
+    def test_blank_source_symbol_cannot_verify(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "signals.db"
+            with sqlite3.connect(path) as con:
+                con.execute("CREATE TABLE scanner_signal_history (symbol TEXT,candle_time TEXT,price REAL,signal TEXT)")
+                con.executemany("INSERT INTO scanner_signal_history VALUES (?,?,?,?)", [
+                    ("A", "2026-10-14 10:00:00", 100, "BUY"),
+                    ("   ", "2026-10-14 10:01:00", 101, "SELL"),
+                ])
+            with self.assertRaisesRegex(ValueError, "invalid SQLite signal candle key"):
+                compare_archive_keys(path, Pg([("A", datetime(2026, 10, 14, 10), 100, "BUY")]))
+
     def test_duplicate_sqlite_keys_are_not_silently_accepted(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "signals.db"
