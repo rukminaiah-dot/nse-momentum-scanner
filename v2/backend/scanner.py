@@ -616,6 +616,11 @@ def on_tick_with_verified_calendar(key, data, schedule, start_date, end_date,
     now_ms = int(time.time() * 1000)
     if stamp > now_ms + 5000 or now_ms - stamp > 120000:
         return "REJECT"
+    # Keep the wrapper's reported action consistent with the real scanner:
+    # an out-of-order tick cannot update candles, volume, trades, or health.
+    last_accepted = _last_accepted_tick_ms.get(key)
+    if last_accepted is not None and stamp < last_accepted:
+        return "REJECT"
     # A late in-session tick may still be fresh by wall clock after a
     # clock-driven close. Reject before trade, health or volume side effects.
     if candles.is_verified_finalized_or_older(key, stamp):
