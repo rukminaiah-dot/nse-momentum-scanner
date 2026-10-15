@@ -56,6 +56,20 @@ class SessionFinalizationTests(unittest.TestCase):
         self.assertIn("TEST", manager.current)
         self.assertNotIn("TEST", manager.completed)
 
+    def test_next_day_open_drops_stale_unfinalized_candle(self):
+        manager = CandleManager(log_closed_candles=False)
+        key = "TEST"
+        manager.update_regular_session(key, 100, ms(15, 29), 5)
+        next_open = int(datetime(2026, 10, 16, 9, 15,
+                                 tzinfo=IST).timestamp() * 1000)
+        self.assertIsNone(manager.update_regular_session(
+            key, 105, next_open, 8))
+        self.assertEqual(manager.current[key]["minute"],
+                         datetime(2026, 10, 16, 9, 15))
+        self.assertEqual(manager.current[key]["candle"].close, 105)
+        self.assertEqual(manager.current[key]["candle"].volume, 8)
+        self.assertEqual(manager.completed.get(key, []), [])
+
     def test_does_not_finalize_during_session(self):
         manager = CandleManager(log_closed_candles=False)
         manager.update("TEST", 100, ms(15, 29), 5)
