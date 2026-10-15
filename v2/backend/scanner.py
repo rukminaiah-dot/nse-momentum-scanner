@@ -34,6 +34,8 @@ gap_recovery = GapRecoveryWorker(
     max_pending=2,
 )
 GAP_RECOVERY_ENABLED = os.getenv("ENABLE_VERIFIED_GAP_RECOVERY") == "1"
+# Experimental candle-only gate; disabled unless explicitly opted in.
+SESSION_CANDLE_GATE_ENABLED = os.getenv("ENABLE_NSE_SESSION_CANDLE_GATE") == "1"
 
 active_trades = {}
 instrument_symbols = {key: symbol for symbol, key in {**NIFTY_200, **INDICES}.items()}
@@ -524,7 +526,10 @@ def on_tick(key, data):
 
     # The candle manager returns a closed candle atomically under its lock.
     # Never infer closure from history length: recovery may replace that list.
-    candle_closed = candles.update(key, price, ts, minute_volume) is not None
+    if SESSION_CANDLE_GATE_ENABLED and key in NIFTY_200.values():
+        candle_closed = candles.update_regular_session(key, price, ts, minute_volume) is not None
+    else:
+        candle_closed = candles.update(key, price, ts, minute_volume) is not None
 
     # Only request recovery after a genuine live closure of a same-session gap.
     # Never request for indices, disabled mode or overnight discontinuities.
