@@ -42,3 +42,31 @@ def inspect_decoded_message(message, arrival_ms):
             continue
         observations.append(observe_message_timing(ltpc.get("ltt"), current_ts, arrival_ms))
     return observations
+
+
+def summarize_decoded_messages(samples):
+    """Aggregate a finite sequence of (decoded_message, arrival_ms) pairs.
+
+    The summary deliberately discards per-message timestamps and instrument IDs.
+    No network calls, persistence, or scanner side effects.
+    """
+    from collections import Counter
+
+    counts = Counter()
+    for message, arrival_ms in samples:
+        for observation in inspect_decoded_message(message, arrival_ms):
+            key = (
+                observation["trade_status"],
+                observation["envelope_status"],
+                observation["regular_hours_window"],
+            )
+            counts[key] += 1
+    return [
+        {
+            "trade_status": trade_status,
+            "envelope_status": envelope_status,
+            "regular_hours_window": window,
+            "count": count,
+        }
+        for (trade_status, envelope_status, window), count in sorted(counts.items())
+    ]
