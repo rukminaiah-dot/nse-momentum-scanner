@@ -167,6 +167,14 @@ class ArchiveHealthTests(unittest.TestCase):
             self.assertEqual(result["mismatched_archive_values"], 3)
             self.assertEqual(result["mismatched_signal_values"], 2)
             self.assertEqual(result["mismatched_price_values"], 2)
+            samples = {item["symbol"]: item for item in result["mismatched_samples"]}
+            self.assertEqual(len(samples), 3)
+            self.assertEqual((samples["A"]["sqlite_signal"], samples["A"]["postgres_signal"]), ("BUY", "SELL"))
+            self.assertEqual((samples["A"]["sqlite_price"], samples["A"]["postgres_price"]), (100, 100))
+            self.assertEqual((samples["B"]["sqlite_signal"], samples["B"]["postgres_signal"]), ("SELL", "SELL"))
+            self.assertEqual((samples["B"]["sqlite_price"], samples["B"]["postgres_price"]), (200, 201))
+            self.assertEqual((samples["C"]["sqlite_signal"], samples["C"]["postgres_signal"]), ("BUY", "SELL"))
+            self.assertEqual((samples["C"]["sqlite_price"], samples["C"]["postgres_price"]), (300, 301))
             self.assertEqual(result["missing_from_archive"], 0)
             self.assertFalse(result["available_source_reconciliation_verified"])
 
