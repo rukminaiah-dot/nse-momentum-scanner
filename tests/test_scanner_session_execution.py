@@ -354,5 +354,32 @@ class ScannerSessionExecutionTests(unittest.TestCase):
                                      "vtt": 500}, *args), "UPDATE")
         self.assertEqual(calls.count("health"), 1)
 
+    def test_calendar_wrapper_reports_reject_for_out_of_order_tick(self):
+        key = "NSE_EQ|TEST"
+        day = date(2026, 10, 15)
+        schedule = {day: (time(9, 15), time(15, 30))}
+        on_tick, manager, state, calls = isolated_scanner(
+            milliseconds(10, 1) + 35000)
+        state["INDICES"] = {"INDEX": "NSE_INDEX|TEST"}
+        state["SESSION_CANDLE_GATE_ENABLED"] = False
+        tree = ast.parse(SOURCE.read_text())
+        fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef)
+                  and n.name == "on_tick_with_verified_calendar")
+        exec(compile(ast.Module(body=[fn], type_ignores=[]),
+                     str(SOURCE), "exec"), state)
+        gated = state["on_tick_with_verified_calendar"]
+        args = (schedule, day, day, "Synthetic test calendar", True)
+        newer = milliseconds(10, 1) + 30000
+        older = milliseconds(10, 1) + 10000
+        self.assertEqual(gated(key, {"ltp": 101, "ltt": newer,
+                                     "vtt": 508}, *args), "UPDATE")
+        before = list(calls)
+        self.assertEqual(gated(key, {"ltp": 80, "ltt": older,
+                                     "vtt": 600}, *args), "REJECT")
+        self.assertEqual(calls, before)
+        self.assertEqual(state["_last_accepted_tick_ms"][key], newer)
+        self.assertEqual(state["last_cumulative_volumes"][key], 508)
+        self.assertEqual(manager.current[key]["candle"].close, 101)
+
 if __name__ == "__main__":
     unittest.main()
