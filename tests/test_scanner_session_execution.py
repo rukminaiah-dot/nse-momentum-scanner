@@ -76,6 +76,21 @@ class ScannerSessionExecutionTests(unittest.TestCase):
         self.assertEqual(manager.current[key]["candle"].close, 101)
         self.assertEqual(len(manager.completed.get(key, [])), 0)
 
+    def test_out_of_order_same_minute_tick_cannot_change_ohlc(self):
+        key = "NSE_EQ|TEST"
+        on_tick, manager, state, calls = isolated_scanner(milliseconds(10, 1))
+        newer = milliseconds(10, 1) + 30000
+        older = milliseconds(10, 1) + 10000
+        on_tick(key, {"ltp": 101, "ltt": newer, "vtt": 508})
+        before = list(calls)
+        on_tick(key, {"ltp": 80, "ltt": older, "vtt": 600})
+        candle = manager.current[key]["candle"]
+        self.assertEqual((candle.open, candle.high, candle.low, candle.close),
+                         (101, 101, 101, 101))
+        self.assertEqual(state["_last_accepted_tick_ms"][key], newer)
+        self.assertEqual(state["last_cumulative_volumes"][key], 508)
+        self.assertEqual(calls, before)
+
     def test_after_hours_tick_does_not_mutate_trade_volume_or_health(self):
         on_tick, manager, state, calls = isolated_scanner(milliseconds(15, 55))
         on_tick("NSE_EQ|TEST", {"ltp": 125, "ltt": milliseconds(15, 55),
