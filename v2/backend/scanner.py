@@ -483,12 +483,11 @@ def on_tick(key, data):
         except (ValueError, TypeError):
             pass
 
-    before = len(candles.completed.get(key, []))
-    candles.update(key, price, ts, minute_volume)
-    after = len(candles.completed.get(key, []))
+    closed = candles.update(key, price, ts, minute_volume)
 
-    # Analyse only when a minute candle has actually closed.
-    if after > before:
+    # Only a live rollover may trigger analysis. Recovery can grow completed
+    # history without closing the active candle.
+    if closed is not None:
         write_candle_quality()
         analyse(key)
 
