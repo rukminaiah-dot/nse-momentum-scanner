@@ -73,6 +73,49 @@ def previous_session_evidence(*, previous_open, previous_close, observed_at_ist,
     return classify_percentage_change((previous_close / previous_open - 1) * 100)
 
 
+def global_markets_evidence(*, market_changes_pct, observed_at_ist, now=None):
+    now = now or datetime.now(IST)
+    if not _valid_observation(observed_at_ist, now, 30):
+        return None
+    if not isinstance(market_changes_pct, dict) or len(market_changes_pct) < 2:
+        return None
+    if any(not isinstance(k, str) or not k.strip() for k in market_changes_pct):
+        return None
+    values = list(market_changes_pct.values())
+    if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not isfinite(v) for v in values):
+        return None
+    return classify_percentage_change(sum(values) / len(values))
+
+
+def fii_dii_evidence(*, fii_net_crore, dii_net_crore, observed_at_ist,
+                     session_date_ist, expected_previous_session_date_ist, now=None):
+    now = now or datetime.now(IST)
+    if not isinstance(session_date_ist, str) or session_date_ist != expected_previous_session_date_ist:
+        return None
+    try:
+        from datetime import date
+        if date.fromisoformat(session_date_ist).isoformat() != session_date_ist:
+            return None
+    except ValueError:
+        return None
+    if not _valid_observation(observed_at_ist, now, 1440):
+        return None
+    values = (fii_net_crore, dii_net_crore)
+    if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not isfinite(v) for v in values):
+        return None
+    total = sum(values)
+    return 1 if total > 0 else -1 if total < 0 else 0
+
+
+def rbi_macro_news_evidence(*, event_bias, event_id, observed_at_ist, now=None):
+    now = now or datetime.now(IST)
+    if not isinstance(event_id, str) or not event_id.strip():
+        return None
+    if not _valid_observation(observed_at_ist, now, 240):
+        return None
+    return event_bias if type(event_bias) is int and event_bias in (-1, 0, 1) else None
+
+
 def assess_verified_sources(observations, *, now=None):
     """Assemble evidence only from explicitly source-verified observations.
 
