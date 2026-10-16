@@ -1,3 +1,4 @@
+from copy import copy
 from datetime import datetime
 from threading import RLock
 from zoneinfo import ZoneInfo
@@ -55,7 +56,8 @@ class CandleManager:
                     continue
                 if minute in by_minute:
                     continue
-                by_minute[minute] = candle
+                # Do not retain a mutable Candle owned by the recovery caller.
+                by_minute[minute] = copy(candle)
             retained = sorted(by_minute)[-limit:]
             if not any(minute in recovered and minute not in original_minutes
                        for minute in retained):
