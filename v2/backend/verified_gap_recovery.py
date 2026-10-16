@@ -33,6 +33,10 @@ def validated_completed_rows(rows, now_ist):
         minute = stamp.astimezone(IST).replace(tzinfo=None)
         if minute.date() != session or minute >= cutoff:
             continue
+        # Intraday recovery must not import off-session rows as market candles.
+        # NSE regular equity session: 09:15 inclusive to 15:30 exclusive IST.
+        if not (9 * 60 + 15 <= minute.hour * 60 + minute.minute < 15 * 60 + 30):
+            continue
         if minute.second or minute.microsecond or minute in result:
             raise ValueError("invalid or duplicate candle minute")
         if any(isinstance(value, bool) for value in row[1:6]):
