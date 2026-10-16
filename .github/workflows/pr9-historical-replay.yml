@@ -36,6 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     env:
+      PYTHONPATH: ${{ github.workspace }}
       NSE_RECOVERY_MODE: disabled
       NSE_ENABLE_VERIFIED_GAP_RECOVERY: "0"
       UPSTOX_ACCESS_TOKEN: ${{ secrets.UPSTOX_ACCESS_TOKEN }}
