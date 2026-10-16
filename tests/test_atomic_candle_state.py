@@ -58,5 +58,23 @@ class AtomicCandleStateTests(unittest.TestCase):
         self.assertEqual(history[-1].close, 101)
 
 
+    def test_invalid_batch_is_atomic(self):
+        manager = CandleManager()
+        manager.update('X', 100, millis(9, 15))
+        manager.update('X', 101, millis(9, 18))
+        before, _ = manager.snapshot('X')
+        valid = recovered(9, 16)
+        invalid = recovered(9, 17)
+        invalid.timestamp = datetime(2026, 10, 16, 9, 19)
+        with self.assertRaises(ValueError):
+            manager.insert_missing_completed('X', {
+                datetime(2026, 10, 16, 9, 16): valid,
+                datetime(2026, 10, 16, 9, 17): invalid,
+            })
+        after, _ = manager.snapshot('X')
+        self.assertEqual([c.timestamp for c in before],
+                         [c.timestamp for c in after])
+
+
 if __name__ == '__main__':
     unittest.main()
