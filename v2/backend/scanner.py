@@ -620,7 +620,14 @@ if __name__ == "__main__":
                 previous_closes.get(key),
             )
 
-    configure_gap_recovery(enabled=False)
+    # Double opt-in: never turn recovery on in existing production settings.
+    # Staging operator must explicitly set both values.
+    recovery_enabled = (
+        os.environ.get("NSE_RECOVERY_MODE") == "staging"
+        and os.environ.get("NSE_ENABLE_VERIFIED_GAP_RECOVERY") == "1"
+    )
+    configure_gap_recovery(enabled=recovery_enabled)
+    print("VERIFIED_GAP_RECOVERY:", "ENABLED_STAGING" if recovery_enabled else "DISABLED", flush=True)
     try:
         UpstoxLiveV3(on_tick=on_tick).connect()
     finally:
