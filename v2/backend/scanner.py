@@ -32,10 +32,15 @@ def configure_gap_recovery(*, enabled=False, fetch_rows=None):
     """Explicit opt-in after preload; production default stays disabled."""
     global _recovery_worker
     if not enabled:
+        previous = _recovery_worker
         _recovery_worker = None
+        if previous is not None:
+            previous.join(timeout=5)
         return None
+    if _recovery_worker is not None:
+        return _recovery_worker
     _recovery_worker = GapRecoveryWorker(
-        fetch_rows or fetch_recovery_rows,
+        fetch_rows if fetch_rows is not None else fetch_recovery_rows,
         candles.snapshot,
         candles.merge_verified_recovery,
     )
