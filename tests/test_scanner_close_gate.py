@@ -90,5 +90,22 @@ class ScannerCloseGateTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
 
 
+    def test_result_timestamp_uses_instrument_mapping_and_snapshot(self):
+        tree = ast.parse(SCANNER.read_text(encoding="utf-8"))
+        helper = next(node for node in tree.body
+                      if isinstance(node, ast.FunctionDef)
+                      and node.name == "completed_candle_time_for_symbol")
+        calls = [node for node in ast.walk(helper)
+                 if isinstance(node, ast.Call)
+                 and isinstance(node.func, ast.Attribute)
+                 and node.func.attr == "snapshot"
+                 and isinstance(node.func.value, ast.Name)
+                 and node.func.value.id == "candles"]
+        self.assertEqual(len(calls), 1)
+        self.assertTrue(any(
+            isinstance(node, ast.Name) and node.id == "instrument_symbols"
+            for node in ast.walk(helper)))
+
+
 if __name__ == "__main__":
     unittest.main()
