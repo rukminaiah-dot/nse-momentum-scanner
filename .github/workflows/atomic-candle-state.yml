@@ -1,0 +1,21 @@
+name: Atomic Candle State Prototype Tests
+on:
+  push:
+    branches:
+      - feature/atomic-candle-state-prototype
+  pull_request:
+    paths:
+      - 'v2/backend/candle_manager.py'
+      - 'tests/test_atomic_candle_state.py'
+      - '.github/workflows/atomic-candle-state.yml'
+  workflow_dispatch:
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m py_compile v2/backend/candle_manager.py tests/test_atomic_candle_state.py
+      - run: python -m unittest discover -s tests -p 'test_atomic_candle_state.py' -v
