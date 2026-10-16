@@ -63,5 +63,32 @@ class ScannerCloseGateTests(unittest.TestCase):
         )
 
 
+    def test_scanner_does_not_bypass_completed_history_lock(self):
+        tree = ast.parse(SCANNER.read_text(encoding="utf-8"))
+        direct = [
+            node for node in ast.walk(tree)
+            if isinstance(node, ast.Attribute)
+            and node.attr == "completed"
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "candles"
+        ]
+        self.assertEqual(direct, [], "scanner must use synchronized candle APIs")
+
+    def test_scanner_uses_guarded_preload_api(self):
+        tree = ast.parse(SCANNER.read_text(encoding="utf-8"))
+        preload = next(node for node in tree.body
+                       if isinstance(node, ast.FunctionDef)
+                       and node.name == "preload_history")
+        calls = [
+            node for node in ast.walk(preload)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "preload_completed"
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "candles"
+        ]
+        self.assertEqual(len(calls), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
