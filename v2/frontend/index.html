@@ -101,6 +101,7 @@ async function loadTrades(){
         Status: <b class="${t.status==='CLOSED'?'sell':t.status==='TARGET_1'?'target':'buy'}">${t.status}</b><br>
         Entry: ${t.entry_price}<br>
         Last recorded price: ${t.current_price}<br>
+        Quote freshness: ${t.quote_freshness==='VERIFIED_FRESH'&&t.quote_timestamp_verified===true?'VERIFIED_FRESH':'UNVERIFIED / NOT LIVE'}<br>
         ${t.status!=="CLOSED" ? `<span class="${Number(t.current_price)>=Number(t.entry_price) ? "profit" : "loss"}">Indicative P&L (quote freshness unverified): ${(Number(t.current_price)-Number(t.entry_price)).toFixed(2)} (${(((Number(t.current_price)-Number(t.entry_price))/Number(t.entry_price))*100).toFixed(2)}%)</span><br>` : ""}
         ${t.status==="CLOSED" ? `<span class="${Number(t.realized_pnl)>=0 ? "profit" : "loss"}">Realized P&L: ${Number(t.realized_pnl).toFixed(2)} (${Number(t.realized_pnl_pct).toFixed(2)}%)</span><br>` : ""}
         ${t.status==="CLOSED" ? `Exit: ${t.exit_price}<br>Reason: ${t.exit_reason}<br>` : ""}
