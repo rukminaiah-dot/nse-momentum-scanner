@@ -72,6 +72,38 @@ class RecoveryUpdateInterleavingTests(unittest.TestCase):
         self.assertEqual(active, tomorrow)
         self.assertNotIn(missing, {c.timestamp for c in completed})
 
+    def test_competing_recovery_workers_insert_missing_minute_once(self):
+        from threading import Barrier
+        boundary = self.active
+        missing = self.start + timedelta(minutes=4)
+        gate = Barrier(3)
+        counts = []
+        errors = []
+
+        def recover():
+            try:
+                gate.wait(timeout=5)
+                counts.append(self.manager.merge_verified_recovery(
+                    "SYM", {missing: candle(missing)}, boundary))
+            except Exception as exc:
+                errors.append(exc)
+
+        threads = [Thread(target=recover) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        try:
+            gate.wait(timeout=5)
+        finally:
+            for thread in threads:
+                thread.join(5)
+        self.assertFalse(any(thread.is_alive() for thread in threads))
+        self.assertEqual(errors, [])
+        self.assertEqual(sorted(counts), [0, 1])
+        completed, active = self.manager.snapshot("SYM")
+        self.assertEqual(active, boundary)
+        self.assertEqual(sum(c.timestamp == missing for c in completed), 1)
+        self.assertEqual(len(completed), 10)
+
     def test_recovery_does_not_alias_mutable_caller_candles(self):
         missing = self.start + timedelta(minutes=4)
         recovered = candle(missing)
