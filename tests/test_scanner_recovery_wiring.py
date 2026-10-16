@@ -39,11 +39,12 @@ class ScannerRecoveryWiringTests(unittest.TestCase):
         request = scanner_function("request_recovery_on_gap", state)
         make = lambda minute: SimpleNamespace(timestamp=minute)
         cases = [
-            ([make(t(9, 15)), make(t(9, 17))], t(9, 18), True),
+            ([make(t(9, 15)), make(t(9, 17))], t(9, 19), True),
             ([make(t(9, 15)), make(t(9, 16))], t(9, 17), False),
-            ([make(t(9, 15, 15)), make(t(9, 17))], t(9, 18), False),
-            ([make(t(9, 15)), make(t(9, 17))], t(9, 17), False),
+            ([make(t(9, 15, 15)), make(t(9, 17))], t(9, 19), True),
+            ([make(t(9, 15)), make(t(9, 17))], t(9, 18), False),
             ([], t(9, 18), False),
+            ([make(t(9, 15))], t(9, 17), True),
         ]
         for history, active, expected in cases:
             with self.subTest(history=history, active=active):
