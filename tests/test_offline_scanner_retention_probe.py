@@ -9,6 +9,7 @@ class OfflineScannerRetentionProbeTests(unittest.TestCase):
     def test_sixty_bar_negative_controls_remain_visible(self):
         with contextlib.redirect_stdout(io.StringIO()):
             differences = compare(60, history=400)
+        self.assertEqual(len(differences), 4)
         self.assertEqual(set(differences), {
             ("high_seed_tiny_uptrend", "primary_index", 400, "HOLD", "BUY"),
             ("high_seed_tiny_uptrend", "secondary_index", 400, "HOLD", "BUY"),
