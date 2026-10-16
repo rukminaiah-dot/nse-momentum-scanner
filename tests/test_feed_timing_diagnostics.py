@@ -2,6 +2,8 @@
 import ast
 import contextlib
 import io
+import os
+from unittest.mock import patch
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
@@ -27,7 +29,7 @@ def diagnostic_block():
 
 
 class FeedTimingDiagnosticTests(unittest.TestCase):
-    def run_block(self, after, before):
+    def run_block(self, after, before, enabled=True):
         calls = []
         output = io.StringIO()
         namespace = {
@@ -37,8 +39,9 @@ class FeedTimingDiagnosticTests(unittest.TestCase):
             "write_candle_quality": lambda: calls.append("quality"),
             "analyse": lambda key: calls.append(("analyse", key)),
         }
-        with contextlib.redirect_stdout(output):
-            exec(diagnostic_block(), namespace)
+        with patch.dict(os.environ, {"FEED_TIMING_DIAGNOSTICS": "1" if enabled else "0"}):
+            with contextlib.redirect_stdout(output):
+                exec(diagnostic_block(), namespace)
         return calls, output.getvalue()
 
     def test_closed_candle_emits_timing_without_changing_analysis_order(self):
@@ -46,7 +49,12 @@ class FeedTimingDiagnosticTests(unittest.TestCase):
         self.assertEqual(calls, ["quality", ("analyse", "NSE_EQ|TEST")])
         self.assertIn("FEED_TIMING: NSE_EQ|TEST", output)
         self.assertIn("TICK_AGE_MS: 1250", output)
-        self.assertIn("POST_CLOSE_PROCESSING_MS:", output)
+        self.assertIn("QUALITY_ANALYSIS_MS:", output)
+
+    def test_disabled_diagnostics_still_analyses_without_logging(self):
+        calls, output = self.run_block(after=1, before=0, enabled=False)
+        self.assertEqual(calls, ["quality", ("analyse", "NSE_EQ|TEST")])
+        self.assertEqual(output, "")
 
     def test_no_closed_candle_does_not_emit_or_analyse(self):
         calls, output = self.run_block(after=0, before=0)
