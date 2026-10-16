@@ -85,6 +85,32 @@ class RetentionTests(unittest.TestCase):
         self.assertEqual(manager.insert_missing_completed("X", {old.timestamp: old}), 0)
         self.assertEqual(len(manager.snapshot("X")[0]), 3)
 
+    def test_ema_drift_decays_with_longer_retention(self):
+        # Deterministic synthetic regimes; quantify rather than assume parity.
+        regimes = {
+            "trend": [100.0 + i * 0.25 for i in range(400)],
+            "step": [100.0] * 200 + [140.0] * 200,
+            "alternating": [100.0 + (8.0 if i % 2 else -8.0) for i in range(400)],
+        }
+        for name, values in regimes.items():
+            full = ema(values, 20)
+            drift_60 = abs(full - ema(values[-60:], 20))
+            drift_200 = abs(full - ema(values[-200:], 20))
+            with self.subTest(regime=name):
+                self.assertLessEqual(drift_200, drift_60 + 1e-10)
+
+    def test_capped_recovery_keeps_newest_missing_minute(self):
+        manager = CandleManager(max_completed_per_symbol=3)
+        original = bars(6)
+        manager.preload_completed("X", [original[0], original[2], original[4]])
+        active_ts = datetime(2026, 10, 16, 9, 21, tzinfo=ZoneInfo("Asia/Kolkata"))
+        manager.update("X", 106, int(active_ts.timestamp() * 1000))
+        recovered = {original[i].timestamp: original[i] for i in (1, 3, 5)}
+        inserted = manager.insert_missing_completed("X", recovered)
+        completed, _ = manager.snapshot("X")
+        self.assertEqual(inserted, 2)
+        self.assertEqual([c.timestamp.minute for c in completed], [18, 19, 20])
+
 
 if __name__ == "__main__":
     unittest.main()
