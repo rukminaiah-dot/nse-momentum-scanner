@@ -17,6 +17,12 @@ def compare(history, cap):
         "oscillation": [100 + (0.6 if i % 2 else -0.6) + i * 0.001
                         for i in range(history)],
         "flat": [100.0] * history,
+        # Adversarial near-flat tails: the long EMA seed can oppose a tiny
+        # recent trend even when the capped EMA crossover follows that trend.
+        "high_seed_tiny_uptrend": ([150.0] * (history - 60)
+                                   + [100.0 + i * 0.0001 for i in range(60)]),
+        "low_seed_tiny_downtrend": ([50.0] * (history - 60)
+                                    + [100.0 - i * 0.0001 for i in range(60)]),
     }
     total = 0
     disagreements = []
@@ -32,6 +38,11 @@ def compare(history, cap):
                 disagreements.append((regime, end, full, limited))
     print(f"synthetic_core_signal_comparisons={total} history={history} cap={cap}")
     print(f"core_signal_disagreements={len(disagreements)}")
+    by_regime = {name: 0 for name in regimes}
+    for name, _, _, _ in disagreements:
+        by_regime[name] += 1
+    for name, count in by_regime.items():
+        print(f"regime_disagreements name={name} count={count}")
     for regime, end, full, limited in disagreements[:10]:
         print(f"disagreement regime={regime} prefix={end} unlimited={full} capped={limited}")
     print("Scope: core generate_signal only; excludes 5m trend, ATR late-entry, "
