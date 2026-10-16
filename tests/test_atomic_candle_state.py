@@ -437,5 +437,35 @@ class AtomicCandleStateTests(unittest.TestCase):
         self.assertEqual(manager.snapshot("B")[0][0].close, 100)
 
 
+    def test_worker_merge_adapter_rechecks_live_boundary(self):
+        manager = CandleManager()
+        manager.update("X", 100, millis(9, 15))
+        manager.update("X", 101, millis(9, 17))
+        _, boundary = manager.snapshot("X")
+        manager.update("X", 102, millis(9, 18))
+        gap = recovered(9, 16, 99)
+        self.assertEqual(manager.merge_verified_recovery(
+            "X", {gap.timestamp: gap}, boundary), 1)
+        self.assertEqual(manager.merge_verified_recovery(
+            "X", {gap.timestamp: gap}, boundary), 0)
+        history, _ = manager.snapshot("X")
+        self.assertEqual([c.timestamp.minute for c in history], [15, 16, 17])
+
+    def test_worker_merge_adapter_rejects_stale_session_and_future_boundary(self):
+        manager = CandleManager()
+        manager.update("X", 100, millis(9, 15))
+        manager.update("X", 101, millis(9, 17))
+        _, old_boundary = manager.snapshot("X")
+        next_day = int(datetime(2026, 10, 19, 9, 15, tzinfo=IST).timestamp() * 1000)
+        manager.update("X", 102, next_day)
+        gap = recovered(9, 16)
+        self.assertEqual(manager.merge_verified_recovery(
+            "X", {gap.timestamp: gap}, old_boundary), 0)
+        self.assertEqual(manager.merge_verified_recovery(
+            "X", {gap.timestamp: gap}, datetime(2026, 10, 20, 9, 15)), 0)
+        self.assertEqual(manager.merge_verified_recovery(
+            "X", {gap.timestamp: gap}, None), 0)
+
+
 if __name__ == '__main__':
     unittest.main()
