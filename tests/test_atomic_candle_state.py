@@ -105,5 +105,31 @@ class AtomicCandleStateTests(unittest.TestCase):
         self.assertEqual(count, 1)
 
 
+    def test_recovery_does_not_modify_active_candle(self):
+        manager = CandleManager()
+        manager.update('X', 100, millis(9, 15))
+        manager.update('X', 101, millis(9, 17))
+        active_before = manager.current['X']['candle']
+        close_before = active_before.close
+        missing = recovered(9, 16)
+        manager.insert_missing_completed('X', {missing.timestamp: missing})
+        self.assertIs(manager.current['X']['candle'], active_before)
+        self.assertEqual(manager.current['X']['candle'].close, close_before)
+
+    def test_recovery_rejects_invalid_limit_without_mutation(self):
+        manager = CandleManager()
+        manager.update('X', 100, millis(9, 15))
+        manager.update('X', 101, millis(9, 17))
+        before, _ = manager.snapshot('X')
+        missing = recovered(9, 16)
+        for limit in (0, True, -1):
+            with self.subTest(limit=limit), self.assertRaises(ValueError):
+                manager.insert_missing_completed(
+                    'X', {missing.timestamp: missing}, limit=limit)
+        after, _ = manager.snapshot('X')
+        self.assertEqual([c.timestamp for c in before],
+                         [c.timestamp for c in after])
+
+
 if __name__ == '__main__':
     unittest.main()
