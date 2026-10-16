@@ -9,6 +9,7 @@ on:
       - 'tests/test_premarket_*.py'
       - 'tests/test_active_trade_retention.py'
       - 'tests/test_trade_hold_retention.py'
+      - 'tests/test_trade_quote_freshness.py'
       - 'test_verified_gap_recovery.py'
       - 'test_gap_recovery_worker.py'
       - 'test_recovery_trigger.py'
@@ -103,3 +104,6 @@ jobs:
 
       - name: Offline active trade retention and HOLD safety tests
         run: python -m unittest discover -s tests -p 'test_*trade*retention.py' -v
+
+      - name: Offline simulated trade quote freshness tests
+        run: python -m unittest discover -s tests -p test_trade_quote_freshness.py -v
