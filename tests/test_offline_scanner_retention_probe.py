@@ -23,7 +23,9 @@ class OfflineScannerRetentionProbeTests(unittest.TestCase):
         self.assertEqual(differences, [])
 
     def test_invalid_probe_configuration_fails_closed(self):
-        for cap, history in ((20, 400), (60, 60), (200, 100)):
+        for cap, history in ((20, 400), (60, 60), (200, 100),
+                             (60.0, 400), (60, 400.0), (True, 400),
+                             (60, False)):
             with self.subTest(cap=cap, history=history):
                 with self.assertRaises(ValueError):
                     compare(cap, history=history)
