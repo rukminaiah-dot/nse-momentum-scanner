@@ -76,5 +76,20 @@ class AtomicCandleStateTests(unittest.TestCase):
                          [c.timestamp for c in after])
 
 
+    def test_recovery_insert_does_not_emit_candle_close(self):
+        from unittest.mock import patch
+        manager = CandleManager()
+        manager.update('X', 100, millis(9, 15))
+        manager.update('X', 101, millis(9, 17))
+        missing = recovered(9, 16)
+        with patch.object(manager, 'update',
+                          side_effect=AssertionError('recovery must not call update')):
+            self.assertEqual(manager.insert_missing_completed(
+                'X', {missing.timestamp: missing}), 1)
+        history, active = manager.snapshot('X')
+        self.assertEqual(active, datetime(2026, 10, 16, 9, 17))
+        self.assertEqual(len(history), 2)
+
+
 if __name__ == '__main__':
     unittest.main()
