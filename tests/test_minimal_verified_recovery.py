@@ -124,5 +124,36 @@ class VerifiedRecoverySmokeTests(unittest.TestCase):
         self.assertEqual(worker.status()["rejected_cooldown"], 1)
 
 
+    def test_filters_previous_day_and_off_session(self):
+        yesterday = self.t0 - timedelta(days=1)
+        before_open = self.t0.replace(hour=9, minute=14)
+        after_close = self.t0.replace(hour=15, minute=30)
+        recovered = validated_completed_rows(
+            [row(yesterday), row(before_open), row(after_close), row(self.t0)],
+            self.now)
+        self.assertEqual(set(recovered), {self.t0})
+
+    def test_rejects_non_finite_and_negative_volume(self):
+        for invalid_value in (float("nan"), float("inf"), -1):
+            with self.subTest(value=invalid_value):
+                invalid = row(self.t0)
+                invalid[5] = invalid_value
+                with self.assertRaises(ValueError):
+                    validated_completed_rows([invalid], self.now)
+
+    def test_merge_rejects_active_or_other_day_and_respects_limit(self):
+        earlier = self.t0 - timedelta(minutes=1)
+        recovered = validated_completed_rows(
+            [row(earlier), row(self.t0), row(self.t1)], self.now)
+        active = self.t1
+        merged, added = merge_verified_missing(
+            [], recovered, active_minute=active, limit=1)
+        self.assertEqual([c.timestamp for c in merged], [self.t0])
+        self.assertEqual(added, [self.t0])
+        self.assertNotIn(active, added)
+        with self.assertRaises(ValueError):
+            merge_verified_missing([], recovered, active_minute=active, limit=0)
+
+
 if __name__ == "__main__":
     unittest.main()
