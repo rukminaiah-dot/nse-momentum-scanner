@@ -15,6 +15,8 @@ def main():
     parser = argparse.ArgumentParser(description="Read-only Upstox intraday verification")
     parser.add_argument("--instrument-key", required=True,
                         help="Upstox instrument key for an authorized test instrument")
+    parser.add_argument("--required-minute", action="append", default=[],
+                        help="Exact completed IST minute to verify (YYYY-MM-DDTHH:MM); repeatable")
     args = parser.parse_args()
     token = os.getenv("UPSTOX_ACCESS_TOKEN")
     if not token:
@@ -34,6 +36,18 @@ def main():
         if rows is None or not isinstance(rows, (list, tuple)):
             raise ValueError("missing or invalid candle collection")
         verified = validated_completed_rows(rows, datetime.now(ZoneInfo("Asia/Kolkata")))
+        requested = []
+        for raw_minute in args.required_minute:
+            minute = datetime.fromisoformat(raw_minute)
+            if minute.tzinfo is not None or minute.second or minute.microsecond:
+                raise ValueError("required minute must be a naive IST minute")
+            requested.append(minute)
+        for minute in requested:
+            print("required_minute:", minute.isoformat(timespec="minutes"),
+                  "VERIFIED" if minute in verified else "NOT_VERIFIED")
+        if requested and any(minute not in verified for minute in requested):
+            print("INCONCLUSIVE: one or more requested minutes lack verified broker candles")
+            return 3
         print("returned_rows:", len(rows))
         print("verified_completed_same_day_rows:", len(verified))
         if not verified:
