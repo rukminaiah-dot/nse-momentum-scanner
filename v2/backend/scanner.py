@@ -70,7 +70,7 @@ def write_candle_quality():
     today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
     rows = {}
     for key in NIFTY_200.values():
-        history = candles.completed.get(key, [])
+        history, _ = candles.snapshot(key)
         recent = history[-6:]
         same_day = len(recent) == 6 and all(
             getattr(c, "timestamp", None) is not None
@@ -192,7 +192,7 @@ def preload_history(key):
         except Exception as exc:
             print("INTRADAY PRELOAD FAILED:", key, type(exc).__name__, flush=True)
 
-    candles.completed[key] = loaded
+    candles.preload_completed(key, loaded)
     print("PRELOAD:", key, len(loaded), "historical candles")
 
 def five_minute_trend(history):
@@ -226,8 +226,19 @@ def five_minute_trend(history):
         return "BEARISH"
     return "NEUTRAL"
 
+def completed_candle_time_for_symbol(symbol):
+    """Read the latest completed minute for a displayed symbol under lock."""
+    for instrument, display_symbol in instrument_symbols.items():
+        if display_symbol != symbol:
+            continue
+        history, _ = candles.snapshot(instrument)
+        if history:
+            return history[-1].timestamp.strftime('%Y-%m-%d %H:%M:%S')
+    return None
+
+
 def save_scan_result(key, price, ema9_value, ema20_value, mom, market, trend_5m, signal, previous_close=None):
-    candle_time = next((items[-1].timestamp.strftime('%Y-%m-%d %H:%M:%S') for instrument, items in candles.completed.items() if instrument_symbols.get(instrument, instrument) == key and items), None)
+    candle_time = completed_candle_time_for_symbol(key)
     con = sqlite3.connect(DB_PATH)
     con.execute("""INSERT OR REPLACE INTO scanner_results (symbol,updated_at,price,ema9,ema20,momentum,market,trend_5m,signal,previous_close) VALUES (?,?,?,?,?,?,?,?,?,?)""", (key, candle_time, price, ema9_value, ema20_value, mom, market, trend_5m, signal, previous_close))
     if candle_time is not None:
@@ -246,7 +257,7 @@ def save_scan_result(key, price, ema9_value, ema20_value, mom, market, trend_5m,
 
 
 def analyse(key):
-    history = candles.completed.get(key, [])
+    history, _ = candles.snapshot(key)
 
     # Reject old candles before generating any signals.
     if history:
@@ -483,12 +494,11 @@ def on_tick(key, data):
         except (ValueError, TypeError):
             pass
 
-    before = len(candles.completed.get(key, []))
-    candles.update(key, price, ts, minute_volume)
-    after = len(candles.completed.get(key, []))
+    closed = candles.update(key, price, ts, minute_volume)
 
-    # Analyse only when a minute candle has actually closed.
-    if after > before:
+    # Only a live rollover may trigger analysis. Recovery can grow completed
+    # history without closing the active candle.
+    if closed is not None:
         write_candle_quality()
         analyse(key)
 
@@ -512,17 +522,17 @@ if __name__ == "__main__":
         try:
             preload_history(key)
             time.sleep(0.15)
-            loaded = len(candles.completed.get(key, []))
+            loaded = len(candles.snapshot(key)[0])
 
             if key == INDICES["NIFTY 50"] and loaded >= 20:
-                closes = [c.close for c in candles.completed[key]]
+                closes = [c.close for c in candles.snapshot(key)[0]]
                 market_regimes["NIFTY 50"] = index_signal(closes[-1], ema(closes, 9), ema(closes, 20), None)
                 print("INITIAL NIFTY 50 REGIME:", market_regimes["NIFTY 50"])
 
             # Preserve actual previous-session stock prices for validation when
             # the market is closed. Never turn preloaded history into a BUY.
             if key in NIFTY_200.values() and loaded >= 20:
-                history = candles.completed[key]
+                history, _ = candles.snapshot(key)
                 closes = [item.close for item in history]
                 if hasattr(history[-1], "timestamp"):
                     save_scan_result(
@@ -542,12 +552,12 @@ if __name__ == "__main__":
             print("PRELOAD: live candle warmup for", key)
 
     for key in INDICES.values():
-        if len(candles.completed.get(key, [])) >= 20:
+        if len(candles.snapshot(key)[0]) >= 20:
             analyse(key)
     # Display last available index values before live candles arrive.
     # These are informational only; do not run trading analysis here.
     for key in INDICES.values():
-        history = candles.completed.get(key, [])
+        history, _ = candles.snapshot(key)
         if len(history) >= 20:
             closes = [c.close for c in history]
             save_scan_result(
