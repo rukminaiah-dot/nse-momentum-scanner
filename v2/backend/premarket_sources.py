@@ -47,13 +47,24 @@ def gift_nifty_evidence(*, last_price, reference_close, observed_at_ist,
 
 
 def previous_session_evidence(*, previous_open, previous_close, observed_at_ist,
-                              now=None, max_age_minutes=1440):
+                              now=None, max_age_minutes=1440, session_date_ist=None, expected_previous_session_date_ist=None):
     """Classify a *supplied* previous-session open-to-close move.
 
     Timestamp freshness alone does not establish exchange-session provenance.
     Callers must verify the trading date and source before using this evidence.
     """
     now = now or datetime.now(IST)
+    # Expected date must be verified against an exchange calendar by the caller.
+    if (not isinstance(session_date_ist, str)
+            or not isinstance(expected_previous_session_date_ist, str)
+            or session_date_ist != expected_previous_session_date_ist):
+        return None
+    try:
+        from datetime import date
+        if date.fromisoformat(session_date_ist).isoformat() != session_date_ist:
+            return None
+    except ValueError:
+        return None
     if not _valid_observation(observed_at_ist, now, max_age_minutes):
         return None
     if any(isinstance(x, bool) or not isinstance(x, (float, int)) or not isfinite(x) or x <= 0
@@ -94,7 +105,9 @@ def assess_verified_sources(observations, *, now=None):
                 value = previous_session_evidence(
                     previous_open=record.get("previous_open"),
                     previous_close=record.get("previous_close"),
-                    observed_at_ist=record.get("observed_at_ist"), now=now)
+                    observed_at_ist=record.get("observed_at_ist"), now=now,
+                    session_date_ist=record.get("session_date_ist"),
+                    expected_previous_session_date_ist=record.get("expected_previous_session_date_ist"))
             # Remaining source categories have no adapters yet.
         if value is not None:
             evidence[key] = value
