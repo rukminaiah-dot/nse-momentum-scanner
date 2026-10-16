@@ -19,6 +19,17 @@ class CandleManager:
             return list(self.completed.get(key, [])), (
                 active["minute"] if active is not None else None)
 
+    def preload_completed(self, key, candles):
+        """Atomically replace startup history; caller must establish preload policy.
+
+        This is a synchronization primitive, not permission to overwrite
+        concurrent live data. Integration must enforce startup-only usage.
+        """
+        with self._state_lock:
+            if key in self.current:
+                raise RuntimeError("cannot preload after live candle started")
+            self.completed[key] = list(candles)
+
     def insert_missing_completed(self, key, recovered, limit=60):
         """Repair history only; never emit a candle-closed event or signal.
 
