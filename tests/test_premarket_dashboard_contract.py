@@ -26,6 +26,12 @@ class PremarketDashboardContractTests(unittest.TestCase):
             "fii_dii", "previous_session"
         })
 
+    def test_dashboard_shows_missing_automatic_sources(self):
+        page = HTML.read_text(encoding="utf-8")
+        self.assertIn("WAIT — automatic forecast unavailable", page)
+        self.assertIn("Missing: ", page)
+        self.assertIn("data.status==='WAIT_LIVE_CONFIRMATION'", page)
+
     def test_missing_data_never_generates_a_direction(self):
         result = assess_premarket({"gift_nifty": 1})
         self.assertEqual(result.direction, "UNKNOWN")
