@@ -76,8 +76,8 @@ async function loadPremarketSourceStatus(){
   if(data.mode!=='RESEARCH_ONLY'||data.order_execution_enabled!==false||!data.sources||typeof data.sources!=='object')throw Error('Invalid safety contract');
   const sources=Object.values(data.sources);
   const connected=sources.filter(x=>x.status==='VERIFIED'&&x.value!==null).length;
-  const missing=Object.entries(data.sources).filter(([key,x])=>x.status!=='VERIFIED'||x.value===null).map(([key])=>premarketLabels[key]||key);
-  const forecast=(missing.length===0&&data.status==='WAIT_LIVE_CONFIRMATION'&&['BULLISH','BEARISH','NEUTRAL'].includes(data.direction))?data.direction+' bias — awaiting live confirmation':'WAIT — automatic forecast unavailable';
+  const missing=Array.isArray(data.missing_sources)?data.missing_sources.map(key=>premarketLabels[key]||key):Object.entries(data.sources).filter(([key,x])=>x.status!=='VERIFIED'||x.value===null).map(([key])=>premarketLabels[key]||key);
+  const forecast=(data.automatic_forecast_ready===true&&missing.length===0&&data.status==='WAIT_LIVE_CONFIRMATION'&&['BULLISH','BEARISH','NEUTRAL'].includes(data.direction))?data.direction+' bias — awaiting live confirmation':'WAIT — automatic forecast unavailable';
   panel.textContent='Automatic sources: '+connected+'/'+sources.length+' verified. '+forecast+'. '+(missing.length?'Missing: '+missing.join(', ')+'.':'Manual research remains separate.');
  }catch(e){panel.textContent='Automatic source status unavailable — manual evidence assessment only; no live forecast.';}
 }
