@@ -226,12 +226,19 @@ def five_minute_trend(history):
         return "BEARISH"
     return "NEUTRAL"
 
-def preload_keys_for_results():
-    return list(INDICES.values()) + list(NIFTY_200.values())
+def completed_candle_time_for_symbol(symbol):
+    """Read the latest completed minute for a displayed symbol under lock."""
+    for instrument, display_symbol in instrument_symbols.items():
+        if display_symbol != symbol:
+            continue
+        history, _ = candles.snapshot(instrument)
+        if history:
+            return history[-1].timestamp.strftime('%Y-%m-%d %H:%M:%S')
+    return None
 
 
 def save_scan_result(key, price, ema9_value, ema20_value, mom, market, trend_5m, signal, previous_close=None):
-    candle_time = next((history[-1].timestamp.strftime('%Y-%m-%d %H:%M:%S') for instrument in preload_keys_for_results() if instrument_symbols.get(instrument, instrument) == key for history in [candles.snapshot(instrument)[0]] if history), None)
+    candle_time = completed_candle_time_for_symbol(key)
     con = sqlite3.connect(DB_PATH)
     con.execute("""INSERT OR REPLACE INTO scanner_results (symbol,updated_at,price,ema9,ema20,momentum,market,trend_5m,signal,previous_close) VALUES (?,?,?,?,?,?,?,?,?,?)""", (key, candle_time, price, ema9_value, ema20_value, mom, market, trend_5m, signal, previous_close))
     if candle_time is not None:
