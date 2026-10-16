@@ -39,6 +39,8 @@ small{color:#aaa}
 <h3>NIFTY 200 Stock Board — Ranked by Momentum</h3>
 <div id="stock-count" class="card">Loading stock coverage…</div>
 <div id="stock-board" class="table-wrap">Loading validation table…</div>
+<h3>Live Screener Feed Coverage</h3>
+<div id="live-feed-readiness" class="card">Checking feed coverage…</div>
 <h3>Active Trades — Simulated Signal Ledger</h3>
 <div class="pm-note">Open signals stay pinned until the ledger records an exit. Prices and P&amp;L may be delayed; no broker orders.</div>
 <div id="active-trades">Loading active trades...</div>
@@ -87,6 +89,23 @@ async function loadPremarketSourceStatus(){
  }catch(e){panel.textContent='Automatic source status unavailable — manual evidence assessment only; no live forecast.';}
 }
 loadPremarketSourceStatus();
+async function loadLiveFeedReadiness(){
+ const panel=document.getElementById('live-feed-readiness');
+ try {
+  const response=await fetch('/api/v2/live-screener-readiness',{cache:'no-store'});
+  if(!response.ok)throw Error('HTTP '+response.status);
+  const data=await response.json();
+  if(!Array.isArray(data.blockers))throw Error('Invalid readiness');
+  const count=Number.isInteger(data.recent_stock_count)?data.recent_stock_count:0;
+  const total=Number.isInteger(data.expected_stock_count)?data.expected_stock_count:'unknown';
+  panel.textContent=(data.live_screener_ready===true?'Full feed coverage verified':data.partial_feed_activity_observed===true?'Partial live feed activity':'Live feed not verified')
+   +' | Recent ticks: '+count+' / '+total
+   +' | Checks: '+(data.blockers.join(', ')||'passed')
+   +' | Broker orders: disabled';
+ }catch(error){panel.textContent='Feed readiness unavailable; full coverage not verified. Broker orders disabled.';}
+}
+loadLiveFeedReadiness();
+setInterval(loadLiveFeedReadiness,10000);
 async function loadTrades(){
  try{
   const r=await fetch('/api/v2/trades');
