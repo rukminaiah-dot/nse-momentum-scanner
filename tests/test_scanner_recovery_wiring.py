@@ -79,6 +79,21 @@ class ScannerRecoveryWiringTests(unittest.TestCase):
         state["_recovery_worker"] = None
         self.assertFalse(request("X"))
 
+    def test_scanner_exit_closes_worker_before_return(self):
+        tree = ast.parse(SCANNER.read_text())
+        main = next(n for n in tree.body if isinstance(n, ast.If)
+                    and isinstance(n.test, ast.Compare)
+                    and isinstance(n.test.left, ast.Name)
+                    and n.test.left.id == "__name__")
+        cleanup = [n for n in ast.walk(main) if isinstance(n, ast.Try)
+                   and n.finalbody]
+        self.assertTrue(cleanup, "scanner needs guaranteed worker cleanup")
+        final_calls = [n for block in cleanup for statement in block.finalbody
+                       for n in ast.walk(statement) if isinstance(n, ast.Call)
+                       and isinstance(n.func, ast.Attribute)
+                       and n.func.attr == "close"]
+        self.assertTrue(final_calls, "scanner exit must close, not merely join, worker")
+
     def test_recovery_only_requested_after_live_close(self):
         tree = ast.parse(SCANNER.read_text())
         tick = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "on_tick")
