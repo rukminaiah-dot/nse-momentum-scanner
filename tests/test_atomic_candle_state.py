@@ -206,5 +206,20 @@ class AtomicCandleStateTests(unittest.TestCase):
         self.assertEqual(active, datetime(2026, 10, 16, 9, 17))
 
 
+    def test_preload_copies_history_and_refuses_live_overwrite(self):
+        manager = CandleManager()
+        original = [recovered(9, 15)]
+        manager.preload_completed('X', original)
+        original.append(recovered(9, 16))
+        history, active = manager.snapshot('X')
+        self.assertEqual(len(history), 1)
+        self.assertIsNone(active)
+        manager.update('X', 101, millis(9, 17))
+        with self.assertRaises(RuntimeError):
+            manager.preload_completed('X', [recovered(9, 16)])
+        history_after, _ = manager.snapshot('X')
+        self.assertEqual(len(history_after), 1)
+
+
 if __name__ == '__main__':
     unittest.main()
