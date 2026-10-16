@@ -34,6 +34,7 @@ class FeedTimingDiagnosticTests(unittest.TestCase):
         output = io.StringIO()
         namespace = {
             "after": after, "before": before,
+            "os": os,
             "ts": 1_000_000, "key": "NSE_EQ|TEST",
             "time": SimpleNamespace(time=lambda: 1001.25),
             "write_candle_quality": lambda: calls.append("quality"),
