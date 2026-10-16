@@ -151,7 +151,23 @@ def assess_verified_sources(observations, *, now=None):
                     observed_at_ist=record.get("observed_at_ist"), now=now,
                     session_date_ist=record.get("session_date_ist"),
                     expected_previous_session_date_ist=record.get("expected_previous_session_date_ist"))
-            # Remaining source categories have no adapters yet.
+            elif key == "global_markets":
+                value = global_markets_evidence(
+                    market_changes_pct=record.get("market_changes_pct"),
+                    observed_at_ist=record.get("observed_at_ist"), now=now)
+            elif key == "fii_dii":
+                value = fii_dii_evidence(
+                    fii_net_crore=record.get("fii_net_crore"),
+                    dii_net_crore=record.get("dii_net_crore"),
+                    observed_at_ist=record.get("observed_at_ist"),
+                    session_date_ist=record.get("session_date_ist"),
+                    expected_previous_session_date_ist=record.get("expected_previous_session_date_ist"),
+                    now=now)
+            elif key == "rbi_macro_news":
+                value = rbi_macro_news_evidence(
+                    event_bias=record.get("event_bias"),
+                    event_id=record.get("event_id"),
+                    observed_at_ist=record.get("observed_at_ist"), now=now)
         if value is not None:
             evidence[key] = value
         status = ("VERIFIED" if value is not None else
