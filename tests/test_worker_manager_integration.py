@@ -55,7 +55,7 @@ class WorkerManagerIntegrationTests(unittest.TestCase):
         worker = GapRecoveryWorker(
             lambda key: [row(9, 15, 999), row(9, 16, 101)],
             manager.snapshot, manager.merge_verified_recovery,
-            cooldown=0.001, min_request_spacing=0.001)
+            cooldown=60, min_request_spacing=0.001)
         self.assertTrue(worker.request("X"))
         worker.join()
         history, active = manager.snapshot("X")
@@ -65,7 +65,10 @@ class WorkerManagerIntegrationTests(unittest.TestCase):
         self.assertEqual(worker.status()["verified_insertions"], 1)
         self.assertFalse(worker.request("X"))
         self.assertEqual(worker.status()["rejected_cooldown"], 1)
-        time.sleep(0.01)
+        # Advance the stored cooldown deadline deterministically instead of
+        # relying on sub-millisecond CI scheduling and wall-clock sleeps.
+        with worker._lock:
+            worker._last_attempt["X"] -= 61
         self.assertTrue(worker.request("X"))
         worker.join()
         self.assertEqual(worker.status()["verified_insertions"], 1)
