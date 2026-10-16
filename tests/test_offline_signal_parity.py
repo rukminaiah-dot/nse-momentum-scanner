@@ -217,6 +217,17 @@ class OfflineSignalParityTests(unittest.TestCase):
                     self.assertEqual(evaluate(bars[-60:], **opts)["signal"],
                                      expected)
 
+    def test_five_minute_trend_requires_three_complete_buckets(self):
+        bars = history(14)
+        self.assertEqual(five_minute_trend(bars), "NEUTRAL")
+        self.assertEqual(five_minute_trend(history(15)), "BULLISH")
+
+    def test_five_minute_trend_ignores_incomplete_latest_bucket(self):
+        bars = history(16)
+        self.assertEqual(five_minute_trend(bars), "BULLISH")
+        bars[-1].close = -1000
+        self.assertEqual(five_minute_trend(bars), "BULLISH")
+
 
 if __name__ == "__main__":
     unittest.main()
