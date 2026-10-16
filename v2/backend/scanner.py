@@ -640,4 +640,4 @@ if __name__ == "__main__":
         # thread during a normal scanner exit; never place this in on_tick.
         worker = _recovery_worker
         if worker is not None:
-            worker.join(timeout=5)
+            worker.close(timeout=5)
