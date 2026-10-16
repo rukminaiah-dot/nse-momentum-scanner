@@ -15,7 +15,7 @@ Branch: `feature/isolated-recovery-worker-manager-integration` into `feature/ato
 | Synthetic snapshot and merge benchmarks | RECORDED | See `docs/candle-history-retention-performance-review.md`; no agreed release SLO |
 | Multi-thread contention benchmark | RECORDED — RISK | [run 38950035431](https://github.com/rukminaiah-dot/nse-momentum-scanner/actions/runs/38950035431): 8 threads / 200 symbols / 1950 bars, update p95 103.4829 ms, p99 126.8856 ms |
 | Retention cap safety | NOT ACCEPTED | Short caps can alter EMA and signal decisions; default cap remains `None`, scanner cap not activated |
-| Approved historical market replay | BLOCKED | Production Render logs (2026-10-16 ~10:29 UTC) show successful `INTRADAY PRELOAD` and `PRELOAD READY` for multiple NSE_EQ instruments, typically 60 completed candles; this verifies runtime acquisition occurred but logs contain no OHLCV rows. No approved replay dataset / parity sign-off; safe no-database acquisition procedure in `docs/pr-9-historical-replay-acquisition.md` |
+| Read-only historical acquisition and offline trace | PASS — TRACE ONLY | [PR9 historical replay workflow run #5](https://github.com/rukminaiah-dot/nse-momentum-scanner/actions/workflows/pr9-historical-replay.yml): 2026-10-15 through 2026-10-16, `NSE_EQ|INE974X01010`, `stock`, 750 candles reported by the successful exporter in preceding run #4; run #5 passed the fetch-and-trace step and overall workflow (16 s). Raw candles and trace remained temporary on the runner and were deleted, not published as artifacts. Exact run #5 summary counts/hash not independently captured. |\n| Independent historical decision parity | BLOCKED | Real-data offline trace ran successfully, but no separately produced expected scanner decision baseline, discrepancy report, or owner sign-off. A successful trace is not parity acceptance. Production preload logs confirm acquisition but contain no OHLCV rows. |
 | Full scanner lifecycle parity | BLOCKED | Synthetic source extraction excludes complete runtime, persistence, staleness and order boundaries |
 | Representative performance acceptance | BLOCKED | Requires owner-approved load model, latency threshold, and measurements |
 | Independent review | BLOCKED | No approvals recorded on PR at status check |
@@ -32,7 +32,7 @@ Branch: `feature/isolated-recovery-worker-manager-integration` into `feature/ato
 
 ## Release decision
 
-**HOLD / keep draft and unmerged.** CI is green, but replay, lifecycle parity, performance acceptance, retention approval, independent reviews and branch-protection verification are outstanding. No live trading, broker configuration, production database or retention activation is authorized by this checklist.
+**HOLD / keep draft and unmerged.** CI and the read-only historical acquisition/trace are green, but independent historical decision parity, lifecycle parity, performance acceptance, retention approval, independent reviews and branch-protection verification are outstanding. No live trading, broker configuration, production database or retention activation is authorized by this checklist.
 
 ## Scope control
 
