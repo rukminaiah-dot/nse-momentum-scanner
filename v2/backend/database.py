@@ -28,6 +28,12 @@ def init_db():
             realized_pnl_pct REAL
         )
     """)
+    # Additive migration preserves existing simulated trade records.
+    trade_columns = {row[1] for row in con.execute("PRAGMA table_info(trades)")}
+    if "quote_observed_at_ist" not in trade_columns:
+        con.execute("ALTER TABLE trades ADD COLUMN quote_observed_at_ist TEXT")
+    if "quote_timestamp_verified" not in trade_columns:
+        con.execute("ALTER TABLE trades ADD COLUMN quote_timestamp_verified INTEGER NOT NULL DEFAULT 0")
     con.execute("""
         CREATE TABLE IF NOT EXISTS trade_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
