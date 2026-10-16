@@ -111,10 +111,12 @@ def assess_verified_sources(observations, *, now=None):
             # Remaining source categories have no adapters yet.
         if value is not None:
             evidence[key] = value
+        status = ("VERIFIED" if value is not None else
+                  "NOT_CONNECTED" if record is None else "INVALID_OR_UNVERIFIED")
         sources[key] = {
             "weight": weight,
             "value": value,
-            "status": "VERIFIED" if value is not None else "NOT_CONNECTED",
+            "status": status,
             "observed_at_ist": record.get("observed_at_ist") if value is not None else None,
         }
     prediction = assess_premarket(evidence, now=now)
