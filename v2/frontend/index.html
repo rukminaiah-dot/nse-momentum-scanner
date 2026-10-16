@@ -14,11 +14,19 @@ small{color:#aaa}
 .profit{color:#4ade80;font-weight:bold}
 .loss{color:#fb7185;font-weight:bold}
 .table-wrap{overflow-x:auto;border-radius:10px;background:#1c2230}table{width:100%;border-collapse:collapse;font-size:13px;white-space:nowrap}th,td{padding:10px;border-bottom:1px solid #394150;text-align:left}th{position:sticky;top:0;background:#293244} .status-ok{color:#4ade80}.status-warn{color:#fbbf24}
+.premarket-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.premarket-grid label{display:block;font-size:13px;color:#cbd5e1}.premarket-grid select{width:100%;margin-top:6px;padding:10px;background:#101827;color:#fff;border:1px solid #475569;border-radius:8px}.pm-note{color:#cbd5e1;font-size:13px;line-height:1.5}.pm-result{font-weight:bold;font-size:20px;margin:10px 0}.pm-wait{color:#fbbf24}
 </style>
 </head>
 <body>
 <h2>NSE Momentum Scanner V2</h2>
 <div id="feed-status" class="card">Checking market and feed freshness…</div>
+<h3>Pre-Market Study &amp; Direction Forecast</h3>
+<section id="premarket-study" class="card" aria-label="Research-only pre-market outlook">
+<div class="pm-note">Manual evidence assessment • Not a live feed • Not a BUY/SELL call. All five inputs are required. Evidence agreement is NOT prediction accuracy.</div>
+<div class="premarket-grid" id="premarket-inputs"></div>
+<div id="premarket-outlook" class="pm-result pm-wait" role="status" aria-live="polite">WAIT — Evidence unavailable</div>
+<div id="premarket-reasons" class="pm-note">Select verified pre-market evidence to calculate a directional bias. No data is assumed.</div>
+</section>
 <h3>Market Index Signals</h3>
 <div id="indices">Loading live indices...</div>
 <h3>203-Instrument Candle Quality Ratings (Research Only)</h3>
@@ -34,6 +42,30 @@ small{color:#aaa}
 <div id="trades">Loading trades...</div>
 
 <script>
+// Research-only mirror of backend premarket_prediction.WEIGHTS; no broker access.
+const premarketWeights={gift_nifty:3,global_markets:2,rbi_macro_news:3,fii_dii:1,previous_session:1};
+const premarketLabels={gift_nifty:'GIFT NIFTY',global_markets:'Global market cues',rbi_macro_news:'RBI / macro news',fii_dii:'FII / DII flows',previous_session:'Previous session trend'};
+function initPremarket(){
+ const container=document.getElementById('premarket-inputs');
+ container.innerHTML=Object.keys(premarketWeights).map(key=>'<label>'+premarketLabels[key]+'<select data-premarket="'+key+'"><option value="">Not verified</option><option value="1">Bullish</option><option value="0">Neutral</option><option value="-1">Bearish</option></select></label>').join('');
+ container.addEventListener('change',updatePremarket);
+ updatePremarket();
+}
+function updatePremarket(){
+ const entries=Object.entries(premarketWeights);
+ const values=entries.map(([key,weight])=>({key,weight,value:document.querySelector('[data-premarket="'+key+'"]').value}));
+ const missing=values.filter(x=>x.value==='');
+ const output=document.getElementById('premarket-outlook');
+ const detail=document.getElementById('premarket-reasons');
+ if(missing.length){output.textContent='WAIT — Evidence unavailable';output.className='pm-result pm-wait';detail.textContent='Missing: '+missing.map(x=>premarketLabels[x.key]).join(', ')+'. No prediction without all five sources.';return;}
+ const weighted=values.reduce((sum,x)=>sum+x.weight*Number(x.value),0);
+ const agreement=Math.round(Math.abs(weighted)/10*100);
+ const direction=weighted>0?'BULLISH':weighted<0?'BEARISH':'NEUTRAL';
+ output.textContent=direction+' bias | Evidence agreement: '+agreement+'/100';
+ output.className='pm-result '+(direction==='BULLISH'?'buy':direction==='BEARISH'?'sell':'pm-wait');
+ detail.textContent='Manual research outlook only; not a win probability. WAIT for fresh market-open candles, index trend and volume confirmation. No automatic trades.';
+}
+initPremarket();
 async function loadTrades(){
  try{
   const r=await fetch('/api/v2/trades');
