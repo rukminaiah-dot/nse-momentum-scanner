@@ -9,8 +9,8 @@ from v2.backend.offline_signal_parity import evaluate
 
 
 def compare(cap, history=400):
-    if cap < 21 or history <= cap:
-        raise ValueError("require history > cap >= 21")
+    if isinstance(cap, bool) or isinstance(history, bool) or not isinstance(cap, int) or not isinstance(history, int) or cap < 21 or history <= cap:
+        raise ValueError("require integer history > cap >= 21")
     start = datetime(2026, 10, 16, 9, 15)
     regimes = {
         "trend": [100 + i * 0.03 for i in range(history)],
