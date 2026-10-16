@@ -97,6 +97,49 @@ class OfflineSignalParityTests(unittest.TestCase):
                             is_stock=True)
         self.assertNotEqual(current["ema20"], combined["ema20"])
 
+    def test_index_new_session_requires_twenty_today_bars(self):
+        previous = history(30)
+        for candle in previous:
+            candle.timestamp -= timedelta(days=1)
+        today = history(19)
+        result = evaluate(previous + today,
+                          session_date=datetime(2026, 10, 16).date(),
+                          is_index=True)
+        self.assertEqual(result, {"signal": "BLOCKED", "reason": "WARMUP"})
+
+    def test_stock_first_six_minutes_can_use_overnight_ema(self):
+        previous = history(30)
+        for candle in previous:
+            candle.timestamp -= timedelta(days=1)
+        today = history(6)
+        result = evaluate(previous + today,
+                          session_date=datetime(2026, 10, 16).date(),
+                          is_stock=True)
+        self.assertIsNone(result["reason"])
+        self.assertIsNotNone(result["ema20"])
+
+    def test_stock_first_five_minutes_block_overnight_momentum(self):
+        previous = history(30)
+        for candle in previous:
+            candle.timestamp -= timedelta(days=1)
+        today = history(5)
+        result = evaluate(previous + today,
+                          session_date=datetime(2026, 10, 16).date(),
+                          is_stock=True)
+        self.assertEqual(result["reason"], "OVERNIGHT_GAP")
+
+    def test_five_minute_trend_ignores_previous_session_buckets(self):
+        previous = history(30, direction=-1)
+        for candle in previous:
+            candle.timestamp -= timedelta(days=1)
+        today = history(15, direction=1)
+        self.assertEqual(five_minute_trend(previous + today), "BULLISH")
+
+    def test_five_minute_trend_requires_three_complete_buckets(self):
+        bars = history(15)
+        bars = [c for c in bars if c.timestamp != datetime(2026, 10, 16, 9, 20)]
+        self.assertEqual(five_minute_trend(bars), "NEUTRAL")
+
 
 if __name__ == "__main__":
     unittest.main()
