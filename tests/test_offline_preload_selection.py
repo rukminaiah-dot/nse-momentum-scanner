@@ -59,6 +59,22 @@ class OfflinePreloadSelectionTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.select([], [], limit=limit)
 
+    def test_selection_does_not_mutate_source_lists(self):
+        historical = bars(self.start - timedelta(days=1), 3)
+        intraday = list(reversed(bars(self.start, 5)))
+        original_historical = list(historical)
+        original_intraday = list(intraday)
+        selected = self.select(historical, intraday)
+        self.assertEqual(historical, original_historical)
+        self.assertEqual(intraday, original_intraday)
+        self.assertIsNot(selected, intraday)
+
+    def test_missing_timestamp_is_ignored(self):
+        current = bars(self.start, 2)
+        unknown = Candle(123, 100)
+        selected = self.select([], [unknown, *current])
+        self.assertEqual(selected, current)
+
 
 if __name__ == "__main__":
     unittest.main()
