@@ -54,25 +54,33 @@ def main():
     token = os.environ.get("UPSTOX_ACCESS_TOKEN")
     if not token:
         parser.error("UPSTOX_ACCESS_TOKEN is not configured")
-    import upstox_client
-    config = upstox_client.Configuration()
-    config.access_token = token
-    api = upstox_client.HistoryV3Api(upstox_client.ApiClient(config))
+    # Explicitly percent-encode the instrument key in the URL path. A raw '|'
+    # is rejected upstream with HTTP 400 "Suspicious Path Character".
+    from urllib.parse import quote
+    import requests
+    encoded_key = quote(args.instrument_key.strip(), safe="")
+    url = (
+        f"https://api.upstox.com/v3/historical-candle/{encoded_key}/minutes/1/"
+        f"{args.to_date}/{args.from_date}"
+    )
     try:
-        response = api.get_historical_candle_data1(
-            args.instrument_key, "minutes", "1", str(args.to_date), str(args.from_date))
-    except Exception as exc:
-        # The SDK exception may include response cookies, headers, HTML, or tokens.
-        # Do not print the exception or traceback into GitHub Actions logs.
-        status = getattr(exc, "status", None)
-        if not isinstance(status, int) or status < 100 or status > 599:
-            status = "unknown"
-        raise SystemExit(
-            f"Historical candle request failed (HTTP status: {status}). "
-            "Response details suppressed to protect credentials and cookies. "
-            "Check Upstox token validity, endpoint access, and network restrictions."
-        ) from None
-    candles = normalize(response.data.candles or [])
+        response = requests.get(
+            url,
+            headers={"Accept": "application/json", "Authorization": f"Bearer {token}"},
+            timeout=30,
+            allow_redirects=False,
+        )
+        if response.status_code != 200:
+            raise SystemExit(
+                f"Historical candle request failed (HTTP status: {response.status_code}). "
+                "Response details suppressed to protect credentials and cookies."
+            )
+        payload = response.json()
+    except requests.RequestException:
+        raise SystemExit("Historical candle network request failed; sensitive details suppressed.") from None
+    except ValueError:
+        raise SystemExit("Historical candle endpoint returned invalid JSON; details suppressed.") from None
+    candles = normalize((payload.get("data") or {}).get("candles") or [])
     if not candles:
         raise ValueError("API returned no candles")
     if any(not args.from_date <= datetime.fromisoformat(row[0]).date() <= args.to_date for row in candles):
