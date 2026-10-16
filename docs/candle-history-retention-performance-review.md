@@ -91,3 +91,22 @@ Inspected `v2/backend/scanner.py` as **source text only**, without importing or 
 ## Restart preload indicator drift regression (2026-10-16)
 
 `tests/test_offline_restart_preload.py` models the scanner's independent 60-completed-bar intraday startup preload and compares a resumed index history with an uninterrupted 375-minute same-session history. The tests require identical recent momentum and five-minute trend while preserving the expected EMA20 seed difference at restart. This isolates **preload-induced drift even when manager retention is unlimited**, rather than attributing every mismatch to an optional retention cap. The test also checks chronological selection and exclusion of the still-forming minute. It uses synthetic bars and the offline decision model only; it is not a historical market replay or proof of scanner end-to-end parity. Check CI at the latest commit for the result.
+
+
+## Nine-case GitHub-hosted synthetic benchmark (2026-10-17)
+
+Verified [Worker CI run 38948178483](https://github.com/rukminaiah-dot/nse-momentum-scanner/actions/runs/38948178483) succeeded at [e53677a](https://github.com/rukminaiah-dot/nse-momentum-scanner/commit/e53677a0703111a136255f0e51ad3a871558e916). Linux GitHub-hosted Python 3.11, 200 sequential snapshots and a separate 200-update contention pass per configuration. Each case runs in a fresh process. Times are milliseconds; RSS is peak process MiB. These measurements are synthetic and do not represent production/staging throughput or merge latency.
+
+| Symbols | Bars/symbol | Snapshot p50 | Snapshot p95 | Snapshot p99 | Concurrent update p95 | Peak RSS MiB |
+|---:|---:|---:|---:|---:|---:|---:|
+| 50 | 60 | 0.1173 | 0.1275 | 0.1433 | 0.0031 | 13.98 |
+| 200 | 60 | 0.1137 | 0.1404 | 0.1885 | 0.0032 | 16.69 |
+| 500 | 60 | 0.1144 | 0.1239 | 0.1274 | 0.0030 | 22.47 |
+| 50 | 390 | 0.7635 | 0.8158 | 0.9045 | 0.7863 | 20.31 |
+| 200 | 390 | 0.7675 | 0.8149 | 0.8869 | 0.8101 | 37.72 |
+| 500 | 390 | 0.7604 | 0.7955 | 0.8632 | 0.7990 | 74.56 |
+| 50 | 1950 | 3.8269 | 4.1532 | 14.9851 | 3.9648 | 44.82 |
+| 200 | 1950 | 3.8392 | 4.0100 | 4.1939 | 3.8445 | 136.70 |
+| 500 | 1950 | 3.8351 | 3.9916 | 4.0816 | 3.9761 | 320.72 |
+
+**Interpretation:** snapshot copying scales with per-symbol history length, while total retained memory scales with symbol count and history. The 50×1950 snapshot p99 outlier illustrates scheduler/runtime noise in a small 200-iteration sample. These results do not justify turning on a retention cap because correctness remains the primary blocker. Remaining performance gaps: dedicated recovery-merge latency distribution, measured lock-hold time, multi-worker contention, representative hardware and realistic feed rates.
