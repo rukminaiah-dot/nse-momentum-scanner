@@ -226,8 +226,12 @@ def five_minute_trend(history):
         return "BEARISH"
     return "NEUTRAL"
 
+def preload_keys_for_results():
+    return list(INDICES.values()) + list(NIFTY_200.values())
+
+
 def save_scan_result(key, price, ema9_value, ema20_value, mom, market, trend_5m, signal, previous_close=None):
-    candle_time = next((items[-1].timestamp.strftime('%Y-%m-%d %H:%M:%S') for instrument, items in candles.completed.items() if instrument_symbols.get(instrument, instrument) == key and items), None)
+    candle_time = next((history[-1].timestamp.strftime('%Y-%m-%d %H:%M:%S') for instrument in preload_keys_for_results() if instrument_symbols.get(instrument, instrument) == key for history in [candles.snapshot(instrument)[0]] if history), None)
     con = sqlite3.connect(DB_PATH)
     con.execute("""INSERT OR REPLACE INTO scanner_results (symbol,updated_at,price,ema9,ema20,momentum,market,trend_5m,signal,previous_close) VALUES (?,?,?,?,?,?,?,?,?,?)""", (key, candle_time, price, ema9_value, ema20_value, mom, market, trend_5m, signal, previous_close))
     if candle_time is not None:
@@ -246,7 +250,7 @@ def save_scan_result(key, price, ema9_value, ema20_value, mom, market, trend_5m,
 
 
 def analyse(key):
-    history = candles.completed.get(key, [])
+    history, _ = candles.snapshot(key)
 
     # Reject old candles before generating any signals.
     if history:
@@ -546,7 +550,7 @@ if __name__ == "__main__":
     # Display last available index values before live candles arrive.
     # These are informational only; do not run trading analysis here.
     for key in INDICES.values():
-        history = candles.completed.get(key, [])
+        history, _ = candles.snapshot(key)
         if len(history) >= 20:
             closes = [c.close for c in history]
             save_scan_result(
