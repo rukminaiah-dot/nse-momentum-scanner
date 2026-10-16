@@ -12,6 +12,7 @@ on:
       - 'tests/test_worker_manager_integration.py'
       - 'tests/test_minimal_verified_recovery.py'
       - 'tests/test_scanner_recovery_wiring.py'
+      - 'tests/test_scanner_recovery_real_candles.py'
       - 'scripts/benchmark_candle_snapshots.py'
       - '.github/workflows/worker-manager-integration.yml'
   workflow_dispatch:
@@ -29,4 +30,5 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_worker_manager_integration.py' -v
       - run: python -m unittest discover -s tests -p 'test_minimal_verified_recovery.py' -v
       - run: python -m unittest discover -s tests -p 'test_scanner_recovery_wiring.py' -v
+      - run: python -m unittest discover -s tests -p 'test_scanner_recovery_real_candles.py' -v
       - run: python -m scripts.benchmark_candle_snapshots --symbols 50 --history 390 --iterations 200
