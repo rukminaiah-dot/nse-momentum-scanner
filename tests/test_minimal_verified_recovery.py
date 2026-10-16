@@ -2,6 +2,7 @@
 import unittest
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+from unittest.mock import patch
 from v2.backend.verified_gap_recovery import validated_completed_rows, merge_verified_missing
 from v2.backend.gap_recovery_worker import GapRecoveryWorker
 
@@ -17,6 +18,12 @@ class VerifiedRecoverySmokeTests(unittest.TestCase):
         self.t0 = datetime(2026, 10, 16, 9, 52)
         self.t1 = self.t0 + timedelta(minutes=1)
         self.now = datetime(2026, 10, 16, 9, 55, tzinfo=IST)
+        # Recovery validation is session-date-sensitive. Freeze only the
+        # worker's clock so these offline fixtures survive calendar rollover.
+        clock_patch = patch('v2.backend.gap_recovery_worker.datetime')
+        clock = clock_patch.start()
+        clock.now.return_value = self.now
+        self.addCleanup(clock_patch.stop)
 
     def test_validates_completed_rows(self):
         result = validated_completed_rows([row(self.t0), row(self.t1)], self.now)
