@@ -52,7 +52,16 @@ def update_state(trade_id, price, action="HOLD", reason="Chart remains valid"):
     con = connect()
     row = con.execute("SELECT status FROM trades WHERE id=?", (trade_id,)).fetchone()
     old_status = row[0] if row else None
-    con.execute("UPDATE trades SET current_price=?, status=? WHERE id=?", (price, action, trade_id))
+    if old_status is None or old_status == "CLOSED":
+        con.close()
+        return
+    # HOLD refreshes the last observed price, never erases the active BUY state.
+    if action == "HOLD":
+        con.execute("UPDATE trades SET current_price=?, quote_observed_at_ist=NULL, quote_timestamp_verified=0 WHERE id=?", (price, trade_id))
+        con.commit()
+        con.close()
+        return
+    con.execute("UPDATE trades SET current_price=?, status=?, quote_observed_at_ist=NULL, quote_timestamp_verified=0 WHERE id=?", (price, action, trade_id))
     if old_status != action:
         con.execute("INSERT INTO trade_events (trade_id,event_time,action,price,reason) VALUES (?,?,?,?,?)", (trade_id, now(), action, price, reason))
     con.commit()
@@ -75,6 +84,7 @@ def sell(trade_id, price, reason):
     con.execute("""
         UPDATE trades
         SET current_price=?, status='CLOSED',
+            quote_observed_at_ist=NULL, quote_timestamp_verified=0,
             exit_reason=?, exit_time=?, exit_price=?,
             realized_pnl=?, realized_pnl_pct=?
         WHERE id=?

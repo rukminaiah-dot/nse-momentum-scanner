@@ -12,8 +12,31 @@ from .signal_engine import generate_signal
 from .market_regime import index_signal
 from .trade_engine import buy, update_state, sell
 from .database import DB_PATH, init_db, reset_scanner_results
+from .quality_metrics import observed_history_gaps
+
+from .gap_recovery_worker import GapRecoveryWorker
+
+def _fetch_recovery_rows(key):
+    config = upstox_client.Configuration()
+    config.access_token = os.environ["UPSTOX_ACCESS_TOKEN"]
+    api = upstox_client.HistoryV3Api(upstox_client.ApiClient(config))
+    response = api.get_intra_day_candle_data(key, "minutes", "1")
+    return response.data.candles or []
 
 candles = CandleManager()
+# Recovery is disabled by default; never activate on a production restart
+# without explicitly setting the opt-in environment flag.
+gap_recovery = GapRecoveryWorker(
+    _fetch_recovery_rows,
+    candles.recovery_snapshot,
+    candles.merge_recovered,
+    cooldown=120,
+    max_pending=2,
+)
+GAP_RECOVERY_ENABLED = os.getenv("ENABLE_VERIFIED_GAP_RECOVERY") == "1"
+# Experimental candle-only gate; disabled unless explicitly opted in.
+SESSION_CANDLE_GATE_ENABLED = os.getenv("ENABLE_NSE_SESSION_CANDLE_GATE") == "1"
+
 active_trades = {}
 instrument_symbols = {key: symbol for symbol, key in {**NIFTY_200, **INDICES}.items()}
 market_regimes = {}
@@ -70,7 +93,8 @@ def write_candle_quality():
     today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
     rows = {}
     for key in NIFTY_200.values():
-        history = candles.completed.get(key, [])
+        with candles.lock:
+            history = list(candles.completed.get(key, []))
         recent = history[-6:]
         same_day = len(recent) == 6 and all(
             getattr(c, "timestamp", None) is not None
@@ -80,6 +104,7 @@ def write_candle_quality():
             recent[i].timestamp - recent[i-1].timestamp == timedelta(minutes=1)
             for i in range(1, 6)
         )
+        gap_metrics = observed_history_gaps(history, today)
         last = history[-1] if history else None
         if len(recent) < 6:
             reason = "WARMUP"
@@ -90,6 +115,7 @@ def write_candle_quality():
         else:
             reason = None
         rows[instrument_symbols.get(key, key)] = {
+            **gap_metrics,
             "six_consecutive_today": consecutive,
             "continuity_reason": reason,
             "last_closed_candle_ist": last.timestamp.isoformat() if last else None,
@@ -99,7 +125,9 @@ def write_candle_quality():
     try:
         path = Path(_QUALITY_PATH)
         tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps({"observed_at_epoch": now, "stocks": rows}))
+        tmp.write_text(json.dumps({"observed_at_epoch": now, "stocks": rows,
+                                   "gap_recovery": {"enabled": GAP_RECOVERY_ENABLED,
+                                                    **gap_recovery.status()}}))
         tmp.replace(path)
     except (OSError, TypeError, ValueError) as exc:
         print("CANDLE_QUALITY_WRITE_ERROR:", type(exc).__name__, flush=True)
@@ -139,15 +167,20 @@ def preload_history(key):
     to_date = today - timedelta(days=1)
     from_date = to_date - timedelta(days=7)
 
-    response = api.get_historical_candle_data1(
-        key, "minutes", "1",
-        str(to_date), str(from_date)
-    )
-    rows = response.data.candles or []
+    # A previous-session history outage must not prevent today's completed
+    # intraday candles from warming the scanner.
+    try:
+        response = api.get_historical_candle_data1(
+            key, "minutes", "1",
+            str(to_date), str(from_date)
+        )
+        rows = response.data.candles or []
+    except Exception as exc:
+        print("HISTORICAL PRELOAD FAILED:", key, type(exc).__name__, flush=True)
+        rows = []
 
     if not rows:
         print("PRELOAD: no historical candles for", key)
-        return
 
     loaded = []
     for row in reversed(rows[:20]):
@@ -192,7 +225,8 @@ def preload_history(key):
         except Exception as exc:
             print("INTRADAY PRELOAD FAILED:", key, type(exc).__name__, flush=True)
 
-    candles.completed[key] = loaded
+    with candles.lock:
+        candles.completed[key] = loaded
     print("PRELOAD:", key, len(loaded), "historical candles")
 
 def five_minute_trend(history):
@@ -237,6 +271,12 @@ def save_scan_result(key, price, ema9_value, ema20_value, mom, market, trend_5m,
             (key,candle_time,price,ema9_value,ema20_value,mom,market,trend_5m,signal))
     con.commit()
     con.close()
+    # Optional archival only after the local scanner history commit succeeds.
+    # Never block signal generation if PostgreSQL is unavailable.
+    if candle_time is not None and os.getenv("ENABLE_SIGNAL_ARCHIVE_POSTGRES") == "1":
+        from .signal_archive_dispatch import submit_observation
+        if not submit_observation((key, candle_time, price, signal)):
+            print("SIGNAL_ARCHIVE_QUEUE_OVERFLOW: manual SQLite replay required", flush=True)
     if key in ("NIFTY 50", "SENSEX") and candle_time is not None:
         try:
             from .index_snapshot_archive import save_index_snapshot
@@ -246,7 +286,8 @@ def save_scan_result(key, price, ema9_value, ema20_value, mom, market, trend_5m,
 
 
 def analyse(key):
-    history = candles.completed.get(key, [])
+    with candles.lock:
+        history = list(candles.completed.get(key, []))
 
     # Reject old candles before generating any signals.
     if history:
@@ -431,6 +472,21 @@ def on_tick(key, data):
     except (TypeError, ValueError, OverflowError):
         return
 
+    # Experimental guard: reject after-hours stock ticks before simulated
+    # trades, volume counters, health updates, or signal generation.
+    if SESSION_CANDLE_GATE_ENABLED and key in NIFTY_200.values():
+        from .session_guard import session_tick_action
+        with candles.lock:
+            active = candles.current.get(key)
+            active_minute = active["minute"] if active else None
+            session_action = session_tick_action(ts, active_minute)
+            if session_action == "FINALIZE_LAST_MINUTE":
+                if candles.finalize_last_regular_minute(key, ts) is not None:
+                    write_candle_quality()
+                return
+            if session_action != "UPDATE":
+                return
+
     # Reject out-of-order exchange ticks within the same minute as well.
     # Otherwise a delayed tick can corrupt OHLC, cumulative-volume deltas,
     # and simulated trade state even when its minute is not older.
@@ -483,14 +539,133 @@ def on_tick(key, data):
         except (ValueError, TypeError):
             pass
 
-    before = len(candles.completed.get(key, []))
-    candles.update(key, price, ts, minute_volume)
-    after = len(candles.completed.get(key, []))
+    # The candle manager returns a closed candle atomically under its lock.
+    # Never infer closure from history length: recovery may replace that list.
+    if SESSION_CANDLE_GATE_ENABLED and key in NIFTY_200.values():
+        candle_closed = candles.update_regular_session(key, price, ts, minute_volume) is not None
+    else:
+        candle_closed = candles.update(key, price, ts, minute_volume) is not None
 
-    # Analyse only when a minute candle has actually closed.
-    if after > before:
+    # Only request recovery after a genuine live closure of a same-session gap.
+    # Never request for indices, disabled mode or overnight discontinuities.
+    if candle_closed and GAP_RECOVERY_ENABLED and key in NIFTY_200.values():
+        from .recovery_trigger import should_request_recovery
+        history, active_minute = candles.recovery_snapshot(key)
+        if should_request_recovery(
+            history, active_minute, enabled=GAP_RECOVERY_ENABLED,
+            stock=True, candle_closed=True
+        ):
+            gap_recovery.request(key)
+
+    # Diagnostic-only timing: separate tick age, candle close lag, and
+    # post-close processing cost. No trading decisions depend on these values.
+    if candle_closed:
+        from time import perf_counter as diagnostic_perf_counter
+        diagnostic_started = diagnostic_perf_counter()
+        tick_age_ms = max(0, int(time.time() * 1000) - ts)
         write_candle_quality()
         analyse(key)
+        processing_ms = round((diagnostic_perf_counter() - diagnostic_started) * 1000, 1)
+        print(
+            "FEED_TIMING:", key,
+            "| TICK_AGE_MS:", tick_age_ms,
+            "| POST_CLOSE_PROCESSING_MS:", processing_ms,
+            flush=True,
+        )
+
+
+def finalize_verified_calendar_without_tick(key, now_ms, schedule,
+                                            start_date, end_date, source,
+                                            verified, close_grace_minutes=5):
+    """Explicit offline/test-callable no-tick finalization; no timer is started.
+
+    The caller supplies its own clock and independently reviewed calendar.
+    No feed callback, network request, or background scheduler is installed.
+    """
+    if SESSION_CANDLE_GATE_ENABLED or key not in (
+            frozenset(NIFTY_200.values()) | frozenset(INDICES.values())):
+        return False
+    if isinstance(now_ms, bool):
+        return False
+    try:
+        stamp = int(float(now_ms))
+    except (TypeError, ValueError, OverflowError):
+        return False
+    closed = candles.finalize_verified_session_end(
+        key, stamp, schedule, start_date, end_date, source, verified,
+        close_grace_minutes)
+    if closed is None:
+        return False
+    write_candle_quality()
+    return True
+
+
+def on_tick_with_verified_calendar(key, data, schedule, start_date, end_date,
+                                   source, verified, close_grace_minutes=5):
+    """Explicitly invoked calendar-aware scanner entrypoint (NOT live-wired).
+
+    Callers must supply independently verified, complete dated sessions.
+    This wrapper is not selected by the Upstox connector or environment.
+    The legacy weekday gate must remain off when exercising this path.
+    """
+    from .offline_scanner_session_dispatch import dispatch_offline_scanner_tick
+
+    if SESSION_CANDLE_GATE_ENABLED or not isinstance(data, dict):
+        return "REJECT"
+    # on_tick silently drops ticks without a price. The explicit offline
+    # wrapper must not report UPDATE when no scanner update can occur.
+    price = data.get("ltp")
+    # The scanner compares prices with numeric trade thresholds and stores
+    # them in OHLC candles. Fail closed on nonnumeric/nonfinite input before
+    # trade, health, volume, or candle mutations.
+    if isinstance(price, bool) or not isinstance(price, (int, float)):
+        return "REJECT"
+    from math import isfinite
+    if not isfinite(price) or price <= 0:
+        return "REJECT"
+    stamp = data.get("ltt")
+    if isinstance(stamp, bool):
+        return "REJECT"
+    try:
+        stamp = int(float(stamp))
+        if stamp < 10**11:
+            stamp *= 1000
+    except (TypeError, ValueError, OverflowError):
+        return "REJECT"
+    # Match on_tick's exchange timestamp freshness before dispatch. Otherwise
+    # the wrapper can report UPDATE although the real scanner drops the tick.
+    # Clock-driven finalization uses a separate explicit entrypoint.
+    now_ms = int(time.time() * 1000)
+    if stamp > now_ms + 5000 or now_ms - stamp > 120000:
+        return "REJECT"
+    # Keep the wrapper's reported action consistent with the real scanner:
+    # an out-of-order tick cannot update candles, volume, trades, or health.
+    last_accepted = _last_accepted_tick_ms.get(key)
+    if last_accepted is not None and stamp < last_accepted:
+        return "REJECT"
+    # Serialize calendar classification and scanner effects against the
+    # explicit clock-driven finalizer. Both use the candle manager's RLock.
+    # Without this lock a close could race between the watermark check and
+    # on_tick, incorrectly reporting UPDATE after the candle was finalized.
+    with candles.lock:
+        if candles.is_verified_finalized_or_older(key, stamp):
+            return "REJECT"
+        item = candles.current.get(key)
+        active_minute = item["minute"] if item else None
+
+        def finalize():
+            if candles.finalize_verified_session_end(
+                    key, stamp, schedule, start_date, end_date, source, verified,
+                    close_grace_minutes) is not None:
+                write_candle_quality()
+
+        return dispatch_offline_scanner_tick(
+            key, stamp, active_minute,
+            frozenset(NIFTY_200.values()) | frozenset(INDICES.values()),
+            schedule, start_date, end_date, source, verified,
+            on_update=lambda: on_tick(key, data),
+            on_finalize=finalize, close_grace_minutes=close_grace_minutes,
+        )
 
 
 if __name__ == "__main__":

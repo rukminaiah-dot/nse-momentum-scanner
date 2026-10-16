@@ -11,17 +11,58 @@ instrument_symbols = {key: symbol for symbol, key in NIFTY_200.items()}
 app = FastAPI(title="NSE Momentum Scanner V2")
 app.include_router(smart_option_router)
 
+
+@app.get("/api/v2/premarket/evidence")
+def get_premarket_evidence():
+    """Fail-closed evidence contract for future verified source adapters.
+
+    No automatic sources are configured. Never fabricate market observations.
+    """
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from .premarket_sources import assess_verified_sources
+    from .premarket_readiness import premarket_readiness
+
+    now = datetime.now(ZoneInfo("Asia/Kolkata"))
+    prediction, sources = assess_verified_sources({}, now=now)
+    missing_sources = [key for key, source in sources.items() if source['status'] != 'VERIFIED']
+    readiness = premarket_readiness(prediction, sources)
+    forecast_ready = readiness["research_forecast_ready"]
+    return {
+        "mode": "RESEARCH_ONLY",
+        "order_execution_enabled": False,
+        "status": prediction.status,
+        "automatic_forecast_ready": forecast_ready,
+        "missing_sources": missing_sources,
+        "readiness": readiness,
+        "direction": prediction.direction,
+        "evidence_score": prediction.evidence_score,
+        "as_of_ist": prediction.as_of_ist,
+        "sources": sources,
+        "reasons": list(prediction.reasons),
+        "note": "No verified automatic data sources configured; manual assessment is separate.",
+    }
+
 @app.get("/api/v2/trades")
 def get_trades():
     con = sqlite3.connect(DB_PATH, timeout=10)
     con.row_factory = sqlite3.Row
+    # Preserve every open trade; limit only closed history.
     rows = con.execute(
-        "SELECT * FROM trades ORDER BY id DESC LIMIT 100"
+        "SELECT * FROM trades WHERE status != 'CLOSED' "
+        "UNION ALL SELECT * FROM (SELECT * FROM trades WHERE status = 'CLOSED' "
+        "ORDER BY id DESC LIMIT 100) ORDER BY id DESC"
     ).fetchall()
     con.close()
     items = [dict(row) for row in rows]
+    from .trade_quote_freshness import quote_freshness
     for item in items:
         item["symbol"] = instrument_symbols.get(item["symbol"], item["symbol"])
+        # Signal time and API refresh time are not verified quote timestamps.
+        item["quote_freshness"] = quote_freshness(
+            observed_at_ist=item.get("quote_observed_at_ist"),
+            timestamp_verified=item.get("quote_timestamp_verified") == 1)
+        item["quote_timestamp_verified"] = item.get("quote_timestamp_verified") == 1
     return items
 
 from fastapi.responses import FileResponse
@@ -179,6 +220,13 @@ def nifty200_feed_health():
     return base
 
 
+@app.get("/api/v2/live-screener-readiness")
+def live_screener_readiness():
+    """Read-only, fail-closed live market tick readiness; never places orders."""
+    from .live_feed_readiness import assess_live_feed
+    return assess_live_feed(nifty200_feed_health())
+
+
 @app.get("/api/v2/candle-feed-quality")
 def candle_feed_quality():
     """Read-only observed candle continuity and volume; stale snapshots fail closed."""
@@ -205,6 +253,11 @@ def candle_feed_quality():
         result["status"] = "REPORTING"
         result["snapshot_age_seconds"] = round(age, 1)
         result["stocks"] = rows
+        recovery = data.get("gap_recovery")
+        if isinstance(recovery, dict):
+            result["gap_recovery"] = recovery
+        from .quality_metrics import summarize_observed_history
+        result.update(summarize_observed_history(rows))
         result["stocks_six_consecutive_today"] = sum(
             v.get("six_consecutive_today") is True for v in rows.values()
         )
@@ -432,3 +485,133 @@ def quality_ratings():
     if output["ratings"]:
         output["status"] = "CANDLE_RATINGS_AVAILABLE"
     return output
+
+
+@app.get("/api/v2/signal-accuracy/daily")
+def get_daily_signal_accuracy(date: str):
+    """Read-only observed BUY-to-SELL paper ledger; no inferred executions."""
+    from datetime import date as date_type
+    from fastapi import HTTPException
+    from .market_config import INDICES
+    from .signal_accuracy_report import report_from_sqlite
+
+    try:
+        date_type.fromisoformat(date)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Date must be YYYY-MM-DD")
+    try:
+        result = report_from_sqlite(DB_PATH, date, index_symbols=set(INDICES))
+    except sqlite3.Error as exc:
+        print("SIGNAL_ACCURACY_READ_ERROR:", type(exc).__name__, flush=True)
+        raise HTTPException(status_code=503, detail="Scanner signal history unavailable") from exc
+    result["order_execution_enabled"] = False
+    result["mode"] = "OBSERVED_SIGNALS_PAPER_ONLY"
+    return result
+
+
+@app.get("/api/v2/signal-accuracy/cumulative")
+def get_cumulative_signal_accuracy(end_date: str):
+    """Read-only cumulative observed signal cycles through an IST date."""
+    import os
+    from datetime import date as date_type
+    from fastapi import HTTPException
+    from .market_config import INDICES
+    from .signal_cumulative_report import cumulative_report, fetch_cumulative_archive
+
+    try:
+        date_type.fromisoformat(end_date)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="end_date must be YYYY-MM-DD")
+    url = os.environ.get("DATABASE_URL")
+    if not url:
+        raise HTTPException(status_code=503, detail="PostgreSQL archive not configured")
+    try:
+        import psycopg
+        with psycopg.connect(url, connect_timeout=5) as pg:
+            rows = fetch_cumulative_archive(pg, end_date=end_date)
+    except psycopg.Error as exc:
+        print("SIGNAL_ARCHIVE_READ_ERROR:", type(exc).__name__, flush=True)
+        raise HTTPException(status_code=503, detail="PostgreSQL signal archive unavailable") from exc
+    try:
+        result = cumulative_report(rows, index_symbols=set(INDICES))
+    except (ValueError, TypeError, OverflowError) as exc:
+        print("SIGNAL_ARCHIVE_INVALID_DATA:", type(exc).__name__, flush=True)
+        raise HTTPException(status_code=503, detail="PostgreSQL signal archive contains invalid observations") from exc
+    result["through_date_ist"] = end_date
+    result["archive_reconciliation_status"] = "NOT_VERIFIED_FOR_THIS_REQUEST"
+    result["archive_reading_scope"] = "BUY_SELL_ONLY"
+    result["archive_empty_warning"] = (
+        "No archived BUY/SELL readings found; this does not prove no scanner signals occurred."
+        if result["observation_status"] == "NO_ARCHIVED_BUY_SELL_READINGS" else None
+    )
+    result["historical_completeness_verified"] = False
+    result["archive_integrity_note"] = (
+        "PostgreSQL signal values were not reconciled against SQLite for this request; "
+        "missing or stale observations may change paper results."
+    )
+    result["order_execution_enabled"] = False
+    return result
+
+
+@app.get("/api/v2/signal-accuracy/cumulative.csv")
+def download_cumulative_signal_accuracy(end_date: str):
+    """Download observed completed calls, not broker trade confirmations."""
+    from fastapi.responses import Response
+    from .signal_accuracy_csv import closed_calls_csv
+    report = get_cumulative_signal_accuracy(end_date)
+    return Response(
+        content=closed_calls_csv(report),
+        media_type="text/csv",
+        headers={"Content-Disposition":
+                 'attachment; filename="paper_signal_accuracy_' + end_date + '.csv"'},
+    )
+
+
+@app.get("/api/v2/signal-accuracy/paper-pnl")
+def get_signal_paper_pnl(
+    end_date: str,
+    notional_inr: float = 10000,
+    round_trip_cost_pct: float = 0,
+):
+    """Explicit assumptions; no real broker P&L or index rupee estimates."""
+    from fastapi import HTTPException
+    from .signal_paper_pnl import model_stock_pnl
+    report = get_cumulative_signal_accuracy(end_date)
+    try:
+        result = model_stock_pnl(
+            report,
+            notional_inr=notional_inr,
+            round_trip_cost_pct=round_trip_cost_pct,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    result["through_date_ist"] = end_date
+    result["order_execution_enabled"] = False
+    return result
+
+
+@app.get("/api/v2/signal-accuracy/archive-health")
+def get_signal_archive_health():
+    """Read-only process-local delivery status; never asserts full coverage."""
+    import os
+    from .signal_archive_delivery_health import archive_delivery_health
+
+    result = archive_delivery_health()
+    result["archive_enabled"] = os.getenv("ENABLE_SIGNAL_ARCHIVE_POSTGRES") == "1"
+    result["mode"] = "OBSERVABILITY_ONLY"
+    result["order_execution_enabled"] = False
+    return result
+
+
+@app.get("/api/v2/signal-accuracy/daily-summary.csv")
+def download_daily_signal_accuracy_summary(end_date: str):
+    """Download per-day closed signal calls; not executed broker trades."""
+    from fastapi.responses import Response
+    from .signal_daily_accuracy_csv import daily_accuracy_csv
+    report = get_cumulative_signal_accuracy(end_date)
+    return Response(
+        content=daily_accuracy_csv(report),
+        media_type="text/csv",
+        headers={"Content-Disposition":
+                 'attachment; filename="paper_signal_daily_summary_' + end_date + '.csv"'},
+    )

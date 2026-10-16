@@ -1,0 +1,121 @@
+name: Verified Gap Recovery Tests
+on:
+  push:
+    branches: [feature/verified-gap-recovery]
+  pull_request:
+    paths:
+      - 'v2/backend/**'
+      - 'v2/frontend/index.html'
+      - 'tests/test_premarket_*.py'
+      - 'tests/test_active_trade_retention.py'
+      - 'tests/test_trade_hold_retention.py'
+      - 'tests/test_trade_quote_freshness.py'
+      - 'tests/test_trade_quote_migration.py'
+      - 'tests/test_live_feed_readiness.py'
+      - 'tests/test_dashboard_feed_readiness.py'
+      - 'test_verified_gap_recovery.py'
+      - 'test_gap_recovery_worker.py'
+      - 'test_recovery_trigger.py'
+      - 'test_recovery_integration.py'
+      - 'test_preload_control_flow.py'
+      - 'test_upstox_probe.py'
+      - 'test_paper_signal_ledger.py'
+      - 'test_signal_accuracy_report.py'
+      - 'test_signal_archive_postgres.py'
+      - 'test_signal_archive_sync.py'
+      - 'test_signal_cumulative_report.py'
+      - 'test_signal_archive_cli.py'
+      - 'test_signal_accuracy_csv.py'
+      - 'test_signal_paper_pnl.py'
+      - 'test_signal_paper_pnl_api.py'
+      - 'test_signal_archive_health.py'
+      - 'test_signal_archive_hook.py'
+      - 'test_signal_archive_queue.py'
+      - 'test_signal_archive_dispatch.py'
+      - 'test_signal_archive_delivery_health.py'
+      - 'test_signal_archive_health_api.py'
+      - 'test_signal_daily_accuracy_csv.py'
+      - 'probe_upstox_recovery.py'
+      - 'tests/test_database_backup_scaffold.py'
+      - 'tests/test_staging_health.py'
+      - 'database/scripts/**'
+      - 'tests/test_quality_metrics.py'
+      - 'tests/test_session_guard.py'
+      - 'tests/test_session_finalization.py'
+      - 'tests/test_scanner_session_guard.py'
+      - 'tests/test_scanner_session_execution.py'
+      - 'tests/test_verified_session_schedule.py'
+      - 'tests/test_verified_session_finalization.py'
+      - 'tests/test_timestamp_audit.py'
+      - 'tests/test_nonproduction_timestamp_observer.py'
+      - 'tests/test_upstox_timestamp_extraction.py'
+      - 'tests/test_live_rollover_retention.py'
+
+permissions:
+  contents: read
+
+jobs:
+  offline-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile recovery modules
+        run: python -m compileall -q v2/backend probe_upstox_recovery.py
+      - name: Offline regression suite
+        run: python -m unittest -v test_verified_gap_recovery test_gap_recovery_worker test_recovery_trigger test_recovery_integration test_preload_control_flow test_upstox_probe test_paper_signal_ledger test_signal_accuracy_report test_signal_archive_postgres test_signal_archive_sync test_signal_cumulative_report test_signal_archive_cli test_signal_accuracy_csv test_signal_paper_pnl test_signal_paper_pnl_api test_signal_archive_health test_signal_archive_hook test_signal_archive_queue test_signal_archive_dispatch test_signal_archive_delivery_health test_signal_archive_health_api test_signal_daily_accuracy_csv
+      - name: Candle quality metric tests
+        run: python -m unittest discover -s tests -p test_quality_metrics.py -v
+      - name: Market session boundary tests
+        run: python -m unittest discover -s tests -p test_session_guard.py -v
+      - name: Market session finalization tests
+        run: python -m unittest discover -s tests -p test_session_finalization.py -v
+      - name: Scanner session guard ordering tests
+        run: python -m unittest discover -s tests -p test_scanner_session_guard.py -v
+      - name: Scanner session mocked execution tests
+        run: python -m unittest discover -s tests -p test_scanner_session_execution.py -v
+      - name: Offline Upstox timestamp diagnostic tests
+        run: python -m unittest discover -s tests -p test_timestamp_audit.py -v
+      - name: Verified calendar end-of-session finalization tests
+        run: python -m unittest discover -s tests -p test_verified_session_finalization.py -v
+      - name: Explicit session schedule tests
+        run: python -m unittest discover -s tests -p test_verified_session_schedule.py -v
+      - name: Nonproduction timestamp observer tests
+        run: python -m unittest discover -s tests -p test_nonproduction_timestamp_observer.py -v
+      - name: Offline Upstox decoded timestamp extraction tests
+        run: python -m unittest discover -s tests -p test_upstox_timestamp_extraction.py -v
+      - name: Live rollover bounded-history regression tests
+        run: python -m unittest discover -s tests -p test_live_rollover_retention.py -v
+      - name: Offline scanner stock and index calendar policy tests
+        run: python -m unittest discover -s tests -p test_offline_scanner_session_policy.py -v
+      - name: Offline calendar-first scanner dispatch tests
+        run: python -m unittest discover -s tests -p test_offline_scanner_session_dispatch.py -v
+
+      - name: Offline database backup safety tests
+        run: python -m unittest discover -s tests -p test_database_backup_scaffold.py -v
+
+      - name: Offline staging isolation tests
+        run: python -m unittest discover -s tests -p test_staging_health.py -v
+
+      - name: Offline premarket source and dashboard contract tests
+        run: python -m unittest discover -s tests -p 'test_premarket_*.py' -v
+
+      - name: Offline active trade retention and HOLD safety tests
+        run: python -m unittest discover -s tests -p 'test_*trade*retention.py' -v
+
+      - name: Offline simulated trade quote freshness tests
+        run: python -m unittest discover -s tests -p test_trade_quote_freshness.py -v
+
+      - name: Offline trade quote schema migration tests
+        run: python -m unittest discover -s tests -p test_trade_quote_migration.py -v
+
+      - name: Offline live screener readiness safety tests
+        run: python -m unittest discover -s tests -p test_live_feed_readiness.py -v
+
+      - name: Dashboard feed readiness contract tests
+        run: python -m unittest discover -s tests -p test_dashboard_feed_readiness.py -v

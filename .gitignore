@@ -18,3 +18,15 @@ v2/data/*.db
 
 v2/backend/*.before_*
 v2/frontend/*.bak_*
+
+# Database backups are private operational data, never commit them.
+/database/backups/**
+!/database/backups/README.md
+!/database/backups/daily/.gitkeep
+!/database/backups/weekly/.gitkeep
+!/database/backups/monthly/.gitkeep
+/database/*.env
+/database/scripts/*.env
+*.dump
+*.sql.gz
+*.backup

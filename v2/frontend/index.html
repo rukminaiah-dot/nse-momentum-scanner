@@ -14,11 +14,20 @@ small{color:#aaa}
 .profit{color:#4ade80;font-weight:bold}
 .loss{color:#fb7185;font-weight:bold}
 .table-wrap{overflow-x:auto;border-radius:10px;background:#1c2230}table{width:100%;border-collapse:collapse;font-size:13px;white-space:nowrap}th,td{padding:10px;border-bottom:1px solid #394150;text-align:left}th{position:sticky;top:0;background:#293244} .status-ok{color:#4ade80}.status-warn{color:#fbbf24}
+.premarket-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.premarket-grid label{display:block;font-size:13px;color:#cbd5e1}.premarket-grid select{width:100%;margin-top:6px;padding:10px;background:#101827;color:#fff;border:1px solid #475569;border-radius:8px}.pm-note{color:#cbd5e1;font-size:13px;line-height:1.5}.pm-result{font-weight:bold;font-size:20px;margin:10px 0}.pm-wait{color:#fbbf24}
 </style>
 </head>
 <body>
 <h2>NSE Momentum Scanner V2</h2>
 <div id="feed-status" class="card">Checking market and feed freshness…</div>
+<h3>Pre-Market Study &amp; Direction Forecast</h3>
+<section id="premarket-study" class="card" aria-label="Research-only pre-market outlook">
+<div id="premarket-source-status" class="pm-note">Checking verified source connections…</div>
+<div class="pm-note">Manual evidence assessment • Not a live feed • Not a BUY/SELL call. All five inputs are required. Evidence agreement is NOT prediction accuracy.</div>
+<div class="premarket-grid" id="premarket-inputs"></div>
+<div id="premarket-outlook" class="pm-result pm-wait" role="status" aria-live="polite">WAIT — Evidence unavailable</div>
+<div id="premarket-reasons" class="pm-note">Select verified pre-market evidence to calculate a directional bias. No data is assumed.</div>
+</section>
 <h3>Market Index Signals</h3>
 <div id="indices">Loading live indices...</div>
 <h3>203-Instrument Candle Quality Ratings (Research Only)</h3>
@@ -30,23 +39,89 @@ small{color:#aaa}
 <h3>NIFTY 200 Stock Board — Ranked by Momentum</h3>
 <div id="stock-count" class="card">Loading stock coverage…</div>
 <div id="stock-board" class="table-wrap">Loading validation table…</div>
-<h3>Trades</h3>
-<div id="trades">Loading trades...</div>
+<h3>Live Screener Feed Coverage</h3>
+<div id="live-feed-readiness" class="card">Checking feed coverage…</div>
+<h3>Active Trades — Simulated Signal Ledger</h3>
+<div class="pm-note">Open signals stay pinned until the ledger records an exit. Prices and P&amp;L may be delayed; no broker orders.</div>
+<div id="active-trades">Loading active trades...</div>
+<h3>Closed Trade History</h3>
+<div id="trades">Loading closed trades...</div>
 
 <script>
+// Research-only mirror of backend premarket_prediction.WEIGHTS; no broker access.
+const premarketWeights={gift_nifty:3,global_markets:2,rbi_macro_news:3,fii_dii:1,previous_session:1};
+const premarketLabels={gift_nifty:'GIFT NIFTY',global_markets:'Global market cues',rbi_macro_news:'RBI / macro news',fii_dii:'FII / DII flows',previous_session:'Previous session trend'};
+function initPremarket(){
+ const container=document.getElementById('premarket-inputs');
+ container.innerHTML=Object.keys(premarketWeights).map(key=>'<label>'+premarketLabels[key]+'<select data-premarket="'+key+'"><option value="">Not verified</option><option value="1">Bullish</option><option value="0">Neutral</option><option value="-1">Bearish</option></select></label>').join('');
+ container.addEventListener('change',updatePremarket);
+ updatePremarket();
+}
+function updatePremarket(){
+ const entries=Object.entries(premarketWeights);
+ const values=entries.map(([key,weight])=>({key,weight,value:document.querySelector('[data-premarket="'+key+'"]').value}));
+ const missing=values.filter(x=>x.value==='');
+ const output=document.getElementById('premarket-outlook');
+ const detail=document.getElementById('premarket-reasons');
+ if(missing.length){output.textContent='WAIT — Evidence unavailable';output.className='pm-result pm-wait';detail.textContent='Missing: '+missing.map(x=>premarketLabels[x.key]).join(', ')+'. No prediction without all five sources.';return;}
+ const weighted=values.reduce((sum,x)=>sum+x.weight*Number(x.value),0);
+ const agreement=Math.round(Math.abs(weighted)/10*100);
+ const direction=weighted>0?'BULLISH':weighted<0?'BEARISH':'NEUTRAL';
+ output.textContent=direction+' bias | Evidence agreement: '+agreement+'/100';
+ output.className='pm-result '+(direction==='BULLISH'?'buy':direction==='BEARISH'?'sell':'pm-wait');
+ detail.textContent='Manual research outlook only; not a win probability. WAIT for fresh market-open candles, index trend and volume confirmation. No automatic trades.';
+}
+initPremarket();
+async function loadPremarketSourceStatus(){
+ const panel=document.getElementById('premarket-source-status');
+ try{
+  const response=await fetch('/api/v2/premarket/evidence',{cache:'no-store'});
+  if(!response.ok)throw Error('HTTP '+response.status);
+  const data=await response.json();
+  if(data.mode!=='RESEARCH_ONLY'||data.order_execution_enabled!==false||!data.sources||typeof data.sources!=='object')throw Error('Invalid safety contract');
+  const sources=Object.values(data.sources);
+  const connected=sources.filter(x=>x.status==='VERIFIED'&&x.value!==null).length;
+  const missing=Array.isArray(data.missing_sources)?data.missing_sources.map(key=>premarketLabels[key]||key):Object.entries(data.sources).filter(([key,x])=>x.status!=='VERIFIED'||x.value===null).map(([key])=>premarketLabels[key]||key);
+  const invalid=Object.entries(data.sources).filter(([key,x])=>x.status==='INVALID_OR_UNVERIFIED').map(([key])=>premarketLabels[key]||key);
+  const disconnected=Object.entries(data.sources).filter(([key,x])=>x.status==='NOT_CONNECTED').map(([key])=>premarketLabels[key]||key);
+  const forecast=(data.automatic_forecast_ready===true&&missing.length===0&&data.status==='WAIT_LIVE_CONFIRMATION'&&['BULLISH','BEARISH','NEUTRAL'].includes(data.direction))?data.direction+' bias — awaiting live confirmation':'WAIT — automatic forecast unavailable';
+  panel.textContent='Automatic sources: '+connected+'/'+sources.length+' verified. '+forecast+'. '+(disconnected.length?'Not connected: '+disconnected.join(', ')+'. ':'')+(invalid.length?'Invalid or unverified: '+invalid.join(', ')+'. ':'')+(!missing.length?'Manual research remains separate.':'');
+ }catch(e){panel.textContent='Automatic source status unavailable — manual evidence assessment only; no live forecast.';}
+}
+loadPremarketSourceStatus();
+async function loadLiveFeedReadiness(){
+ const panel=document.getElementById('live-feed-readiness');
+ try {
+  const response=await fetch('/api/v2/live-screener-readiness',{cache:'no-store'});
+  if(!response.ok)throw Error('HTTP '+response.status);
+  const data=await response.json();
+  if(!Array.isArray(data.blockers))throw Error('Invalid readiness');
+  const count=Number.isInteger(data.recent_stock_count)?data.recent_stock_count:0;
+  const total=Number.isInteger(data.expected_stock_count)?data.expected_stock_count:'unknown';
+  panel.textContent=(data.live_screener_ready===true?'Full feed coverage verified':data.partial_feed_activity_observed===true?'Partial live feed activity':'Live feed not verified')
+   +' | Recent ticks: '+count+' / '+total
+   +' | Checks: '+(data.blockers.join(', ')||'passed')
+   +' | Broker orders: disabled';
+ }catch(error){panel.textContent='Feed readiness unavailable; full coverage not verified. Broker orders disabled.';}
+}
+loadLiveFeedReadiness();
+setInterval(loadLiveFeedReadiness,10000);
 async function loadTrades(){
  try{
   const r=await fetch('/api/v2/trades');
   const trades=await r.json();
 
-  document.getElementById('trades').innerHTML =
-    trades.length ? trades.map(t=>`
+  if(!r.ok || !Array.isArray(trades))throw Error('Invalid trades response');
+  const active=trades.filter(t=>t.status!=='CLOSED');
+  const closed=trades.filter(t=>t.status==='CLOSED');
+  const render=rows=>rows.map(t=>`
       <div class="card">
         <b>${t.symbol}</b><br>
         Status: <b class="${t.status==='CLOSED'?'sell':t.status==='TARGET_1'?'target':'buy'}">${t.status}</b><br>
         Entry: ${t.entry_price}<br>
-        Current: ${t.current_price}<br>
-        ${t.status!=="CLOSED" ? `<span class="${Number(t.current_price)>=Number(t.entry_price) ? "profit" : "loss"}">Live P&L: ${(Number(t.current_price)-Number(t.entry_price)).toFixed(2)} (${(((Number(t.current_price)-Number(t.entry_price))/Number(t.entry_price))*100).toFixed(2)}%)</span><br>` : ""}
+        Last recorded price: ${t.current_price}<br>
+        Quote freshness: ${t.quote_freshness==='VERIFIED_FRESH'&&t.quote_timestamp_verified===true?'VERIFIED_FRESH':'UNVERIFIED / NOT LIVE'}<br>
+        ${t.status!=="CLOSED" ? `<span class="${Number(t.current_price)>=Number(t.entry_price) ? "profit" : "loss"}">Indicative P&L (quote freshness unverified): ${(Number(t.current_price)-Number(t.entry_price)).toFixed(2)} (${(((Number(t.current_price)-Number(t.entry_price))/Number(t.entry_price))*100).toFixed(2)}%)</span><br>` : ""}
         ${t.status==="CLOSED" ? `<span class="${Number(t.realized_pnl)>=0 ? "profit" : "loss"}">Realized P&L: ${Number(t.realized_pnl).toFixed(2)} (${Number(t.realized_pnl_pct).toFixed(2)}%)</span><br>` : ""}
         ${t.status==="CLOSED" ? `Exit: ${t.exit_price}<br>Reason: ${t.exit_reason}<br>` : ""}
         Target 1: ${t.target_1}<br>
@@ -54,8 +129,10 @@ async function loadTrades(){
         Invalidation: ${t.invalidation}<br>
         <small>${t.signal_time}</small>
       </div>
-    `).join('') : 'No trades yet';
- }catch(e){document.getElementById('trades').textContent='Trade history unavailable; retrying.';}
+    `).join('');
+  document.getElementById('active-trades').innerHTML=active.length?render(active):'No active simulated trades';
+  document.getElementById('trades').innerHTML=closed.length?render(closed):'No closed trades yet';
+ }catch(e){document.getElementById('active-trades').textContent='Active trades unavailable; retrying.';document.getElementById('trades').textContent='Trade history unavailable; retrying.';}
 }
 async function loadScanner(){
  try{
