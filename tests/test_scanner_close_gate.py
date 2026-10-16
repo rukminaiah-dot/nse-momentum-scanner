@@ -107,5 +107,36 @@ class ScannerCloseGateTests(unittest.TestCase):
             for node in ast.walk(helper)))
 
 
+    def test_timestamp_helper_runtime_uses_only_matching_instrument(self):
+        from datetime import datetime
+        from types import SimpleNamespace
+
+        tree = ast.parse(SCANNER.read_text(encoding="utf-8"))
+        helper = next(node for node in tree.body
+                      if isinstance(node, ast.FunctionDef)
+                      and node.name == "completed_candle_time_for_symbol")
+        module = ast.Module(body=[helper], type_ignores=[])
+        ast.fix_missing_locations(module)
+
+        class SnapshotSpy:
+            def __init__(self):
+                self.requested = []
+
+            def snapshot(self, key):
+                self.requested.append(key)
+                return ([SimpleNamespace(timestamp=datetime(2026, 10, 16, 9, 15))]
+                        if key == "instrument-A" else []), None
+
+        spy = SnapshotSpy()
+        scope = {"candles": spy, "instrument_symbols": {
+            "instrument-A": "AAA", "instrument-B": "BBB"}}
+        exec(compile(module, str(SCANNER), "exec"), scope)
+        self.assertEqual(scope["completed_candle_time_for_symbol"]("AAA"),
+                         "2026-10-16 09:15:00")
+        self.assertEqual(spy.requested, ["instrument-A"])
+        self.assertIsNone(scope["completed_candle_time_for_symbol"]("UNKNOWN"))
+        self.assertEqual(spy.requested, ["instrument-A"])
+
+
 if __name__ == "__main__":
     unittest.main()
