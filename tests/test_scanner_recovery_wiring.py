@@ -27,8 +27,13 @@ class ScannerRecoveryWiringTests(unittest.TestCase):
         worker = configure(enabled=True, fetch_rows=Mock())
         self.assertIs(worker, state["_recovery_worker"])
         self.assertEqual(state["GapRecoveryWorker"].call_count, 1)
+        self.assertIs(configure(enabled=True), worker)
+        self.assertEqual(state["GapRecoveryWorker"].call_count, 1)
         self.assertIsNone(configure(enabled=False))
+        worker.join.assert_called_once_with(timeout=5)
         self.assertIsNone(state["_recovery_worker"])
+        self.assertIsNone(configure(enabled=False))
+        worker.join.assert_called_once_with(timeout=5)
 
     def test_scanner_staging_requires_two_explicit_flags(self):
         tree = ast.parse(SCANNER.read_text())
