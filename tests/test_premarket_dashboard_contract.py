@@ -33,6 +33,9 @@ class PremarketDashboardContractTests(unittest.TestCase):
         self.assertIn("trades.filter(t=>t.status!=='CLOSED')", page)
         self.assertIn("trades.filter(t=>t.status==='CLOSED')", page)
         self.assertIn("No active simulated trades", page)
+        self.assertIn("Indicative P&L (quote freshness unverified)", page)
+        self.assertIn("Last recorded price:", page)
+        self.assertNotIn("Live P&L:", page)
 
     def test_dashboard_shows_missing_automatic_sources(self):
         page = HTML.read_text(encoding="utf-8")
