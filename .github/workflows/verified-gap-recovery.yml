@@ -12,6 +12,7 @@ on:
       - 'tests/test_trade_quote_freshness.py'
       - 'tests/test_trade_quote_migration.py'
       - 'tests/test_live_feed_readiness.py'
+      - 'tests/test_dashboard_feed_readiness.py'
       - 'test_verified_gap_recovery.py'
       - 'test_gap_recovery_worker.py'
       - 'test_recovery_trigger.py'
@@ -115,3 +116,6 @@ jobs:
 
       - name: Offline live screener readiness safety tests
         run: python -m unittest discover -s tests -p test_live_feed_readiness.py -v
+
+      - name: Dashboard feed readiness contract tests
+        run: python -m unittest discover -s tests -p test_dashboard_feed_readiness.py -v
