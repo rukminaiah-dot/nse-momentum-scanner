@@ -44,8 +44,11 @@ def get_premarket_evidence():
 def get_trades():
     con = sqlite3.connect(DB_PATH, timeout=10)
     con.row_factory = sqlite3.Row
+    # Preserve every open trade; limit only closed history.
     rows = con.execute(
-        "SELECT * FROM trades ORDER BY id DESC LIMIT 100"
+        "SELECT * FROM trades WHERE status != 'CLOSED' "
+        "UNION ALL SELECT * FROM (SELECT * FROM trades WHERE status = 'CLOSED' "
+        "ORDER BY id DESC LIMIT 100) ORDER BY id DESC"
     ).fetchall()
     con.close()
     items = [dict(row) for row in rows]
