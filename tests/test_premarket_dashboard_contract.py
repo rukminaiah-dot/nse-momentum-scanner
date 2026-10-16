@@ -30,6 +30,7 @@ class PremarketDashboardContractTests(unittest.TestCase):
         page = HTML.read_text(encoding="utf-8")
         self.assertIn("WAIT — automatic forecast unavailable", page)
         self.assertIn("Missing: ", page)
+        self.assertIn("data.automatic_forecast_ready===true", page)
         self.assertIn("data.status==='WAIT_LIVE_CONFIRMATION'", page)
 
     def test_missing_data_never_generates_a_direction(self):
