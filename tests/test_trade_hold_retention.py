@@ -15,8 +15,8 @@ class HoldPreservesActiveTradeTests(unittest.TestCase):
             con = sqlite3.connect(db)
             con.execute("CREATE TABLE trades (id INTEGER PRIMARY KEY, status TEXT, current_price REAL, quote_observed_at_ist TEXT, quote_timestamp_verified INTEGER DEFAULT 0)")
             con.execute("CREATE TABLE trade_events (trade_id INTEGER, event_time TEXT, action TEXT, price REAL, reason TEXT)")
-            con.execute("INSERT INTO trades VALUES (1, 'BUY', 100)")
-            con.execute("INSERT INTO trades VALUES (2, 'CLOSED', 110)")
+            con.execute("INSERT INTO trades (id, status, current_price) VALUES (1, 'BUY', 100)")
+            con.execute("INSERT INTO trades (id, status, current_price) VALUES (2, 'CLOSED', 110)")
             con.commit()
             con.close()
             def connect():
