@@ -39,8 +39,11 @@ small{color:#aaa}
 <h3>NIFTY 200 Stock Board — Ranked by Momentum</h3>
 <div id="stock-count" class="card">Loading stock coverage…</div>
 <div id="stock-board" class="table-wrap">Loading validation table…</div>
-<h3>Trades</h3>
-<div id="trades">Loading trades...</div>
+<h3>Active Trades — Simulated Signal Ledger</h3>
+<div class="pm-note">Open signals stay pinned until the ledger records an exit. Prices and P&amp;L may be delayed; no broker orders.</div>
+<div id="active-trades">Loading active trades...</div>
+<h3>Closed Trade History</h3>
+<div id="trades">Loading closed trades...</div>
 
 <script>
 // Research-only mirror of backend premarket_prediction.WEIGHTS; no broker access.
@@ -89,8 +92,10 @@ async function loadTrades(){
   const r=await fetch('/api/v2/trades');
   const trades=await r.json();
 
-  document.getElementById('trades').innerHTML =
-    trades.length ? trades.map(t=>`
+  if(!r.ok || !Array.isArray(trades))throw Error('Invalid trades response');
+  const active=trades.filter(t=>t.status!=='CLOSED');
+  const closed=trades.filter(t=>t.status==='CLOSED');
+  const render=rows=>rows.map(t=>`
       <div class="card">
         <b>${t.symbol}</b><br>
         Status: <b class="${t.status==='CLOSED'?'sell':t.status==='TARGET_1'?'target':'buy'}">${t.status}</b><br>
@@ -104,8 +109,10 @@ async function loadTrades(){
         Invalidation: ${t.invalidation}<br>
         <small>${t.signal_time}</small>
       </div>
-    `).join('') : 'No trades yet';
- }catch(e){document.getElementById('trades').textContent='Trade history unavailable; retrying.';}
+    `).join('');
+  document.getElementById('active-trades').innerHTML=active.length?render(active):'No active simulated trades';
+  document.getElementById('trades').innerHTML=closed.length?render(closed):'No closed trades yet';
+ }catch(e){document.getElementById('active-trades').textContent='Active trades unavailable; retrying.';document.getElementById('trades').textContent='Trade history unavailable; retrying.';}
 }
 async function loadScanner(){
  try{
