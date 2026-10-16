@@ -181,5 +181,30 @@ class AtomicCandleStateTests(unittest.TestCase):
                           datetime(2026, 10, 16, 9, 17)])
 
 
+    def test_delayed_tick_does_not_roll_active_minute_back(self):
+        manager = CandleManager()
+        manager.update('X', 100, millis(9, 15))
+        manager.update('X', 101, millis(9, 17))
+        history_before, active_before = manager.snapshot('X')
+        self.assertIsNone(manager.update('X', 999, millis(9, 16)))
+        history_after, active_after = manager.snapshot('X')
+        self.assertEqual(active_after, active_before)
+        self.assertEqual([c.timestamp for c in history_after],
+                         [c.timestamp for c in history_before])
+        self.assertEqual(manager.current['X']['candle'].close, 101)
+
+    def test_recovery_ignores_other_session_date(self):
+        manager = CandleManager()
+        manager.update('X', 100, millis(9, 15))
+        manager.update('X', 101, millis(9, 17))
+        previous = recovered(9, 16)
+        previous.timestamp = datetime(2026, 10, 15, 9, 16)
+        self.assertEqual(manager.insert_missing_completed(
+            'X', {previous.timestamp: previous}), 0)
+        history, active = manager.snapshot('X')
+        self.assertEqual(len(history), 1)
+        self.assertEqual(active, datetime(2026, 10, 16, 9, 17))
+
+
 if __name__ == '__main__':
     unittest.main()
