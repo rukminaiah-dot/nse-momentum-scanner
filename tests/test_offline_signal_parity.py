@@ -176,6 +176,27 @@ class OfflineSignalParityTests(unittest.TestCase):
                                   is_stock=True)
                 self.assertIsNone(result["reason"])
 
+    def test_secondary_index_uses_primary_market_regime(self):
+        bars = history()
+        primary = evaluate(bars, session_date=datetime(2026, 10, 16).date(),
+                           is_index=True)
+        secondary = evaluate(bars, session_date=datetime(2026, 10, 16).date(),
+                             is_index=True, is_primary_index=False,
+                             nifty_market="BEARISH")
+        self.assertEqual(primary["market"], "BULLISH")
+        self.assertEqual(secondary["market"], "BEARISH")
+        self.assertEqual(secondary["signal"], "BUY")
+
+    def test_stock_uses_supplied_primary_market_regime(self):
+        result = evaluate(history(), session_date=datetime(2026, 10, 16).date(),
+                          is_stock=True, nifty_market="BEARISH")
+        self.assertEqual(result["market"], "BEARISH")
+
+    def test_reject_ambiguous_instrument_classification(self):
+        with self.assertRaises(ValueError):
+            evaluate(history(), session_date=datetime(2026, 10, 16).date(),
+                     is_index=True, is_stock=True)
+
 
 if __name__ == "__main__":
     unittest.main()
