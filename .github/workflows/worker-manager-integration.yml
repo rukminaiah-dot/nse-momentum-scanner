@@ -10,6 +10,7 @@ on:
       - 'v2/backend/gap_recovery_worker.py'
       - 'v2/backend/verified_gap_recovery.py'
       - 'tests/test_worker_manager_integration.py'
+      - 'tests/test_offline_recovery_isolation.py'
       - 'tests/test_minimal_verified_recovery.py'
       - 'tests/test_scanner_recovery_wiring.py'
       - 'tests/test_scanner_recovery_real_candles.py'
@@ -28,6 +29,7 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_atomic_candle_state.py' -v
       - run: python -m unittest discover -s tests -p 'test_scanner_close_gate.py' -v
       - run: python -m unittest discover -s tests -p 'test_worker_manager_integration.py' -v
+      - run: python -m unittest discover -s tests -p 'test_offline_recovery_isolation.py' -v
       - run: python -m unittest discover -s tests -p 'test_minimal_verified_recovery.py' -v
       - run: python -m unittest discover -s tests -p 'test_scanner_recovery_wiring.py' -v
       - run: python -m unittest discover -s tests -p 'test_scanner_recovery_real_candles.py' -v
