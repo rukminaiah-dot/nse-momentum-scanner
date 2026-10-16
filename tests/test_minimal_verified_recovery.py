@@ -155,5 +155,33 @@ class VerifiedRecoverySmokeTests(unittest.TestCase):
             merge_verified_missing([], recovered, active_minute=active, limit=0)
 
 
+    def test_worker_skips_without_snapshot_history(self):
+        fetch_calls = []
+        worker = GapRecoveryWorker(
+            lambda key: fetch_calls.append(key) or [],
+            lambda _: ([], self.t1),
+            lambda *_: self.fail("merge must not run without history"),
+            min_request_spacing=0.001)
+        self.assertTrue(worker.request("EMPTY_HISTORY"))
+        worker.join(timeout=5)
+        self.assertEqual(fetch_calls, [])
+        self.assertEqual(worker.status()["skipped"], 1)
+        self.assertEqual(worker.status()["pending"], 0)
+
+    def test_worker_rejects_invalid_broker_rows_before_merge(self):
+        existing = validated_completed_rows([row(self.t0)], self.now)[self.t0]
+        invalid = row(self.t1)
+        invalid[4] = float("nan")
+        worker = GapRecoveryWorker(
+            lambda _: [invalid],
+            lambda _: ([existing], self.t1 + timedelta(minutes=1)),
+            lambda *_: self.fail("invalid broker data must never be merged"),
+            min_request_spacing=0.001)
+        self.assertTrue(worker.request("INVALID_BROKER_DATA"))
+        worker.join(timeout=5)
+        self.assertEqual(worker.status()["failed"], 1)
+        self.assertEqual(worker.status()["verified_insertions"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()
