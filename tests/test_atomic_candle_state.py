@@ -328,5 +328,21 @@ class AtomicCandleStateTests(unittest.TestCase):
         self.assertEqual(history[-1].close, 101)
 
 
+    def test_recovered_candle_is_not_aliased_to_caller(self):
+        manager = CandleManager()
+        manager.update('X', 100, millis(9, 15))
+        manager.update('X', 101, millis(9, 17))
+        gap = recovered(9, 16, 99)
+        self.assertEqual(manager.insert_missing_completed(
+            'X', {gap.timestamp: gap}), 1)
+        gap.update(999, 50)
+        history, _ = manager.snapshot('X')
+        repaired = next(c for c in history
+                        if c.timestamp == datetime(2026, 10, 16, 9, 16))
+        self.assertIsNot(repaired, gap)
+        self.assertEqual(repaired.close, 99)
+        self.assertEqual(repaired.volume, 1)
+
+
 if __name__ == '__main__':
     unittest.main()
