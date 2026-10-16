@@ -24,10 +24,13 @@ def get_premarket_evidence():
 
     now = datetime.now(ZoneInfo("Asia/Kolkata"))
     prediction, sources = assess_verified_sources({}, now=now)
+    missing_sources = [key for key, source in sources.items() if source['status'] != 'VERIFIED']
     return {
         "mode": "RESEARCH_ONLY",
         "order_execution_enabled": False,
         "status": prediction.status,
+        "automatic_forecast_ready": not missing_sources and prediction.status != "WAIT_DATA_UNAVAILABLE",
+        "missing_sources": missing_sources,
         "direction": prediction.direction,
         "evidence_score": prediction.evidence_score,
         "as_of_ist": prediction.as_of_ist,
