@@ -1,0 +1,25 @@
+name: Feed Timing Diagnostics Tests
+
+on:
+  push:
+    branches:
+      - feature/isolated-feed-timing-diagnostics
+  pull_request:
+    paths:
+      - 'v2/backend/scanner.py'
+      - 'tests/test_feed_timing_diagnostics.py'
+      - '.github/workflows/feed-timing-diagnostics.yml'
+  workflow_dispatch:
+
+jobs:
+  offline-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile scanner and test module
+        run: python -m py_compile v2/backend/scanner.py tests/test_feed_timing_diagnostics.py
+      - name: Run offline timing regression tests
+        run: python -m unittest discover -s tests -p 'test_feed_timing_diagnostics.py' -v
