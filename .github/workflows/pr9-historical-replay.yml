@@ -54,7 +54,7 @@ jobs:
             exit 1
           fi
       - name: Install read-only history SDK
-        run: python -m pip install --disable-pip-version-check upstox-python-sdk
+        run: python -m pip install --disable-pip-version-check upstox-python-sdk requests
       - name: Fetch and trace in temporary private runner storage
         shell: bash
         env:
