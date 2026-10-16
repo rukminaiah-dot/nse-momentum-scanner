@@ -1,0 +1,18 @@
+name: Isolated Worker Manager Integration Tests
+on:
+  push:
+    branches:
+      - feature/isolated-recovery-worker-manager-integration
+  workflow_dispatch:
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m py_compile v2/backend/candle_manager.py v2/backend/gap_recovery_worker.py v2/backend/verified_gap_recovery.py tests/test_worker_manager_integration.py
+      - run: python -m unittest discover -s tests -p 'test_atomic_candle_state.py' -v
+      - run: python -m unittest discover -s tests -p 'test_scanner_close_gate.py' -v
+      - run: python -m unittest discover -s tests -p 'test_worker_manager_integration.py' -v
