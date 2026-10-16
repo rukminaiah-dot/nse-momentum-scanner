@@ -215,5 +215,29 @@ class VerifiedRecoverySmokeTests(unittest.TestCase):
         self.assertEqual(worker.status()["pending"], 0)
 
 
+    def test_thread_start_failure_releases_slot(self):
+        from unittest.mock import patch
+        worker = GapRecoveryWorker(
+            lambda _: self.fail("broker fetch must not run"),
+            lambda _: self.fail("snapshot must not run"),
+            lambda *_: self.fail("merge must not run"),
+            max_pending=1, min_request_spacing=0.001)
+        with patch("v2.backend.gap_recovery_worker.threading.Thread.start",
+                   side_effect=RuntimeError("simulated thread startup failure")):
+            self.assertFalse(worker.request("START_FAILURE"))
+        status = worker.status()
+        self.assertEqual(status["pending"], 0)
+        self.assertEqual(status["requested"], 0)
+        self.assertEqual(status["failed"], 1)
+        self.assertEqual(status["rejected_cooldown"], 0)
+
+    def test_invalid_worker_limits_fail_closed(self):
+        for kwargs in ({"max_pending": 0}, {"max_pending": True},
+                       {"cooldown": 0}, {"min_request_spacing": 0}):
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                GapRecoveryWorker(lambda _: [], lambda _: ([], None),
+                                  lambda *_: 0, **kwargs)
+
+
 if __name__ == "__main__":
     unittest.main()
