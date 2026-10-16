@@ -1,6 +1,5 @@
 import sqlite3
 import time
-from time import perf_counter as _diagnostic_perf_counter
 import os
 import upstox_client
 from .market_config import INDICES
@@ -561,11 +560,12 @@ def on_tick(key, data):
     # Diagnostic-only timing: separate tick age, candle close lag, and
     # post-close processing cost. No trading decisions depend on these values.
     if candle_closed:
-        diagnostic_started = _diagnostic_perf_counter()
+        from time import perf_counter as diagnostic_perf_counter
+        diagnostic_started = diagnostic_perf_counter()
         tick_age_ms = max(0, int(time.time() * 1000) - ts)
         write_candle_quality()
         analyse(key)
-        processing_ms = round((_diagnostic_perf_counter() - diagnostic_started) * 1000, 1)
+        processing_ms = round((diagnostic_perf_counter() - diagnostic_started) * 1000, 1)
         print(
             "FEED_TIMING:", key,
             "| TICK_AGE_MS:", tick_age_ms,
