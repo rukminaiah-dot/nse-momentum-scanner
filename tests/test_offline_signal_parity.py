@@ -51,6 +51,52 @@ class OfflineSignalParityTests(unittest.TestCase):
         bars = history(29)
         self.assertEqual(five_minute_trend(bars), "BULLISH")
 
+    def test_incomplete_last_bucket_cannot_reverse_trend(self):
+        bars = history(30)
+        for candle in bars[-4:]:
+            candle.close = 1.0
+        # The 09:40 bucket has five candles, so make it incomplete by
+        # dropping its first candle; a four-bar bucket must be ignored.
+        bars = [c for c in bars if c.timestamp != datetime(2026, 10, 16, 9, 40)]
+        self.assertEqual(five_minute_trend(bars), "BULLISH")
+
+    def test_stock_zero_volume_cannot_confirm_buy(self):
+        bars = history()
+        for candle in bars:
+            candle.volume = 0
+        result = evaluate(bars, session_date=datetime(2026, 10, 16).date(),
+                          is_stock=True)
+        self.assertEqual(result["rvol"], 0.0)
+        self.assertNotEqual(result["signal"], "BUY")
+
+    def test_index_excludes_previous_session_from_ema(self):
+        bars = history()
+        previous = history(25)
+        for candle in previous:
+            candle.timestamp -= timedelta(days=1)
+            candle.close = 500.0
+        current = evaluate(bars, session_date=datetime(2026, 10, 16).date(),
+                           is_index=True)
+        combined = evaluate(previous + bars,
+                            session_date=datetime(2026, 10, 16).date(),
+                            is_index=True)
+        self.assertEqual(current["ema9"], combined["ema9"])
+        self.assertEqual(current["ema20"], combined["ema20"])
+        self.assertEqual(current["signal"], combined["signal"])
+
+    def test_overnight_stock_ema_can_use_prior_session_history(self):
+        bars = history()
+        previous = history(25)
+        for candle in previous:
+            candle.timestamp -= timedelta(days=1)
+            candle.close = 500.0
+        current = evaluate(bars, session_date=datetime(2026, 10, 16).date(),
+                           is_stock=True)
+        combined = evaluate(previous + bars,
+                            session_date=datetime(2026, 10, 16).date(),
+                            is_stock=True)
+        self.assertNotEqual(current["ema20"], combined["ema20"])
+
 
 if __name__ == "__main__":
     unittest.main()
