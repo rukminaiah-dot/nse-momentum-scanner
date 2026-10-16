@@ -183,5 +183,37 @@ class VerifiedRecoverySmokeTests(unittest.TestCase):
         self.assertEqual(worker.status()["verified_insertions"], 0)
 
 
+    def test_merge_rejects_timestamp_mismatch(self):
+        recovered = validated_completed_rows([row(self.t0)], self.now)
+        candle = recovered[self.t0]
+        candle.timestamp = self.t1
+        with self.assertRaises(ValueError):
+            merge_verified_missing([], recovered, active_minute=self.t1 + timedelta(minutes=1))
+
+    def test_worker_enforces_global_pending_limit(self):
+        import threading
+        started = threading.Event()
+        release = threading.Event()
+        existing = validated_completed_rows([row(self.t0)], self.now)[self.t0]
+        def blocked_fetch(_):
+            started.set()
+            if not release.wait(5):
+                raise TimeoutError("test worker was not released")
+            return [row(self.t1)]
+        worker = GapRecoveryWorker(
+            blocked_fetch,
+            lambda _: ([existing], self.t1 + timedelta(minutes=1)),
+            lambda *_: 0, max_pending=1, min_request_spacing=0.001)
+        try:
+            self.assertTrue(worker.request("FIRST"))
+            self.assertTrue(started.wait(5))
+            self.assertFalse(worker.request("SECOND"))
+        finally:
+            release.set()
+            worker.join(timeout=5)
+        self.assertEqual(worker.status()["rejected_pending"], 1)
+        self.assertEqual(worker.status()["pending"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()
