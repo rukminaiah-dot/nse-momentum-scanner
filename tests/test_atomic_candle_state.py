@@ -102,8 +102,10 @@ class AtomicCandleStateTests(unittest.TestCase):
         count = manager.insert_missing_completed(
             'X', {old.timestamp: old, recent.timestamp: recent}, limit=1)
         history, _ = manager.snapshot('X')
+        # The limit caps recovered minutes, not preexisting live history.
         self.assertEqual([c.timestamp for c in history],
-                         [datetime(2026, 10, 16, 9, 18)])
+                         [datetime(2026, 10, 16, 9, 15),
+                          datetime(2026, 10, 16, 9, 18)])
         self.assertEqual(count, 1)
 
 
