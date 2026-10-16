@@ -26,7 +26,7 @@ def classify_percentage_change(change_pct, *, neutral_band_pct=0.15):
     """Return -1, 0 or 1 for a finite percentage change, else None."""
     if isinstance(change_pct, bool) or not isinstance(change_pct, (float, int)):
         return None
-    if not isfinite(change_pct) or neutral_band_pct < 0:
+    if (isinstance(neutral_band_pct, bool) or not isinstance(neutral_band_pct, (int, float)) or not isfinite(neutral_band_pct) or neutral_band_pct < 0 or not isfinite(change_pct)):
         return None
     return 1 if change_pct > neutral_band_pct else -1 if change_pct < -neutral_band_pct else 0
 
