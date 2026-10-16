@@ -197,6 +197,26 @@ class OfflineSignalParityTests(unittest.TestCase):
             evaluate(history(), session_date=datetime(2026, 10, 16).date(),
                      is_index=True, is_stock=True)
 
+    def test_sixty_bar_cap_can_flip_both_index_classes(self):
+        from v2.backend.offline_signal_parity import evaluate
+        for direction, seed, expected in ((1, 150.0, "BUY"),
+                                           (-1, 50.0, "SELL")):
+            prices = [seed] * 340 + [100 + direction * i * 0.0001
+                                     for i in range(60)]
+            bars = []
+            start = datetime(2026, 10, 16, 9, 15)
+            for i, price in enumerate(prices):
+                candle = Candle(price, 100)
+                candle.timestamp = start + timedelta(minutes=i)
+                bars.append(candle)
+            for primary in (True, False):
+                with self.subTest(direction=direction, primary=primary):
+                    opts = dict(session_date=start.date(), is_index=True,
+                                is_primary_index=primary)
+                    self.assertEqual(evaluate(bars, **opts)["signal"], "HOLD")
+                    self.assertEqual(evaluate(bars[-60:], **opts)["signal"],
+                                     expected)
+
 
 if __name__ == "__main__":
     unittest.main()
