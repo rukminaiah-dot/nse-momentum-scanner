@@ -19,7 +19,7 @@ class PremarketSourceTests(unittest.TestCase):
         self.assertEqual(gift_nifty_evidence(last_price=25000, **kwargs), 0)
 
     def test_previous_session_direction(self):
-        kwargs = dict(previous_open=25000, observed_at_ist=NOW.isoformat(), now=NOW)
+        kwargs = dict(previous_open=25000, observed_at_ist=NOW.isoformat(), now=NOW, session_date_ist="2026-10-15", expected_previous_session_date_ist="2026-10-15")
         self.assertEqual(previous_session_evidence(previous_close=25100, **kwargs), 1)
         self.assertEqual(previous_session_evidence(previous_close=24900, **kwargs), -1)
 
@@ -45,7 +45,7 @@ class PremarketSourceTests(unittest.TestCase):
                 "observed_at_ist": NOW.isoformat()
             },
             "previous_session": {
-                "verified": True, "source": "OFFLINE_TEST", "instrument": "TEST_INDEX", "session_verified": True, "previous_open": 25000, "previous_close": 24900,
+                "verified": True, "source": "OFFLINE_TEST", "instrument": "TEST_INDEX", "session_verified": True, "previous_open": 25000, "previous_close": 24900, "session_date_ist": "2026-10-15", "expected_previous_session_date_ist": "2026-10-15",
                 "observed_at_ist": NOW.isoformat()
             },
         }, now=NOW)
