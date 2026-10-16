@@ -7,6 +7,8 @@ on:
       - 'v2/backend/**'
       - 'v2/frontend/index.html'
       - 'tests/test_premarket_*.py'
+      - 'tests/test_active_trade_retention.py'
+      - 'tests/test_trade_hold_retention.py'
       - 'test_verified_gap_recovery.py'
       - 'test_gap_recovery_worker.py'
       - 'test_recovery_trigger.py'
@@ -98,3 +100,6 @@ jobs:
 
       - name: Offline premarket source and dashboard contract tests
         run: python -m unittest discover -s tests -p 'test_premarket_*.py' -v
+
+      - name: Offline active trade retention and HOLD safety tests
+        run: python -m unittest discover -s tests -p 'test_*trade*retention.py' -v
