@@ -61,7 +61,7 @@ class RetentionTests(unittest.TestCase):
     def test_ema_seed_changes_with_retention_even_above_period(self):
         # EMA starts from the first value, so a cap above EMA20 is not
         # mathematically equivalent to unbounded history.
-        values = [100.0] * 80 + [150.0] * 20
+        values = [100.0 + i for i in range(80)] + [150.0] * 20
         self.assertNotEqual(ema(values, 20), ema(values[-60:], 20))
 
     def test_overnight_rollover_preserves_latest_cross_session_history(self):
