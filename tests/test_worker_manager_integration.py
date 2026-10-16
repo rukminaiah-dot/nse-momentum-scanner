@@ -29,6 +29,25 @@ class WorkerManagerIntegrationTests(unittest.TestCase):
         fake_datetime.now.return_value = datetime(2026, 10, 16, 10, 0, tzinfo=IST)
         self.addCleanup(clock.stop)
 
+    def test_close_rejects_requests_while_fetch_is_pending(self):
+        entered, release = Event(), Event()
+        def fetch(key):
+            entered.set()
+            release.wait(5)
+            return []
+        worker = GapRecoveryWorker(fetch, lambda key: ([object()], datetime(2026, 10, 16, 9, 17)),
+                                   lambda *args: 0, min_request_spacing=0.001)
+        self.assertTrue(worker.request('X'))
+        self.assertTrue(entered.wait(5))
+        try:
+            worker.close(timeout=0.01)
+            self.assertFalse(worker.request('Y'))
+            self.assertEqual(worker.status()['pending'], 1)
+        finally:
+            release.set()
+            worker.join(timeout=5)
+        self.assertEqual(worker.status()['pending'], 0)
+
     def test_worker_fills_only_missing_minute_and_is_idempotent(self):
         manager = CandleManager()
         manager.update("X", 100, ts(9, 15))
