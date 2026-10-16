@@ -50,8 +50,8 @@ class OfflinePreloadSelectionTests(unittest.TestCase):
         historical = bars(self.start - timedelta(days=1), 90)
         self.assertEqual(self.select(historical, []), historical)
         self.assertEqual(self.select(historical, bars(self.cutoff, 2)), historical)
-        self.assertEqual(self.select(historical, bars(self.start, 1)),
-                         bars(self.start, 1))
+        first_current = bars(self.start, 1)
+        self.assertEqual(self.select(historical, first_current), first_current)
 
     def test_invalid_limit_rejected(self):
         for limit in (0, -1, True, 1.5):
