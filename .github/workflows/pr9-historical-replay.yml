@@ -1,0 +1,88 @@
+name: PR9 Read-Only Historical Replay
+
+on:
+  workflow_dispatch:
+    inputs:
+      instrument_key:
+        description: "Approved Upstox instrument key (e.g. NSE_EQ|...)"
+        required: true
+        type: string
+      from_date:
+        description: "Completed historical start date YYYY-MM-DD"
+        required: true
+        type: string
+      to_date:
+        description: "Completed historical end date YYYY-MM-DD"
+        required: true
+        type: string
+      kind:
+        description: "Scanner instrument type"
+        required: true
+        type: choice
+        options:
+          - stock
+          - primary-index
+          - secondary-index
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr9-historical-replay
+  cancel-in-progress: false
+
+jobs:
+  offline-historical-trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      NSE_RECOVERY_MODE: disabled
+      NSE_ENABLE_VERIFIED_GAP_RECOVERY: "0"
+      UPSTOX_ACCESS_TOKEN: ${{ secrets.UPSTOX_ACCESS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/isolated-recovery-worker-manager-integration
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify authorization secret exists
+        shell: bash
+        run: |
+          if [ -z "$UPSTOX_ACCESS_TOKEN" ]; then
+            echo "::error::UPSTOX_ACCESS_TOKEN repository Actions secret is missing. No API request made."
+            exit 1
+          fi
+      - name: Install read-only history SDK
+        run: python -m pip install --disable-pip-version-check upstox-python-sdk
+      - name: Fetch and trace in temporary private runner storage
+        shell: bash
+        env:
+          INSTRUMENT_KEY: ${{ inputs.instrument_key }}
+          FROM_DATE: ${{ inputs.from_date }}
+          TO_DATE: ${{ inputs.to_date }}
+          KIND: ${{ inputs.kind }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/pr9-private"
+          python scripts/export_upstox_historical_readonly.py \
+            --instrument-key "$INSTRUMENT_KEY" \
+            --from-date "$FROM_DATE" --to-date "$TO_DATE" \
+            --output "$RUNNER_TEMP/pr9-private/candles.csv" --execute
+          python scripts/replay_historical_candles_offline.py \
+            --input "$RUNNER_TEMP/pr9-private/candles.csv" \
+            --output "$RUNNER_TEMP/pr9-private/trace.json" --kind "$KIND"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          report = json.loads((Path(os.environ["RUNNER_TEMP"]) / "pr9-private/trace.json").read_text())
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as out:
+              out.write("## PR #9 historical trace (NOT parity acceptance)\n\n")
+              out.write(f"- Candle rows: {report['candles']}\n")
+              out.write(f"- Sessions: {len(report['sessions'])}\n")
+              out.write(f"- Missing-minute intervals: {len(report['gaps'])}\n")
+              out.write(f"- Input SHA-256: \`{report['input_sha256']}\`\n")
+              out.write("- Status: **TRACE ONLY — independent baseline and owner sign-off still required**\n")
+          PY
+          rm -f "$RUNNER_TEMP/pr9-private/candles.csv" "$RUNNER_TEMP/pr9-private/trace.json"
