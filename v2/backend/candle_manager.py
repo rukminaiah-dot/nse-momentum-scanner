@@ -34,10 +34,12 @@ class CandleManager:
             boundary = active["minute"]
             existing = self.completed.get(key, [])
             by_minute = {c.timestamp: c for c in existing}
-            inserted = 0
-            for minute, candle in sorted(recovered.items()):
+            # Validate the whole batch before touching shared history.
+            for minute, candle in recovered.items():
                 if getattr(candle, "timestamp", None) != minute:
                     raise ValueError("recovered candle timestamp mismatch")
+            inserted = 0
+            for minute, candle in sorted(recovered.items()):
                 if minute.date() != boundary.date() or minute >= boundary:
                     continue
                 if minute in by_minute:
