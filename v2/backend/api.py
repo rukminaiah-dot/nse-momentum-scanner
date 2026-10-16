@@ -56,8 +56,10 @@ def get_trades():
     for item in items:
         item["symbol"] = instrument_symbols.get(item["symbol"], item["symbol"])
         # Signal time and API refresh time are not verified quote timestamps.
-        item["quote_freshness"] = quote_freshness()
-        item["quote_timestamp_verified"] = False
+        item["quote_freshness"] = quote_freshness(
+            observed_at_ist=item.get("quote_observed_at_ist"),
+            timestamp_verified=item.get("quote_timestamp_verified") == 1)
+        item["quote_timestamp_verified"] = item.get("quote_timestamp_verified") == 1
     return items
 
 from fastapi.responses import FileResponse
