@@ -131,5 +131,16 @@ class AtomicCandleStateTests(unittest.TestCase):
                          [c.timestamp for c in after])
 
 
+    def test_duplicate_recovery_does_not_replace_history_list(self):
+        manager = CandleManager()
+        manager.update('X', 100, millis(9, 15))
+        manager.update('X', 101, millis(9, 17))
+        original_history = manager.completed['X']
+        duplicate = recovered(9, 15, 999)
+        self.assertEqual(manager.insert_missing_completed(
+            'X', {duplicate.timestamp: duplicate}), 0)
+        self.assertIs(manager.completed['X'], original_history)
+
+
 if __name__ == '__main__':
     unittest.main()
