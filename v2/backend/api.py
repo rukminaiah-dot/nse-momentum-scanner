@@ -21,17 +21,20 @@ def get_premarket_evidence():
     from datetime import datetime
     from zoneinfo import ZoneInfo
     from .premarket_sources import assess_verified_sources
+    from .premarket_readiness import premarket_readiness
 
     now = datetime.now(ZoneInfo("Asia/Kolkata"))
     prediction, sources = assess_verified_sources({}, now=now)
     missing_sources = [key for key, source in sources.items() if source['status'] != 'VERIFIED']
-    forecast_ready = not missing_sources and prediction.status == "WAIT_LIVE_CONFIRMATION"
+    readiness = premarket_readiness(prediction, sources)
+    forecast_ready = readiness["research_forecast_ready"]
     return {
         "mode": "RESEARCH_ONLY",
         "order_execution_enabled": False,
         "status": prediction.status,
         "automatic_forecast_ready": forecast_ready,
         "missing_sources": missing_sources,
+        "readiness": readiness,
         "direction": prediction.direction,
         "evidence_score": prediction.evidence_score,
         "as_of_ist": prediction.as_of_ist,
