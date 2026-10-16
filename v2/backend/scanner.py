@@ -70,7 +70,7 @@ def write_candle_quality():
     today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
     rows = {}
     for key in NIFTY_200.values():
-        history = candles.completed.get(key, [])
+        history, _ = candles.snapshot(key)
         recent = history[-6:]
         same_day = len(recent) == 6 and all(
             getattr(c, "timestamp", None) is not None
@@ -192,7 +192,7 @@ def preload_history(key):
         except Exception as exc:
             print("INTRADAY PRELOAD FAILED:", key, type(exc).__name__, flush=True)
 
-    candles.completed[key] = loaded
+    candles.preload_completed(key, loaded)
     print("PRELOAD:", key, len(loaded), "historical candles")
 
 def five_minute_trend(history):
@@ -511,17 +511,17 @@ if __name__ == "__main__":
         try:
             preload_history(key)
             time.sleep(0.15)
-            loaded = len(candles.completed.get(key, []))
+            loaded = len(candles.snapshot(key)[0])
 
             if key == INDICES["NIFTY 50"] and loaded >= 20:
-                closes = [c.close for c in candles.completed[key]]
+                closes = [c.close for c in candles.snapshot(key)[0]]
                 market_regimes["NIFTY 50"] = index_signal(closes[-1], ema(closes, 9), ema(closes, 20), None)
                 print("INITIAL NIFTY 50 REGIME:", market_regimes["NIFTY 50"])
 
             # Preserve actual previous-session stock prices for validation when
             # the market is closed. Never turn preloaded history into a BUY.
             if key in NIFTY_200.values() and loaded >= 20:
-                history = candles.completed[key]
+                history, _ = candles.snapshot(key)
                 closes = [item.close for item in history]
                 if hasattr(history[-1], "timestamp"):
                     save_scan_result(
@@ -541,7 +541,7 @@ if __name__ == "__main__":
             print("PRELOAD: live candle warmup for", key)
 
     for key in INDICES.values():
-        if len(candles.completed.get(key, [])) >= 20:
+        if len(candles.snapshot(key)[0]) >= 20:
             analyse(key)
     # Display last available index values before live candles arrive.
     # These are informational only; do not run trading analysis here.
