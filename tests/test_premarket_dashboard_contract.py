@@ -26,6 +26,14 @@ class PremarketDashboardContractTests(unittest.TestCase):
             "fii_dii", "previous_session"
         })
 
+    def test_active_trades_are_separate_from_closed_history(self):
+        page = HTML.read_text(encoding="utf-8")
+        self.assertIn('id="active-trades"', page)
+        self.assertIn('id="trades"', page)
+        self.assertIn("trades.filter(t=>t.status!=='CLOSED')", page)
+        self.assertIn("trades.filter(t=>t.status==='CLOSED')", page)
+        self.assertIn("No active simulated trades", page)
+
     def test_dashboard_shows_missing_automatic_sources(self):
         page = HTML.read_text(encoding="utf-8")
         self.assertIn("WAIT — automatic forecast unavailable", page)
