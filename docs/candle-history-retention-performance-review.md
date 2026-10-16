@@ -110,3 +110,16 @@ Verified [Worker CI run 38948178483](https://github.com/rukminaiah-dot/nse-momen
 | 500 | 1950 | 3.8351 | 3.9916 | 4.0816 | 3.9761 | 320.72 |
 
 **Interpretation:** snapshot copying scales with per-symbol history length, while total retained memory scales with symbol count and history. The 50×1950 snapshot p99 outlier illustrates scheduler/runtime noise in a small 200-iteration sample. These results do not justify turning on a retention cap because correctness remains the primary blocker. Remaining performance gaps: dedicated recovery-merge latency distribution, measured lock-hold time, multi-worker contention, representative hardware and realistic feed rates.
+
+
+## Synthetic recovery-merge latency results (2026-10-17)
+
+[Worker CI 38948778930](https://github.com/rukminaiah-dot/nse-momentum-scanner/actions/runs/38948778930) passed all three recovery-merge benchmark cases at [69c34dd](https://github.com/rukminaiah-dot/nse-momentum-scanner/commit/69c34ddebb94231c85e2882a0509929ec827b48b). Each case uses 100 independent fresh managers, an active-minute boundary, idempotence checks and only same-session missing-minute candidates; prior-day retained history is not recovered.
+
+| Preloaded history (minutes) | Missing recovered per merge | Merge p50 ms | Merge p95 ms | Merge p99 ms |
+|---:|---:|---:|---:|---:|
+| 60 | 6 | 0.0420 | 0.0507 | 0.0800 |
+| 390 | 39 | 0.2818 | 0.3274 | 0.5252 |
+| 1950 | 49 | 1.1127 | 1.1619 | 1.2722 |
+
+The 1950-minute fixture spans calendar dates, but recovery candidates are confined to the active date. These numbers measure **single-threaded manager merge only** on GitHub-hosted Linux/Python 3.11, not broker latency, row verification, websocket scheduling, multi-worker contention, or production performance. They are not approval to enable a retention cap.
