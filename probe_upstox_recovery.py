@@ -18,6 +18,18 @@ def main():
     parser.add_argument("--required-minute", action="append", default=[],
                         help="Exact completed IST minute to verify (YYYY-MM-DDTHH:MM); repeatable")
     args = parser.parse_args()
+    # The intraday endpoint and validator cover the current IST session only.
+    # Reject historical requests before touching credentials or the broker API.
+    today_ist = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+    for raw_minute in args.required_minute:
+        try:
+            minute = datetime.fromisoformat(raw_minute)
+        except ValueError:
+            parser.error("--required-minute must use YYYY-MM-DDTHH:MM")
+        if (minute.tzinfo is not None or minute.second or minute.microsecond
+                or minute.date() != today_ist):
+            parser.error("--required-minute must be a completed minute from today in IST; "
+                         "historical dates require a separate historical-candle endpoint")
     token = os.getenv("UPSTOX_ACCESS_TOKEN")
     if not token:
         print("FAIL: UPSTOX_ACCESS_TOKEN is not set", file=sys.stderr)
