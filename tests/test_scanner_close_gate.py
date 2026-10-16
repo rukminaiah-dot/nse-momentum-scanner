@@ -49,7 +49,18 @@ class ScannerCloseGateTests(unittest.TestCase):
             and isinstance(node.func, ast.Name)
             and node.func.id == "analyse"
         ]
+        all_analysis_calls = [
+            node for node in ast.walk(tick)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "analyse"
+        ]
         self.assertTrue(guarded_calls, "analysis must be gated by live close result")
+        self.assertEqual(
+            {id(node) for node in all_analysis_calls},
+            {id(node) for node in guarded_calls},
+            "every on_tick analysis call must be inside the live-close guard",
+        )
 
 
 if __name__ == "__main__":
