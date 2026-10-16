@@ -221,5 +221,19 @@ class AtomicCandleStateTests(unittest.TestCase):
         self.assertEqual(len(history_after), 1)
 
 
+    def test_update_returns_close_event_only_on_live_rollover(self):
+        manager = CandleManager()
+        self.assertIsNone(manager.update('X', 100, millis(9, 15)))
+        self.assertIsNone(manager.update('X', 101, millis(9, 15)))
+        closed = manager.update('X', 102, millis(9, 17))
+        self.assertIsNotNone(closed)
+        self.assertEqual(closed.timestamp, datetime(2026, 10, 16, 9, 15))
+        missing = recovered(9, 16)
+        self.assertEqual(manager.insert_missing_completed(
+            'X', {missing.timestamp: missing}), 1)
+        self.assertIsNone(manager.update('X', 103, millis(9, 17)))
+        self.assertIsNone(manager.update('X', 999, millis(9, 16)))
+
+
 if __name__ == '__main__':
     unittest.main()
