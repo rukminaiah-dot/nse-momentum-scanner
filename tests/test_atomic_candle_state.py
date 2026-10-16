@@ -248,5 +248,45 @@ class AtomicCandleStateTests(unittest.TestCase):
         self.assertIsNone(manager.update('X', 102, millis(9, 17)))
 
 
+    def test_recovery_waits_for_live_rollover_and_preserves_closed_bar(self):
+        import threading
+        manager = CandleManager()
+        manager.update('X', 100, millis(9, 15))
+        manager.update('X', 101, millis(9, 17))
+        attempted = threading.Event()
+        finished = threading.Event()
+        errors = []
+        recovered_bar = recovered(9, 17, 999)
+
+        def repair():
+            try:
+                attempted.set()
+                manager.insert_missing_completed(
+                    'X', {recovered_bar.timestamp: recovered_bar})
+            except Exception as exc:
+                errors.append(exc)
+            finally:
+                finished.set()
+
+        # Force the rollover to win the manager lock. The recovery worker
+        # must re-read the new active boundary rather than overwrite 09:17.
+        with manager._state_lock:
+            thread = threading.Thread(target=repair)
+            thread.start()
+            self.assertTrue(attempted.wait(timeout=5))
+            self.assertFalse(finished.is_set())
+            closed = manager.update('X', 102, millis(9, 18))
+            self.assertEqual(closed.timestamp, datetime(2026, 10, 16, 9, 17))
+        thread.join(timeout=5)
+        self.assertFalse(thread.is_alive())
+        self.assertFalse(errors)
+        history, active = manager.snapshot('X')
+        self.assertEqual(active, datetime(2026, 10, 16, 9, 18))
+        self.assertEqual([c.timestamp for c in history],
+                         [datetime(2026, 10, 16, 9, 15),
+                          datetime(2026, 10, 16, 9, 17)])
+        self.assertEqual(history[-1].close, 101)
+
+
 if __name__ == '__main__':
     unittest.main()
