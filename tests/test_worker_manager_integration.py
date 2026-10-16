@@ -2,6 +2,7 @@
 import unittest
 from datetime import datetime
 from threading import Event
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from v2.backend.candle_manager import CandleManager
@@ -20,6 +21,13 @@ def row(hour, minute, price):
 
 
 class WorkerManagerIntegrationTests(unittest.TestCase):
+    def setUp(self):
+        # Broker validation must not depend on the day CI happens to run.
+        clock = patch('v2.backend.gap_recovery_worker.datetime')
+        fake_datetime = clock.start()
+        fake_datetime.now.return_value = datetime(2026, 10, 16, 10, 0, tzinfo=IST)
+        self.addCleanup(clock.stop)
+
     def test_worker_fills_only_missing_minute_and_is_idempotent(self):
         manager = CandleManager()
         manager.update("X", 100, ts(9, 15))
