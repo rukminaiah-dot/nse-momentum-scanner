@@ -52,8 +52,12 @@ def get_trades():
     ).fetchall()
     con.close()
     items = [dict(row) for row in rows]
+    from .trade_quote_freshness import quote_freshness
     for item in items:
         item["symbol"] = instrument_symbols.get(item["symbol"], item["symbol"])
+        # Signal time and API refresh time are not verified quote timestamps.
+        item["quote_freshness"] = quote_freshness()
+        item["quote_timestamp_verified"] = False
     return items
 
 from fastapi.responses import FileResponse
