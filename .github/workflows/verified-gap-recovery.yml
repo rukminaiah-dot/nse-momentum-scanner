@@ -5,6 +5,8 @@ on:
   pull_request:
     paths:
       - 'v2/backend/**'
+      - 'v2/frontend/index.html'
+      - 'tests/test_premarket_*.py'
       - 'test_verified_gap_recovery.py'
       - 'test_gap_recovery_worker.py'
       - 'test_recovery_trigger.py'
@@ -93,3 +95,6 @@ jobs:
 
       - name: Offline staging isolation tests
         run: python -m unittest discover -s tests -p test_staging_health.py -v
+
+      - name: Offline premarket source and dashboard contract tests
+        run: python -m unittest discover -s tests -p 'test_premarket_*.py' -v
