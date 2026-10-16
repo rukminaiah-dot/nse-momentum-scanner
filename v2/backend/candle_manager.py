@@ -46,8 +46,10 @@ class CandleManager:
                     continue
                 by_minute[minute] = candle
                 inserted += 1
-            self.completed[key] = [by_minute[t] for t in sorted(by_minute)[-limit:]]
-            return inserted
+            retained = sorted(by_minute)[-limit:]
+            self.completed[key] = [by_minute[t] for t in retained]
+            return sum(1 for minute in recovered if minute in retained
+                       and minute not in {c.timestamp for c in existing})
 
     def update(self, key, price, ts, volume=0):
         with self._state_lock:
