@@ -7,6 +7,7 @@ from .stock_universe import NIFTY_200
 from .candles import Candle
 from .upstox_live import UpstoxLiveV3
 from .candle_manager import CandleManager
+from .gap_recovery_worker import GapRecoveryWorker
 from .indicators import ema, momentum, atr
 from .signal_engine import generate_signal
 from .market_regime import index_signal
@@ -14,6 +15,50 @@ from .trade_engine import buy, update_state, sell
 from .database import DB_PATH, init_db, reset_scanner_results
 
 candles = CandleManager()
+
+_recovery_worker = None
+
+
+def fetch_recovery_rows(key):
+    """Fetch Upstox intraday rows off the websocket callback thread."""
+    config = upstox_client.Configuration()
+    config.access_token = os.environ["UPSTOX_ACCESS_TOKEN"]
+    api = upstox_client.HistoryV3Api(upstox_client.ApiClient(config))
+    response = api.get_intra_day_candle_data(key, "minutes", "1")
+    return response.data.candles or []
+
+
+def configure_gap_recovery(*, enabled=False, fetch_rows=None):
+    """Explicit opt-in after preload; production default stays disabled."""
+    global _recovery_worker
+    if not enabled:
+        _recovery_worker = None
+        return None
+    _recovery_worker = GapRecoveryWorker(
+        fetch_rows or fetch_recovery_rows,
+        candles.snapshot,
+        candles.merge_verified_recovery,
+    )
+    return _recovery_worker
+
+
+def request_recovery_on_gap(key):
+    """Enqueue only for an observed same-session missing minute."""
+    worker = _recovery_worker
+    if worker is None:
+        return False
+    history, active = candles.snapshot(key)
+    if active is None or len(history) < 2:
+        return False
+    latest, previous = history[-1].timestamp, history[-2].timestamp
+    if (latest.date() != active.date() or previous.date() != active.date()
+            or latest >= active or latest <= previous):
+        return False
+    from datetime import timedelta
+    if latest - previous <= timedelta(minutes=1):
+        return False
+    return worker.request(key)
+
 active_trades = {}
 instrument_symbols = {key: symbol for symbol, key in {**NIFTY_200, **INDICES}.items()}
 market_regimes = {}
@@ -499,6 +544,7 @@ def on_tick(key, data):
     # Only a live rollover may trigger analysis. Recovery can grow completed
     # history without closing the active candle.
     if closed is not None:
+        request_recovery_on_gap(key)
         write_candle_quality()
         analyse(key)
 
@@ -572,4 +618,5 @@ if __name__ == "__main__":
                 previous_closes.get(key),
             )
 
+    configure_gap_recovery(enabled=False)
     UpstoxLiveV3(on_tick=on_tick).connect()
