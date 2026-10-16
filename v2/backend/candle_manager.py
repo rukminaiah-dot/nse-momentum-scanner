@@ -17,7 +17,7 @@ class CandleManager:
         """Atomically copy completed history and the current active minute."""
         with self._state_lock:
             active = self.current.get(key)
-            return list(self.completed.get(key, [])), (
+            return [copy(candle) for candle in self.completed.get(key, [])], (
                 active["minute"] if active is not None else None)
 
     def preload_completed(self, key, candles):
@@ -29,7 +29,7 @@ class CandleManager:
         with self._state_lock:
             if key in self.current:
                 raise RuntimeError("cannot preload after live candle started")
-            self.completed[key] = list(candles)
+            self.completed[key] = [copy(candle) for candle in candles]
 
     def insert_missing_completed(self, key, recovered, limit=60):
         """Repair history only; never emit a candle-closed event or signal.
