@@ -27,3 +27,15 @@ Status: **not executed; waiting for authorized historical data**. This is a hand
 ## Current blocker
 
 No authorized dataset, usable runtime access or baseline outputs have been demonstrated in this repository review. Existing synthetic test fixtures are **not** a substitute. Do not run live broker requests from CI or mark historical replay complete. The user does not need to create a database or manually write a CSV; the authorized operator can use the existing read-only Upstox integration when access is available.
+
+## Prepared offline exporter (not executed)
+
+`scripts/export_upstox_historical_readonly.py` uses the existing `HistoryV3Api.get_historical_candle_data1` read-only endpoint. By default it only validates CLI inputs and prints a dry-run notice; `--execute` is required to make a request. It imports no scanner, order, or database code, rejects malformed/off-session/duplicate rows and refuses to overwrite files. Use a private path outside the repository and an approved completed-date range. **The tool has not been run against Upstox, and the resulting data would still require provenance and owner approval before replay acceptance.**
+
+Example dry run (no network):
+
+```sh
+python scripts/export_upstox_historical_readonly.py --instrument-key 'NSE_EQ|APPROVED_KEY' --from-date 2026-10-12 --to-date 2026-10-13 --output /tmp/approved-private-candles.csv
+```
+
+An authorized operator must substitute a real approved instrument key and separately authorize any `--execute` invocation. Never put tokens in command arguments or logs.
