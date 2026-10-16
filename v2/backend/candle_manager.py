@@ -38,18 +38,17 @@ class CandleManager:
             for minute, candle in recovered.items():
                 if getattr(candle, "timestamp", None) != minute:
                     raise ValueError("recovered candle timestamp mismatch")
-            inserted = 0
+            original_minutes = set(by_minute)
             for minute, candle in sorted(recovered.items()):
                 if minute.date() != boundary.date() or minute >= boundary:
                     continue
                 if minute in by_minute:
                     continue
                 by_minute[minute] = candle
-                inserted += 1
             retained = sorted(by_minute)[-limit:]
             self.completed[key] = [by_minute[t] for t in retained]
-            return sum(1 for minute in recovered if minute in retained
-                       and minute not in {c.timestamp for c in existing})
+            return sum(1 for minute in retained
+                       if minute in recovered and minute not in original_minutes)
 
     def update(self, key, price, ts, volume=0):
         with self._state_lock:
