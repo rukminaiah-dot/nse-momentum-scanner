@@ -11,6 +11,35 @@ instrument_symbols = {key: symbol for symbol, key in NIFTY_200.items()}
 app = FastAPI(title="NSE Momentum Scanner V2")
 app.include_router(smart_option_router)
 
+
+@app.get("/api/v2/premarket/evidence")
+def get_premarket_evidence():
+    """Fail-closed evidence contract for future verified source adapters.
+
+    No automatic sources are configured. Never fabricate market observations.
+    """
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from .premarket_prediction import WEIGHTS, assess_premarket
+
+    now = datetime.now(ZoneInfo("Asia/Kolkata"))
+    prediction = assess_premarket({}, now=now)
+    return {
+        "mode": "RESEARCH_ONLY",
+        "order_execution_enabled": False,
+        "status": prediction.status,
+        "direction": prediction.direction,
+        "evidence_score": prediction.evidence_score,
+        "as_of_ist": prediction.as_of_ist,
+        "sources": {
+            key: {"weight": weight, "value": None,
+                  "status": "NOT_CONNECTED", "observed_at_ist": None}
+            for key, weight in WEIGHTS.items()
+        },
+        "reasons": list(prediction.reasons),
+        "note": "No verified automatic data sources configured; manual assessment is separate.",
+    }
+
 @app.get("/api/v2/trades")
 def get_trades():
     con = sqlite3.connect(DB_PATH, timeout=10)
