@@ -21,6 +21,12 @@ class OfflineScannerRetentionProbeTests(unittest.TestCase):
             differences = compare(200, history=400)
         self.assertEqual(differences, [])
 
+    def test_invalid_probe_configuration_fails_closed(self):
+        for cap, history in ((20, 400), (60, 60), (200, 100)):
+            with self.subTest(cap=cap, history=history):
+                with self.assertRaises(ValueError):
+                    compare(cap, history=history)
+
 
 if __name__ == "__main__":
     unittest.main()
