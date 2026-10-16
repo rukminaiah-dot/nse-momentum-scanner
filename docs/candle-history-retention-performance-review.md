@@ -60,3 +60,18 @@ Current synthetic core parity compares only `generate_signal` and must not be re
 The isolated scanner decision comparison now distinguishes primary index, secondary index, and stock paths. In the four synthetic price regimes at 400 bars, each retention limit is compared across 4,560 instrument/prefix combinations. The 60-bar candidate produced four index-class disagreements (HOLD→BUY and HOLD→SELL in both index classes); 200 bars produced zero in this limited dataset. The comparison is run from the offline worker workflow. `tests/test_offline_scanner_retention_probe.py` asserts the precise 60-bar negative-control set and the current 200-bar baseline so future edits cannot silently remove those cases.
 
 **Important:** the 200-bar zero-disagreement assertion is a regression baseline, **not** a safety approval threshold. Additional realistic or adversarial datasets are expected to expand the coverage and may reveal 200-bar differences. The replay uses synthetic timestamps beyond normal market-session length, a separate calculation implementation, and no actual scanner startup. None of these findings justify a production or staging cap change. Any decision to enable retention requires a reviewed historical-data replay, independently checked scanner-rule equivalence, and explicit deployment authorization.
+
+## Offline phase exit checklist (2026-10-16)
+
+- [x] Keep retention opt-in and disabled by default; no live scanner configuration change.
+- [x] Exercise preload, closed-candle append, and recovery merge retention paths with offline unit tests.
+- [x] Exercise indicator, core signal, and isolated scanner-model comparisons at 60 and 200 bars.
+- [x] Preserve known 60-bar HOLD→BUY and HOLD→SELL index counterexamples as CI negative controls.
+- [x] Exercise primary/secondary index and stock classifications, session warmup, overnight continuity, missing minutes, and complete five-minute buckets.
+- [x] Test 375-minute previous-session boundaries at both caps.
+- [ ] Independently verify the isolated scanner model against production scanner logic without executing scanner startup, DB writes, or broker/order paths.
+- [ ] Replay representative licensed historical market sessions, including gaps, reversals, and session rollover; inspect not only final signal but intermediate indicator and rejection diagnostics.
+- [ ] Establish reviewed signal-parity acceptance thresholds and memory/latency tradeoffs from the historical replay.
+- [ ] Obtain explicit deployment authorization before activating any cap.
+
+**Disposition:** offline unit/synthetic-validation phase is complete only when the latest branch-head CI has passed. The 60-bar cap has demonstrated signal changes and is not an acceptable transparent replacement. The 200-bar candidate remains research-only. This checklist is not permission to deploy, merge, change broker settings, or access production data.
