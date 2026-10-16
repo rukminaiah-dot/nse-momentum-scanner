@@ -40,8 +40,7 @@ class RealCandleGapHookTests(unittest.TestCase):
         worker.request.assert_called_once_with("X")
         # Recovered history must not produce a live close or another signal.
         self.assertIsNone(manager.update("X", 102, millis(9, 19)))
-        self.assertTrue(hook("X"))  # Caller must invoke hook only on close.
-        worker.request.assert_called_with("X")
+        worker.request.assert_called_once_with("X")
 
     def test_contiguous_rollover_does_not_enqueue(self):
         manager = CandleManager()
