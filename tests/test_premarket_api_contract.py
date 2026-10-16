@@ -29,6 +29,14 @@ class PremarketAPIContractTests(unittest.TestCase):
         self.assertEqual(prediction.status, "WAIT_DATA_UNAVAILABLE")
         self.assertEqual(sum(s["status"] == "VERIFIED" for s in sources.values()), 2)
 
+    def test_unverified_observation_is_not_mistaken_for_disconnected(self):
+        prediction, sources = assess_verified_sources({
+            "gift_nifty": {"verified": False, "last_price": 25100}
+        }, now=NOW)
+        self.assertEqual(sources["gift_nifty"]["status"], "INVALID_OR_UNVERIFIED")
+        self.assertEqual(sources["global_markets"]["status"], "NOT_CONNECTED")
+        self.assertEqual(prediction.status, "WAIT_DATA_UNAVAILABLE")
+
     def test_unknown_source_rejected(self):
         with self.assertRaises(ValueError):
             assess_verified_sources({"untrusted_source": {}}, now=NOW)
