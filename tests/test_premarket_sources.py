@@ -41,11 +41,11 @@ class PremarketSourceTests(unittest.TestCase):
     def test_verified_sources_do_not_force_partial_forecast(self):
         prediction, sources = assess_verified_sources({
             "gift_nifty": {
-                "verified": True, "last_price": 25100, "reference_close": 25000,
+                "verified": True, "source": "OFFLINE_TEST", "instrument": "TEST_INDEX", "session_verified": True, "last_price": 25100, "reference_close": 25000,
                 "observed_at_ist": NOW.isoformat()
             },
             "previous_session": {
-                "verified": True, "previous_open": 25000, "previous_close": 24900,
+                "verified": True, "source": "OFFLINE_TEST", "instrument": "TEST_INDEX", "session_verified": True, "previous_open": 25000, "previous_close": 24900,
                 "observed_at_ist": NOW.isoformat()
             },
         }, now=NOW)
