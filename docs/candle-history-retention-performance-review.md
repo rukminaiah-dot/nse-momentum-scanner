@@ -21,3 +21,11 @@ Before staging: benchmark 50/200/500 symbols with representative histories (60/3
 - Audit remaining direct reads of `completed` and `current` in all consumers before wiring the recovery worker.
 - Validate market-session boundaries and reconnect/replay sequencing in approved read-only staging.
 - Keep draft PRs unmerged until review; no production deploy, real broker orders, or safety-check bypass.
+
+## Opt-in bounded prototype and indicator parity (2026-10-16)
+
+The draft branch now supports `CandleManager(max_completed_per_symbol=N)` for a positive integer N. The default is `None` (unbounded), and the scanner does **not** pass a cap. When opted in, preload, live closure and missing-history recovery retain the most recent N completed candles; the active minute is separate. Offline tests cover Friday-to-Monday rollover and prevent an older recovery candidate from displacing the newest history.
+
+**Important signal-parity blocker:** `indicators.ema(values, period)` initializes from `values[0]` and iterates over **all** retained values, not merely `period` bars. Even a cap of 60, while above the scanner's minimum 20-bar warmup and 20-bar RVOL window, can change EMA9/EMA20 values and downstream signal decisions versus unlimited history. A regression test explicitly demonstrates the difference. The scanner also computes ATR14, five-minute trend from same-session candles, five-bar momentum with six-minute continuity, and RVOL from 20 volumes. A cap must not be selected on nominal indicator periods alone.
+
+**Decision:** Leave the cap disabled in every deployed and broker-connected environment. Before selecting a value, define acceptable EMA drift and signal-parity thresholds, test representative historical price regimes and restarts, and verify whether persistent indicator state or an explicitly defined warmup horizon is required. No safe numeric staging cap is approved by this note.
