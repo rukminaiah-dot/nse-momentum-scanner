@@ -11,6 +11,7 @@ on:
       - 'tests/test_trade_hold_retention.py'
       - 'tests/test_trade_quote_freshness.py'
       - 'tests/test_trade_quote_migration.py'
+      - 'tests/test_live_feed_readiness.py'
       - 'test_verified_gap_recovery.py'
       - 'test_gap_recovery_worker.py'
       - 'test_recovery_trigger.py'
@@ -111,3 +112,6 @@ jobs:
 
       - name: Offline trade quote schema migration tests
         run: python -m unittest discover -s tests -p test_trade_quote_migration.py -v
+
+      - name: Offline live screener readiness safety tests
+        run: python -m unittest discover -s tests -p test_live_feed_readiness.py -v
