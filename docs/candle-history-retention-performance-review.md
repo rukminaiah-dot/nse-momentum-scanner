@@ -123,3 +123,19 @@ Verified [Worker CI run 38948178483](https://github.com/rukminaiah-dot/nse-momen
 | 1950 | 49 | 1.1127 | 1.1619 | 1.2722 |
 
 The 1950-minute fixture spans calendar dates, but recovery candidates are confined to the active date. These numbers measure **single-threaded manager merge only** on GitHub-hosted Linux/Python 3.11, not broker latency, row verification, websocket scheduling, multi-worker contention, or production performance. They are not approval to enable a retention cap.
+
+
+## Synthetic multi-thread contention results (2026-10-17)
+
+[Worker CI 38950035431](https://github.com/rukminaiah-dot/nse-momentum-scanner/actions/runs/38950035431) passed both contention benchmark workloads at [e3be66d](https://github.com/rukminaiah-dot/nse-momentum-scanner/commit/e3be66dbc6d68062e9547700287f33fa47bc8c5a). All figures below are **end-to-end operation latency**, including scheduling and shared-lock waiting, on GitHub-hosted Linux/Python 3.11. They are not direct lock-hold measurements.
+
+| Symbols | History/symbol | Threads | Operation | Samples | p50 ms | p95 ms | p99 ms |
+|---:|---:|---:|---|---:|---:|---:|---:|
+| 50 | 390 | 4 | Snapshot | 134 | 0.8065 | 0.8692 | 0.9514 |
+| 50 | 390 | 4 | Update | 133 | 0.9623 | 2.0027 | 2.9215 |
+| 50 | 390 | 4 | Empty merge | 133 | 0.1103 | 0.1471 | 0.8839 |
+| 200 | 1950 | 8 | Snapshot | 267 | 4.0763 | 6.0253 | 72.6587 |
+| 200 | 1950 | 8 | Update | 267 | 34.5611 | 103.4829 | 126.8856 |
+| 200 | 1950 | 8 | Empty merge | 266 | 0.8003 | 0.8985 | 35.1848 |
+
+**Performance risk / release gate:** the eight-thread, 1950-bar workload produced 103.48 ms update p95 and 126.89 ms update p99. The global manager lock and full-history snapshot copies may cause material tail latency under load. Do **not** treat a green CI run as performance acceptance. Require representative feed-rate and worker concurrency measurements, agreed latency thresholds and owner sign-off before merge or cap activation. The empty-merge operation does not model insertion of recovered bars, and this benchmark does not cover broker fetch, data verification or production scheduling. Keep the default retention cap disabled; short caps have already shown indicator drift in offline tests.
