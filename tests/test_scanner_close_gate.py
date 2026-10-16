@@ -138,5 +138,53 @@ class ScannerCloseGateTests(unittest.TestCase):
         self.assertEqual(spy.requested, ["instrument-A"])
 
 
+    def test_live_close_gate_runtime_ignores_recovery_history_growth(self):
+        from types import SimpleNamespace
+        tree = ast.parse(SCANNER.read_text(encoding="utf-8"))
+        tick = next(node for node in tree.body
+                    if isinstance(node, ast.FunctionDef) and node.name == "on_tick")
+        assignment = next(node for node in ast.walk(tick)
+                          if isinstance(node, ast.Assign)
+                          and isinstance(node.value, ast.Call)
+                          and isinstance(node.value.func, ast.Attribute)
+                          and node.value.func.attr == "update"
+                          and isinstance(node.value.func.value, ast.Name)
+                          and node.value.func.value.id == "candles")
+        guard = next(node for node in ast.walk(tick)
+                     if isinstance(node, ast.If)
+                     and isinstance(node.test, ast.Compare)
+                     and isinstance(node.test.left, ast.Name)
+                     and node.test.left.id == assignment.targets[0].id
+                     and isinstance(node.test.ops[0], ast.IsNot))
+        # Execute the actual close-event assignment and conditional with a
+        # mocked candle manager; no scanner import, broker, or DB access.
+        snippet = ast.Module(body=[assignment, guard], type_ignores=[])
+        ast.fix_missing_locations(snippet)
+
+        class FakeCandles:
+            def __init__(self):
+                self.history_size = 1
+                self.closed = None
+
+            def update(self, *args):
+                self.history_size += 1  # recovery grew history independently
+                return self.closed
+
+        fake = FakeCandles()
+        analyses = []
+        scope = {
+            "candles": fake, "key": "X", "price": 100,
+            "ts": 1, "minute_volume": 0,
+            "write_candle_quality": lambda: None,
+            "analyse": lambda key: analyses.append(key),
+        }
+        exec(compile(snippet, str(SCANNER), "exec"), scope)
+        self.assertEqual(fake.history_size, 2)
+        self.assertEqual(analyses, [])
+        fake.closed = SimpleNamespace(timestamp="closed")
+        exec(compile(snippet, str(SCANNER), "exec"), scope)
+        self.assertEqual(analyses, ["X"])
+
+
 if __name__ == "__main__":
     unittest.main()
