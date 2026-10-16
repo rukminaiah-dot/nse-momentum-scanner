@@ -15,6 +15,7 @@ on:
       - 'tests/test_offline_signal_parity.py'
       - 'tests/test_offline_preload_selection.py'
       - 'tests/test_scanner_trend_source_parity.py'
+      - 'tests/test_offline_restart_preload.py'
       - 'v2/backend/offline_preload_selection.py'
       - 'tests/test_offline_scanner_retention_probe.py'
       - 'v2/backend/offline_signal_parity.py'
@@ -45,6 +46,7 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_offline_signal_parity.py' -v
       - run: python -m unittest discover -s tests -p 'test_offline_preload_selection.py' -v
       - run: python -m unittest discover -s tests -p 'test_scanner_trend_source_parity.py' -v
+      - run: python -m unittest discover -s tests -p 'test_offline_restart_preload.py' -v
       - run: python -m unittest discover -s tests -p 'test_offline_scanner_retention_probe.py' -v
       - run: python -m unittest discover -s tests -p 'test_minimal_verified_recovery.py' -v
       - run: python -m unittest discover -s tests -p 'test_scanner_recovery_wiring.py' -v
