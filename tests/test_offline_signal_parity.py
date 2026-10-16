@@ -228,6 +228,40 @@ class OfflineSignalParityTests(unittest.TestCase):
         bars[-1].close = -1000
         self.assertEqual(five_minute_trend(bars), "BULLISH")
 
+    def test_realistic_375_minute_sessions_preserve_index_warmup(self):
+        """A full previous trading session cannot satisfy today's index warmup."""
+        previous = history(375)
+        for candle in previous:
+            candle.timestamp -= timedelta(days=1)
+        today = history(20)
+        for today_count, expected_reason in ((19, "WARMUP"), (20, None)):
+            for cap in (60, 200):
+                with self.subTest(today_count=today_count, cap=cap):
+                    bars = (previous + today[:today_count])[-cap:]
+                    result = evaluate(bars, session_date=today[0].timestamp.date(),
+                                      is_index=True)
+                    self.assertEqual(result["reason"], expected_reason)
+                    if today_count == 20:
+                        expected = evaluate(today, session_date=today[0].timestamp.date(),
+                                            is_index=True)
+                        self.assertEqual(result["signal"], expected["signal"])
+                        self.assertEqual(result["ema9"], expected["ema9"])
+                        self.assertEqual(result["ema20"], expected["ema20"])
+
+    def test_realistic_375_minute_sessions_do_not_bridge_stock_gap(self):
+        previous = history(375)
+        for candle in previous:
+            candle.timestamp -= timedelta(days=1)
+        today = history(6)
+        for today_count, expected_reason in ((5, "OVERNIGHT_GAP"),
+                                              (6, None)):
+            for cap in (60, 200):
+                with self.subTest(today_count=today_count, cap=cap):
+                    bars = (previous + today[:today_count])[-cap:]
+                    result = evaluate(bars, session_date=today[0].timestamp.date(),
+                                      is_stock=True)
+                    self.assertEqual(result["reason"], expected_reason)
+
 
 if __name__ == "__main__":
     unittest.main()
