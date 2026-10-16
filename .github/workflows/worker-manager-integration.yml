@@ -28,6 +28,7 @@ on:
       - 'tests/test_scanner_recovery_wiring.py'
       - 'tests/test_scanner_recovery_real_candles.py'
       - 'scripts/benchmark_candle_snapshots.py'
+      - 'scripts/benchmark_recovery_merge.py'
       - '.github/workflows/worker-manager-integration.yml'
   workflow_dispatch:
 jobs:
@@ -68,3 +69,7 @@ jobs:
       - run: python -m scripts.benchmark_candle_snapshots --symbols 500 --history 60 --iterations 200
       - run: python -m scripts.benchmark_candle_snapshots --symbols 200 --history 1950 --iterations 200
       - run: python -m scripts.benchmark_candle_snapshots --symbols 500 --history 1950 --iterations 200
+
+      - run: python -m scripts.benchmark_recovery_merge --history 60 --iterations 100
+      - run: python -m scripts.benchmark_recovery_merge --history 390 --iterations 100
+      - run: python -m scripts.benchmark_recovery_merge --history 1950 --iterations 100
