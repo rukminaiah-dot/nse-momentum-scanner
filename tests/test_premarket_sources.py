@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from v2.backend.premarket_sources import (
-    classify_percentage_change, gift_nifty_evidence, previous_session_evidence
+    classify_percentage_change, gift_nifty_evidence, previous_session_evidence, assess_verified_sources
 )
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -37,6 +37,33 @@ class PremarketSourceTests(unittest.TestCase):
                 last_price=price, reference_close=25000,
                 observed_at_ist=NOW.isoformat(), now=NOW))
         self.assertIsNone(classify_percentage_change(float("nan")))
+
+    def test_verified_sources_do_not_force_partial_forecast(self):
+        prediction, sources = assess_verified_sources({
+            "gift_nifty": {
+                "verified": True, "last_price": 25100, "reference_close": 25000,
+                "observed_at_ist": NOW.isoformat()
+            },
+            "previous_session": {
+                "verified": True, "previous_open": 25000, "previous_close": 24900,
+                "observed_at_ist": NOW.isoformat()
+            },
+        }, now=NOW)
+        self.assertEqual(prediction.direction, "UNKNOWN")
+        self.assertEqual(prediction.status, "WAIT_DATA_UNAVAILABLE")
+        self.assertEqual(sources["gift_nifty"]["value"], 1)
+        self.assertEqual(sources["previous_session"]["value"], -1)
+        self.assertEqual(sources["global_markets"]["status"], "NOT_CONNECTED")
+
+    def test_unverified_observation_rejected(self):
+        prediction, sources = assess_verified_sources({
+            "gift_nifty": {
+                "verified": False, "last_price": 25100, "reference_close": 25000,
+                "observed_at_ist": NOW.isoformat()
+            },
+        }, now=NOW)
+        self.assertEqual(prediction.direction, "UNKNOWN")
+        self.assertIsNone(sources["gift_nifty"]["value"])
 
     def test_previous_session_staleness(self):
         self.assertIsNone(previous_session_evidence(
