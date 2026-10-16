@@ -9,33 +9,33 @@ This draft PR is **not production-ready** and must not be deployed or merged sol
 - Invalid batches are rejected before history is modified; duplicate-only batches do not replace the history list.
 - History-limit accounting counts only retained recovered minutes.
 
-## Outstanding blockers
+## Remaining integration blockers
 
-- `scanner.py` and other modules read `CandleManager.completed` directly. These readers do **not** acquire the new lock. Review and migrate reads to snapshots or another consistent access contract before enabling concurrent recovery.
-- Audit all direct writes to `completed` (including preloading) and `current`; route them through synchronized manager methods or establish an explicit startup-only invariant.
+- Audit modules **other than** `scanner.py` for direct reads and writes to `CandleManager.completed` or `current`. The scanner has been migrated on this draft branch, but the wider repository is not yet verified.
+- Verify startup preload sequencing and failure handling under real scanner initialization; `preload_completed()` refuses replacement once a live candle starts.
 - `snapshot()` copies the history list, **not the mutable Candle objects**. The live active candle remains mutable. Readers requiring immutable OHLCV snapshots need separate copies or a defined lock discipline.
 - Validate that recovered historical candles cannot trigger historical scanner results, BUY/SELL signals, or simulated trades.
 - Define market-session reset and rollover semantics, and test cross-session recovery under concurrent updates.
 - Decide how to preserve existing history beyond `limit` and whether the limit should apply to all history or only recovered minutes. Confirm against indicator warmup needs.
-- Add deterministic multithreaded tests that exercise real `CandleManager.update()` racing with insertion, not just a simulated callback lock.
+- Expand the existing real-thread race test into deterministic interleaving and stress cases, including session rollover and scanner-level behavior.
 - Only after these reviews, test an opt-in read-only staging integration with broker credentials and rate limits, then request explicit approval for any live rollout.
 
 Related isolated recovery primitives: draft PR #7. Do not assume the two draft branches can be merged without resolving integration and conflict semantics.
 
-## Scanner direct-access inventory (main branch review)
+## Scanner direct-access inventory (original main branch, now addressed in draft)
 
-The following `v2/backend/scanner.py` locations currently bypass the prototype's lock:
+The following `v2/backend/scanner.py` locations **on the reviewed main revision** bypassed the prototype's lock:
 
 - Line 195: `candles.completed[key] = loaded` (history preload **write**).
 - Lines 73, 249, 486, 488, 515, 545, 550: direct `completed.get(...)` reads.
 - Line 230: iteration over `candles.completed.items()`.
 - Lines 518 and 525: direct indexing `candles.completed[key]`.
 
-Line numbers refer to the reviewed main-branch revision and may shift. The preload write needs a separate synchronized initialization API or a guaranteed pre-concurrency startup phase. Snapshot-based readers must account for the mutable Candle objects and the fact that snapshots can become stale immediately after the lock is released. These call sites are **not changed** by this prototype.
+Line numbers refer to the reviewed main-branch revision and may shift. The preload write needs a separate synchronized initialization API or a guaranteed pre-concurrency startup phase. Snapshot-based readers must account for the mutable Candle objects and the fact that snapshots can become stale immediately after the lock is released. **Draft-branch status:** scanner history reads now use `snapshot()`, and preload writes use `preload_completed()`. Structural tests reject direct `candles.completed` access. The main branch remains unchanged.
 
-## Critical signal-trigger coupling (scanner lines 486-493)
+## Critical signal-trigger coupling (original main branch, now addressed in draft)
 
-The live `on_tick` path currently determines whether a candle closed by comparing
+The original main-branch `on_tick` path determined whether a candle closed by comparing
 `len(candles.completed[key])` **before and after** `candles.update(...)`.
 A recovery worker inserting historical candles concurrently can change that length,
 causing the tick handler to call `analyse(key)` even when the tick did not close a
@@ -43,9 +43,5 @@ live candle. This defeats the intended guarantee that historical repairs do not
 trigger signals, even though `insert_missing_completed()` never invokes
 `update()` itself.
 
-**Required before integration:** use the actual return value of the live
-`CandleManager.update()` call (closed candle vs. `None`) as the close-event
-condition, rather than history-length changes. Test a recovery insertion
-interleaved with a same-minute tick and assert no analysis/trading signal fires.
-Do not wire recovery into the scanner until this is addressed.
+**Draft-branch status:** `on_tick()` now uses the return value of live `CandleManager.update()` (closed candle vs. `None`) as its close-event condition. An isolated runtime regression confirms that history growth alone does not trigger `analyse()`. A full scanner-level interleaving test, including trade/signal side effects, is **still required** before recovery is enabled.
 
