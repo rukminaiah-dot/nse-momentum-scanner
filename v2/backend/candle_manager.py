@@ -46,6 +46,9 @@ class CandleManager:
                     continue
                 by_minute[minute] = candle
             retained = sorted(by_minute)[-limit:]
+            if not any(minute in recovered and minute not in original_minutes
+                       for minute in retained):
+                return 0
             self.completed[key] = [by_minute[t] for t in retained]
             return sum(1 for minute in retained
                        if minute in recovered and minute not in original_minutes)
