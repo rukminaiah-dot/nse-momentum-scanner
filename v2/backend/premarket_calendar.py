@@ -6,12 +6,14 @@ not invent a holiday calendar or fetch one implicitly.
 from datetime import date
 
 
-def previous_trading_session_date(*, target_date_ist, verified_session_dates):
+def previous_trading_session_date(*, target_date_ist, verified_session_dates, calendar_verified=False, calendar_source=None):
     """Return prior session ISO date only if a verified schedule covers target date.
 
     Dates must be strictly increasing, unique ISO YYYY-MM-DD strings. The caller
     must supply a complete, authoritative calendar covering the requested range.
     """
+    if (calendar_verified is not True or not isinstance(calendar_source, str) or not calendar_source.strip()):
+        return None
     if not isinstance(target_date_ist, str):
         return None
     try:
