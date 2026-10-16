@@ -35,7 +35,7 @@ def configure_gap_recovery(*, enabled=False, fetch_rows=None):
         previous = _recovery_worker
         _recovery_worker = None
         if previous is not None:
-            previous.join(timeout=5)
+            previous.close(timeout=5)
         return None
     if _recovery_worker is not None:
         return _recovery_worker
