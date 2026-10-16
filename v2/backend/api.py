@@ -20,10 +20,10 @@ def get_premarket_evidence():
     """
     from datetime import datetime
     from zoneinfo import ZoneInfo
-    from .premarket_prediction import WEIGHTS, assess_premarket
+    from .premarket_sources import assess_verified_sources
 
     now = datetime.now(ZoneInfo("Asia/Kolkata"))
-    prediction = assess_premarket({}, now=now)
+    prediction, sources = assess_verified_sources({}, now=now)
     return {
         "mode": "RESEARCH_ONLY",
         "order_execution_enabled": False,
@@ -31,11 +31,7 @@ def get_premarket_evidence():
         "direction": prediction.direction,
         "evidence_score": prediction.evidence_score,
         "as_of_ist": prediction.as_of_ist,
-        "sources": {
-            key: {"weight": weight, "value": None,
-                  "status": "NOT_CONNECTED", "observed_at_ist": None}
-            for key, weight in WEIGHTS.items()
-        },
+        "sources": sources,
         "reasons": list(prediction.reasons),
         "note": "No verified automatic data sources configured; manual assessment is separate.",
     }
