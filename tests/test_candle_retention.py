@@ -48,6 +48,36 @@ class RetentionTests(unittest.TestCase):
         self.assertEqual(manager.insert_missing_completed("X", {older.timestamp: older}), 0)
         self.assertEqual([c.timestamp.minute for c in manager.snapshot("X")[0]], [18, 19])
 
+    def test_retention_preserves_recent_indicator_window(self):
+        # Current scanner EMA20/ATR14 and RVOL20 need at least 20 bars.
+        manager = CandleManager(max_completed_per_symbol=60)
+        manager.preload_completed("X", bars(100))
+        completed, _ = manager.snapshot("X")
+        self.assertEqual(len(completed), 60)
+        self.assertEqual([c.timestamp for c in completed[-20:]],
+                         [c.timestamp for c in bars(100)[-20:]])
+
+    def test_overnight_rollover_preserves_latest_cross_session_history(self):
+        manager = CandleManager(max_completed_per_symbol=3)
+        friday = datetime(2026, 10, 16, 15, 28, tzinfo=ZoneInfo("Asia/Kolkata"))
+        monday = datetime(2026, 10, 19, 9, 15, tzinfo=ZoneInfo("Asia/Kolkata"))
+        for i in range(3):
+            manager.update("X", 100 + i, int((friday + timedelta(minutes=i)).timestamp() * 1000))
+        manager.update("X", 103, int(monday.timestamp() * 1000))
+        manager.update("X", 104, int((monday + timedelta(minutes=1)).timestamp() * 1000))
+        completed, active = manager.snapshot("X")
+        self.assertEqual(len(completed), 3)
+        self.assertEqual([c.timestamp for c in completed],
+                         [datetime(2026, 10, 16, 15, 29),
+                          datetime(2026, 10, 16, 15, 30),
+                          datetime(2026, 10, 19, 9, 15)])
+        self.assertEqual(active, datetime(2026, 10, 19, 9, 16))
+        # Recovery from Friday must not enter Monday's active session.
+        old = Candle(99, 0)
+        old.timestamp = datetime(2026, 10, 16, 15, 27)
+        self.assertEqual(manager.insert_missing_completed("X", {old.timestamp: old}), 0)
+        self.assertEqual(len(manager.snapshot("X")[0]), 3)
+
 
 if __name__ == "__main__":
     unittest.main()
