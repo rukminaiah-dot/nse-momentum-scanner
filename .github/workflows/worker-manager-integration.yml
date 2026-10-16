@@ -34,3 +34,6 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_scanner_recovery_wiring.py' -v
       - run: python -m unittest discover -s tests -p 'test_scanner_recovery_real_candles.py' -v
       - run: python -m scripts.benchmark_candle_snapshots --symbols 50 --history 390 --iterations 200
+      - run: python -m scripts.benchmark_candle_snapshots --symbols 200 --history 390 --iterations 200
+      - run: python -m scripts.benchmark_candle_snapshots --symbols 500 --history 390 --iterations 200
+      - run: python -m scripts.benchmark_candle_snapshots --symbols 50 --history 1950 --iterations 200
