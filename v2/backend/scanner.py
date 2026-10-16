@@ -557,10 +557,20 @@ def on_tick(key, data):
         ):
             gap_recovery.request(key)
 
-    # Analyse only when a minute candle has actually closed.
+    # Diagnostic-only timing: separate tick age, candle close lag, and
+    # post-close processing cost. No trading decisions depend on these values.
     if candle_closed:
+        diagnostic_started = time.perf_counter()
+        tick_age_ms = max(0, int(time.time() * 1000) - ts)
         write_candle_quality()
         analyse(key)
+        processing_ms = round((time.perf_counter() - diagnostic_started) * 1000, 1)
+        print(
+            "FEED_TIMING:", key,
+            "| TICK_AGE_MS:", tick_age_ms,
+            "| POST_CLOSE_PROCESSING_MS:", processing_ms,
+            flush=True,
+        )
 
 
 def finalize_verified_calendar_without_tick(key, now_ms, schedule,
