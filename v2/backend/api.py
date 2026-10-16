@@ -220,6 +220,13 @@ def nifty200_feed_health():
     return base
 
 
+@app.get("/api/v2/live-screener-readiness")
+def live_screener_readiness():
+    """Read-only, fail-closed live market tick readiness; never places orders."""
+    from .live_feed_readiness import assess_live_feed
+    return assess_live_feed(nifty200_feed_health())
+
+
 @app.get("/api/v2/candle-feed-quality")
 def candle_feed_quality():
     """Read-only observed candle continuity and volume; stale snapshots fail closed."""
