@@ -32,15 +32,19 @@ def compare(cap, history=400):
         for end in range(21, history + 1):
             full = candles[:end]
             short = full[-cap:]
-            for kind, is_index, is_stock in (
-                ("index", True, False), ("stock", False, True)):
+            for kind, is_index, is_stock, is_primary in (
+                ("primary_index", True, False, True),
+                ("secondary_index", True, False, False),
+                ("stock", False, True, False)):
                 # All timestamps are intentionally on the same synthetic
                 # calendar date, so a 400-minute replay spans a simulated
                 # session; no market-hours claim is made.
                 full_decision = evaluate(full, session_date=start.date(),
-                                         is_index=is_index, is_stock=is_stock)
+                                         is_index=is_index, is_stock=is_stock,
+                                         is_primary_index=is_primary)
                 short_decision = evaluate(short, session_date=start.date(),
-                                          is_index=is_index, is_stock=is_stock)
+                                          is_index=is_index, is_stock=is_stock,
+                                          is_primary_index=is_primary)
                 count += 1
                 if full_decision["signal"] != short_decision["signal"]:
                     mismatches.append((name, kind, end,
@@ -48,6 +52,9 @@ def compare(cap, history=400):
                                        short_decision["signal"]))
     print(f"offline_scanner_comparisons={count} history={history} cap={cap}")
     print(f"offline_scanner_disagreements={len(mismatches)}")
+    for kind in ("primary_index", "secondary_index", "stock"):
+        print(f"instrument_disagreements kind={kind} count="
+              f"{sum(item[1] == kind for item in mismatches)}")
     for name, kind, end, full, short in mismatches[:12]:
         print(f"scanner_disagreement regime={name} kind={kind} "
               f"prefix={end} unlimited={full} capped={short}")
