@@ -6,9 +6,18 @@ from v2.backend.live_feed_readiness import assess_live_feed
 class LiveFeedReadinessTests(unittest.TestCase):
     def test_market_open_recent_ticks_required(self):
         ready = assess_live_feed(dict(market_session="OPEN", status="REPORTING",
-                                      stocks_with_recent_ticks=15))
+                                      stocks_with_recent_ticks=15, universe_size=15,
+                                      connection_last_event="CONNECTED"))
         self.assertTrue(ready["live_screener_ready"])
         self.assertFalse(ready["order_execution_enabled"])
+
+    def test_partial_coverage_never_claims_ready(self):
+        result = assess_live_feed(dict(market_session="OPEN", status="REPORTING",
+                                       stocks_with_recent_ticks=15, universe_size=200,
+                                       connection_last_event="CONNECTED"))
+        self.assertTrue(result["partial_feed_activity_observed"])
+        self.assertFalse(result["live_screener_ready"])
+        self.assertIn("FULL_UNIVERSE_COVERAGE_NOT_VERIFIED", result["blockers"])
 
     def test_closed_market_fails_closed(self):
         result = assess_live_feed(dict(market_session="CLOSED", status="REPORTING",
