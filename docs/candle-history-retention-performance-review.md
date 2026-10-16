@@ -37,3 +37,20 @@ The current nine retention regression tests passed in [CI run 38940672810](https
 Before activating a cap, replay a representative, timestamped historical dataset in two isolated candle managers: one unlimited and one capped. At each eligible completed minute, compare EMA9, EMA20, ATR14, momentum, 5-minute trend, RVOL and the final BUY/SELL/HOLD decision with identical inputs. Record maximum and p95 absolute/relative EMA drift, decision disagreement count, warmup and restart behavior, and whether any difference changes a BUY or SELL action. The acceptance thresholds must be explicitly approved before testing; do not choose a threshold after inspecting outcomes. A **zero unexplained BUY/SELL disagreement** is a conservative proposed release gate, not evidence that any cap meets it.
 
 Include gap-recovery inserts, missing minutes, session transitions, and restart preloads. Replay must remain credential-free, order-disabled and isolated from production databases. Until such evidence exists, keep `max_completed_per_symbol=None` and the PR in draft.
+
+## Scanner-level replay implementation boundary (2026-10-16)
+
+Source review of `v2/backend/scanner.py` identifies why invoking the scanner directly is **not** an acceptable offline parity harness: after calculating a signal it calls `save_scan_result(...)`, and for a qualifying stock BUY it calls `buy(...)` and `load_active_trades()`. An offline replay must never reach these paths.
+
+A safe next implementation should extract the *pure decision calculation* into a separate function that accepts a supplied completed-candle history, instrument classification (index versus stock), and the market-regime input. It should return the computed indicators, trend, continuity block reason, and final signal without importing scanner startup, accessing a database, using network clients, or placing orders. The production call path must not be switched to that function until parity against existing behavior is established with unit tests and explicit review.
+
+Scanner logic to preserve in the pure model:
+
+- Require at least 20 completed bars, and for index calculations use only bars from the current IST session.
+- Require the latest six bars to be consecutive one-minute candles from today's IST session; otherwise block the signal entirely.
+- Compute EMA9/EMA20, momentum, ATR14, and stock RVOL using the exact current implementations and windows.
+- Build 5-minute trend from **complete** five-candle buckets, using only the latest session and three complete buckets; gate stock BUY/SELL on BULLISH/BEARISH respectively.
+- Apply index-specific EMA/momentum directional override and stock-only ATR late-entry rejection; preserve current market-regime treatment.
+- Compare not only BUY/SELL/HOLD but also continuity blocks, intermediate indicators, and rejection reasons. Report results by instrument class and price regime.
+
+Current synthetic core parity compares only `generate_signal` and must not be represented as complete scanner parity. At `58e1037`, a 60-bar cap produced HOLD→BUY and HOLD→SELL divergences in adversarial histories; those cases are now protected by tests at `da4d300`. Keep all caps disabled.
