@@ -13,11 +13,11 @@ This draft PR is **not production-ready** and must not be deployed or merged sol
 
 - Audit modules **other than** `scanner.py` for direct reads and writes to `CandleManager.completed` or `current`. The scanner has been migrated on this draft branch, but the wider repository is not yet verified.
 - Verify startup preload sequencing and failure handling under real scanner initialization; `preload_completed()` refuses replacement once a live candle starts.
-- `snapshot()` copies the history list, **not the mutable Candle objects**. The live active candle remains mutable. Readers requiring immutable OHLCV snapshots need separate copies or a defined lock discipline.
+- `snapshot()` now copies both the history list and its Candle objects; `preload_completed()` and recovery insertion also copy incoming candles. These are **detached mutable copies**, not frozen records. Validate the CPU/memory overhead for large NIFTY 200 workloads and verify that no consumer relies on object identity.
 - Validate that recovered historical candles cannot trigger historical scanner results, BUY/SELL signals, or simulated trades.
 - Define market-session reset and rollover semantics, and test cross-session recovery under concurrent updates.
 - Decide how to preserve existing history beyond `limit` and whether the limit should apply to all history or only recovered minutes. Confirm against indicator warmup needs.
-- Expand the existing real-thread race test into deterministic interleaving and stress cases, including session rollover and scanner-level behavior.
+- The two lock-order tests now force recovery before and after live rollover. Still add sustained stress cases, cross-session rollover, and full scanner-level signal/trade side-effect validation.
 - Only after these reviews, test an opt-in read-only staging integration with broker credentials and rate limits, then request explicit approval for any live rollout.
 
 Related isolated recovery primitives: draft PR #7. Do not assume the two draft branches can be merged without resolving integration and conflict semantics.
