@@ -140,6 +140,42 @@ class OfflineSignalParityTests(unittest.TestCase):
         bars = [c for c in bars if c.timestamp != datetime(2026, 10, 16, 9, 20)]
         self.assertEqual(five_minute_trend(bars), "NEUTRAL")
 
+    def test_retention_cannot_bypass_index_session_warmup(self):
+        previous = history(240)
+        for candle in previous:
+            candle.timestamp -= timedelta(days=1)
+        today = history(19)
+        for cap in (60, 200):
+            with self.subTest(cap=cap):
+                result = evaluate((previous + today)[-cap:],
+                                  session_date=datetime(2026, 10, 16).date(),
+                                  is_index=True)
+                self.assertEqual(result["reason"], "WARMUP")
+
+    def test_retention_cannot_bridge_overnight_stock_momentum(self):
+        previous = history(240)
+        for candle in previous:
+            candle.timestamp -= timedelta(days=1)
+        today = history(5)
+        for cap in (60, 200):
+            with self.subTest(cap=cap):
+                result = evaluate((previous + today)[-cap:],
+                                  session_date=datetime(2026, 10, 16).date(),
+                                  is_stock=True)
+                self.assertEqual(result["reason"], "OVERNIGHT_GAP")
+
+    def test_retention_keeps_stock_continuity_after_six_today_bars(self):
+        previous = history(240)
+        for candle in previous:
+            candle.timestamp -= timedelta(days=1)
+        today = history(6)
+        for cap in (60, 200):
+            with self.subTest(cap=cap):
+                result = evaluate((previous + today)[-cap:],
+                                  session_date=datetime(2026, 10, 16).date(),
+                                  is_stock=True)
+                self.assertIsNone(result["reason"])
+
 
 if __name__ == "__main__":
     unittest.main()
