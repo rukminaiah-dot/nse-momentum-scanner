@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from v2.backend.candle_manager import CandleManager
 from v2.backend.candles import Candle
+from v2.backend.indicators import ema
 
 
 def bars(count):
@@ -56,6 +57,12 @@ class RetentionTests(unittest.TestCase):
         self.assertEqual(len(completed), 60)
         self.assertEqual([c.timestamp for c in completed[-20:]],
                          [c.timestamp for c in bars(100)[-20:]])
+
+    def test_ema_seed_changes_with_retention_even_above_period(self):
+        # EMA starts from the first value, so a cap above EMA20 is not
+        # mathematically equivalent to unbounded history.
+        values = [100.0] * 80 + [150.0] * 20
+        self.assertNotEqual(ema(values, 20), ema(values[-60:], 20))
 
     def test_overnight_rollover_preserves_latest_cross_session_history(self):
         manager = CandleManager(max_completed_per_symbol=3)
