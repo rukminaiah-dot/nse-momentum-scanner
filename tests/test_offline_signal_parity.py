@@ -262,6 +262,32 @@ class OfflineSignalParityTests(unittest.TestCase):
                                       is_stock=True)
                     self.assertEqual(result["reason"], expected_reason)
 
+    def test_session_open_missing_minute_blocks_even_with_yesterday_history(self):
+        previous = history(375)
+        for candle in previous:
+            candle.timestamp -= timedelta(days=1)
+        today = history(6)
+        today[3].timestamp += timedelta(minutes=1)
+        for cap in (60, 200):
+            with self.subTest(cap=cap):
+                result = evaluate((previous + today)[-cap:],
+                                  session_date=today[0].timestamp.date(),
+                                  is_stock=True)
+                self.assertEqual(result["reason"], "MISSING_MINUTE")
+
+    def test_secondary_index_session_warmup_matches_primary_index(self):
+        previous = history(375)
+        for candle in previous:
+            candle.timestamp -= timedelta(days=1)
+        today = history(19)
+        for primary in (True, False):
+            for cap in (60, 200):
+                with self.subTest(primary=primary, cap=cap):
+                    result = evaluate((previous + today)[-cap:],
+                                      session_date=today[0].timestamp.date(),
+                                      is_index=True, is_primary_index=primary)
+                    self.assertEqual(result["reason"], "WARMUP")
+
 
 if __name__ == "__main__":
     unittest.main()
