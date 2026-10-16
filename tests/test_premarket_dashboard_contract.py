@@ -35,6 +35,8 @@ class PremarketDashboardContractTests(unittest.TestCase):
         self.assertIn("No active simulated trades", page)
         self.assertIn("Indicative P&L (quote freshness unverified)", page)
         self.assertIn("Last recorded price:", page)
+        self.assertIn("Quote freshness:", page)
+        self.assertIn("UNVERIFIED / NOT LIVE", page)
         self.assertNotIn("Live P&L:", page)
 
     def test_dashboard_shows_missing_automatic_sources(self):
