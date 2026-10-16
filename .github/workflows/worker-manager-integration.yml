@@ -63,3 +63,8 @@ jobs:
       - run: python -m scripts.benchmark_candle_snapshots --symbols 200 --history 390 --iterations 200
       - run: python -m scripts.benchmark_candle_snapshots --symbols 500 --history 390 --iterations 200
       - run: python -m scripts.benchmark_candle_snapshots --symbols 50 --history 1950 --iterations 200
+      - run: python -m scripts.benchmark_candle_snapshots --symbols 50 --history 60 --iterations 200
+      - run: python -m scripts.benchmark_candle_snapshots --symbols 200 --history 60 --iterations 200
+      - run: python -m scripts.benchmark_candle_snapshots --symbols 500 --history 60 --iterations 200
+      - run: python -m scripts.benchmark_candle_snapshots --symbols 200 --history 1950 --iterations 200
+      - run: python -m scripts.benchmark_candle_snapshots --symbols 500 --history 1950 --iterations 200
