@@ -77,8 +77,10 @@ async function loadPremarketSourceStatus(){
   const sources=Object.values(data.sources);
   const connected=sources.filter(x=>x.status==='VERIFIED'&&x.value!==null).length;
   const missing=Array.isArray(data.missing_sources)?data.missing_sources.map(key=>premarketLabels[key]||key):Object.entries(data.sources).filter(([key,x])=>x.status!=='VERIFIED'||x.value===null).map(([key])=>premarketLabels[key]||key);
+  const invalid=Object.entries(data.sources).filter(([key,x])=>x.status==='INVALID_OR_UNVERIFIED').map(([key])=>premarketLabels[key]||key);
+  const disconnected=Object.entries(data.sources).filter(([key,x])=>x.status==='NOT_CONNECTED').map(([key])=>premarketLabels[key]||key);
   const forecast=(data.automatic_forecast_ready===true&&missing.length===0&&data.status==='WAIT_LIVE_CONFIRMATION'&&['BULLISH','BEARISH','NEUTRAL'].includes(data.direction))?data.direction+' bias — awaiting live confirmation':'WAIT — automatic forecast unavailable';
-  panel.textContent='Automatic sources: '+connected+'/'+sources.length+' verified. '+forecast+'. '+(missing.length?'Missing: '+missing.join(', ')+'.':'Manual research remains separate.');
+  panel.textContent='Automatic sources: '+connected+'/'+sources.length+' verified. '+forecast+'. '+(disconnected.length?'Not connected: '+disconnected.join(', ')+'. ':'')+(invalid.length?'Invalid or unverified: '+invalid.join(', ')+'. ':'')+(!missing.length?'Manual research remains separate.':'');
  }catch(e){panel.textContent='Automatic source status unavailable — manual evidence assessment only; no live forecast.';}
 }
 loadPremarketSourceStatus();
