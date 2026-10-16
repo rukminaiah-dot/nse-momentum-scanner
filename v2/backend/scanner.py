@@ -48,14 +48,16 @@ def request_recovery_on_gap(key):
     if worker is None:
         return False
     history, active = candles.snapshot(key)
-    if active is None or len(history) < 2:
+    if active is None or not history:
         return False
-    latest, previous = history[-1].timestamp, history[-2].timestamp
-    if (latest.date() != active.date() or previous.date() != active.date()
-            or latest >= active or latest <= previous):
+    latest = history[-1].timestamp
+    if latest.date() != active.date() or latest >= active:
         return False
     from datetime import timedelta
-    if latest - previous <= timedelta(minutes=1):
+    # A missing completed minute lies between the last closed candle and
+    # the newly active minute. Earlier history gaps also matter, but must not
+    # repeatedly trigger requests once this boundary is contiguous.
+    if active - latest <= timedelta(minutes=1):
         return False
     return worker.request(key)
 
