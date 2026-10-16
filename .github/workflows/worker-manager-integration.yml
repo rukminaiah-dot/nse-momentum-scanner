@@ -16,6 +16,7 @@ on:
       - 'v2/backend/offline_signal_parity.py'
       - 'scripts/compare_candle_retention.py'
       - 'scripts/compare_signal_retention.py'
+      - 'scripts/compare_offline_scanner_retention.py'
       - 'v2/backend/candle_manager.py'
       - 'tests/test_minimal_verified_recovery.py'
       - 'tests/test_scanner_recovery_wiring.py'
@@ -45,6 +46,8 @@ jobs:
       - run: python -m scripts.compare_candle_retention --history 400 --cap 200
       - run: python -m scripts.compare_signal_retention --history 400 --cap 60
       - run: python -m scripts.compare_signal_retention --history 400 --cap 200
+      - run: python -m scripts.compare_offline_scanner_retention --history 400 --cap 60
+      - run: python -m scripts.compare_offline_scanner_retention --history 400 --cap 200
       - run: python -m scripts.benchmark_candle_snapshots --symbols 50 --history 390 --iterations 200
       - run: python -m scripts.benchmark_candle_snapshots --symbols 200 --history 390 --iterations 200
       - run: python -m scripts.benchmark_candle_snapshots --symbols 500 --history 390 --iterations 200
