@@ -288,5 +288,45 @@ class AtomicCandleStateTests(unittest.TestCase):
         self.assertEqual(history[-1].close, 101)
 
 
+    def test_recovery_wins_lock_before_rollover_without_duplicate_close(self):
+        import threading
+        manager = CandleManager()
+        manager.update('X', 100, millis(9, 15))
+        manager.update('X', 101, millis(9, 17))
+        ready = threading.Event()
+        finished = threading.Event()
+        errors = []
+        gap = recovered(9, 16, 99)
+
+        def live():
+            try:
+                ready.set()
+                manager.update('X', 102, millis(9, 18))
+            except Exception as exc:
+                errors.append(exc)
+            finally:
+                finished.set()
+
+        # Force recovery to commit while the live rollover is blocked.
+        # After release, the rollover must append only the real 09:17 bar.
+        with manager._state_lock:
+            thread = threading.Thread(target=live)
+            thread.start()
+            self.assertTrue(ready.wait(timeout=5))
+            self.assertFalse(finished.is_set())
+            self.assertEqual(manager.insert_missing_completed(
+                'X', {gap.timestamp: gap}), 1)
+        thread.join(timeout=5)
+        self.assertFalse(thread.is_alive())
+        self.assertFalse(errors)
+        history, active = manager.snapshot('X')
+        self.assertEqual(active, datetime(2026, 10, 16, 9, 18))
+        self.assertEqual([c.timestamp for c in history],
+                         [datetime(2026, 10, 16, 9, 15),
+                          datetime(2026, 10, 16, 9, 16),
+                          datetime(2026, 10, 16, 9, 17)])
+        self.assertEqual(history[-1].close, 101)
+
+
 if __name__ == '__main__':
     unittest.main()
