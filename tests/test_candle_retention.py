@@ -4,7 +4,8 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from v2.backend.candle_manager import CandleManager
 from v2.backend.candles import Candle
-from v2.backend.indicators import ema
+from v2.backend.indicators import ema, momentum
+from v2.backend.signal_engine import generate_signal
 
 
 def bars(count):
@@ -110,6 +111,28 @@ class RetentionTests(unittest.TestCase):
         completed, _ = manager.snapshot("X")
         self.assertEqual(inserted, 2)
         self.assertEqual([c.timestamp.minute for c in completed], [18, 19, 20])
+
+    def test_sixty_bar_cap_can_create_false_core_buy_and_sell(self):
+        # Preserve counterexamples discovered in offline six-regime CI.
+        # These are signal-equivalence tests, not order execution.
+        history = 400
+        scenarios = (
+            ("BUY", [150.0] * (history - 60)
+             + [100.0 + i * 0.0001 for i in range(60)]),
+            ("SELL", [50.0] * (history - 60)
+             + [100.0 - i * 0.0001 for i in range(60)]),
+        )
+
+        def signal(values):
+            return generate_signal(
+                values[-1], ema(values, 9), ema(values, 20),
+                None, momentum(values), rvol=1.5, market="NEUTRAL",
+            )
+
+        for capped_decision, prices in scenarios:
+            with self.subTest(capped_decision=capped_decision):
+                self.assertEqual(signal(prices), "HOLD")
+                self.assertEqual(signal(prices[-60:]), capped_decision)
 
 
 if __name__ == "__main__":
