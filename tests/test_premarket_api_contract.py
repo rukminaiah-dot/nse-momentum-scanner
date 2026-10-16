@@ -23,7 +23,7 @@ class PremarketAPIContractTests(unittest.TestCase):
             "gift_nifty": {"verified": True, "source": "OFFLINE_TEST", "instrument": "TEST_INDEX", "session_verified": True, "last_price": 25100,
                            "reference_close": 25000, "observed_at_ist": NOW.isoformat()},
             "previous_session": {"verified": True, "source": "OFFLINE_TEST", "instrument": "TEST_INDEX", "session_verified": True, "previous_open": 25000,
-                                 "previous_close": 25100, "observed_at_ist": NOW.isoformat()},
+                                 "previous_close": 25100, "session_date_ist": "2026-10-15", "expected_previous_session_date_ist": "2026-10-15", "observed_at_ist": NOW.isoformat()},
         }, now=NOW)
         self.assertEqual(prediction.direction, "UNKNOWN")
         self.assertEqual(prediction.status, "WAIT_DATA_UNAVAILABLE")
