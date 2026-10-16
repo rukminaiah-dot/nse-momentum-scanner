@@ -29,7 +29,8 @@ class PremarketDashboardContractTests(unittest.TestCase):
     def test_dashboard_shows_missing_automatic_sources(self):
         page = HTML.read_text(encoding="utf-8")
         self.assertIn("WAIT — automatic forecast unavailable", page)
-        self.assertIn("Missing: ", page)
+        self.assertIn("Not connected: ", page)
+        self.assertIn("Invalid or unverified: ", page)
         self.assertIn("data.automatic_forecast_ready===true", page)
         self.assertIn("data.status==='WAIT_LIVE_CONFIRMATION'", page)
 
