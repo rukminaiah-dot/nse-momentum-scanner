@@ -1,0 +1,62 @@
+"""Offline tests for experimental candle-manager atomic recovery API."""
+import unittest
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from v2.backend.candle_manager import CandleManager
+from v2.backend.candles import Candle
+
+IST = ZoneInfo("Asia/Kolkata")
+
+
+def millis(hour, minute):
+    return int(datetime(2026, 10, 16, hour, minute, tzinfo=IST).timestamp() * 1000)
+
+
+def recovered(hour, minute, price=100):
+    candle = Candle(price, 1)
+    candle.timestamp = datetime(2026, 10, 16, hour, minute)
+    return candle
+
+
+class AtomicCandleStateTests(unittest.TestCase):
+    def test_no_active_minute_means_no_insert(self):
+        manager = CandleManager()
+        candle = recovered(9, 15)
+        self.assertEqual(manager.insert_missing_completed('X', {candle.timestamp: candle}), 0)
+        self.assertEqual(manager.snapshot('X'), ([], None))
+
+    def test_insert_only_missing_completed_minutes(self):
+        manager = CandleManager()
+        manager.update('X', 100, millis(9, 15))
+        manager.update('X', 101, millis(9, 17))
+        existing, active = manager.snapshot('X')
+        self.assertEqual(active, datetime(2026, 10, 16, 9, 17))
+        original = existing[0]
+        missing = recovered(9, 16)
+        future = recovered(9, 17)
+        batch = {original.timestamp: recovered(9, 15, 500),
+                 missing.timestamp: missing, future.timestamp: future}
+        self.assertEqual(manager.insert_missing_completed('X', batch), 1)
+        history, _ = manager.snapshot('X')
+        self.assertEqual([c.timestamp for c in history],
+                         [datetime(2026, 10, 16, 9, 15), datetime(2026, 10, 16, 9, 16)])
+        self.assertIs(history[0], original)
+        self.assertEqual(manager.insert_missing_completed('X', batch), 0)
+
+    def test_rechecks_active_boundary(self):
+        manager = CandleManager()
+        manager.update('X', 100, millis(9, 15))
+        manager.update('X', 101, millis(9, 16))
+        _, stale_boundary = manager.snapshot('X')
+        manager.update('X', 102, millis(9, 17))
+        self.assertEqual(stale_boundary, datetime(2026, 10, 16, 9, 16))
+        gap = recovered(9, 16)
+        # The live update already closed 09:16, so never overwrite it.
+        self.assertEqual(manager.insert_missing_completed('X', {gap.timestamp: gap}), 0)
+        history, _ = manager.snapshot('X')
+        self.assertEqual(len(history), 2)
+        self.assertEqual(history[-1].close, 101)
+
+
+if __name__ == '__main__':
+    unittest.main()
