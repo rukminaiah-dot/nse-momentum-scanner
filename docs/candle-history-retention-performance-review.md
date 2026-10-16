@@ -75,3 +75,9 @@ The isolated scanner decision comparison now distinguishes primary index, second
 - [ ] Obtain explicit deployment authorization before activating any cap.
 
 **Disposition:** offline unit/synthetic-validation phase is complete only when the latest branch-head CI has passed. The 60-bar cap has demonstrated signal changes and is not an acceptable transparent replacement. The 200-bar candidate remains research-only. This checklist is not permission to deploy, merge, change broker settings, or access production data.
+
+## Read-only scanner-rule inspection (2026-10-16)
+
+Inspected `v2/backend/scanner.py` as **source text only**, without importing or executing its module. The current isolated `offline_signal_parity.py` reproduces the inspected index-specific 20-current-session-bar warmup, six consecutive same-day one-minute candles, EMA9/EMA20 and five-bar momentum, stock RVOL from the latest 20 volumes, inherited NIFTY 50 regime for secondary indices and NIFTY 200 stocks, three complete five-minute trend buckets, index directional override, and ATR late-entry checks. This is a **manual source-rule correspondence review**, not an independent runtime equivalence test. The scanner's real-time clock, symbol mappings, persistence, scanner startup, and order side effects are intentionally outside the offline model.
+
+**Distinct preload limit:** `scanner.py` currently selects `current[-60:]` for its same-session intraday preload before calling `candles.preload_completed`. That existing **preload selection** is separate from `CandleManager(max_completed_per_symbol=60)`, which is still not activated. A live startup can therefore begin with fewer candles than the offline synthetic unlimited-history reference even without a manager retention cap. Historical replay must model actual preload and warmup behavior rather than interpreting the offline negative controls as proof that live scanner history is always unlimited.
