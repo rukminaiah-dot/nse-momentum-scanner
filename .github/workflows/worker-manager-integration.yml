@@ -27,4 +27,4 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_scanner_close_gate.py' -v
       - run: python -m unittest discover -s tests -p 'test_worker_manager_integration.py' -v
       - run: python -m unittest discover -s tests -p 'test_minimal_verified_recovery.py' -v
-      - run: python scripts/benchmark_candle_snapshots.py --symbols 50 --history 390 --iterations 200
+      - run: python -m scripts.benchmark_candle_snapshots --symbols 50 --history 390 --iterations 200
