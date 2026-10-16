@@ -58,7 +58,7 @@ class CandleManager:
                     continue
                 # Do not retain a mutable Candle owned by the recovery caller.
                 by_minute[minute] = copy(candle)
-            retained = sorted(by_minute)[-limit:]
+            # Recovery must not evict live/preloaded history used for indicators.\n            # Keep every existing minute; cap only the recovered candidates.\n            recovered_minutes = sorted(minute for minute in by_minute\n                                       if minute not in original_minutes)[-limit:]\n            retained = sorted(original_minutes.union(recovered_minutes))
             if not any(minute in recovered and minute not in original_minutes
                        for minute in retained):
                 return 0
