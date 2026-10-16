@@ -66,6 +66,21 @@ class CandleManager:
             return sum(1 for minute in retained
                        if minute in recovered and minute not in original_minutes)
 
+    def merge_verified_recovery(self, key, recovered, snapshot_active_minute):
+        """Adapter for GapRecoveryWorker.merge(key, recovered, active_minute).
+
+        A worker snapshot is only a hint: update and insertion serialize on
+        the same lock, and insertion always checks the latest active minute.
+        Never accept a recovery result for a different trading session.
+        """
+        with self._state_lock:
+            active = self.current.get(key)
+            if (active is None or snapshot_active_minute is None
+                    or active["minute"] < snapshot_active_minute
+                    or active["minute"].date() != snapshot_active_minute.date()):
+                return 0
+            return self.insert_missing_completed(key, recovered)
+
     def update(self, key, price, ts, volume=0):
         with self._state_lock:
             return self._update_locked(key, price, ts, volume)
