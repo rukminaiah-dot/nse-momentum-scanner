@@ -74,6 +74,32 @@ class WorkerManagerIntegrationTests(unittest.TestCase):
                          [c.timestamp for c in history])
         self.assertEqual(worker.status()["verified_insertions"], 0)
 
+    def test_delayed_same_session_response_uses_latest_live_boundary(self):
+        manager = CandleManager()
+        manager.update("X", 100, ts(9, 15))
+        manager.update("X", 102, ts(9, 17))
+        entered, release = Event(), Event()
+
+        def fetch(key):
+            entered.set()
+            if not release.wait(5):
+                raise RuntimeError("test fetch timeout")
+            return [row(9, 16, 101), row(9, 17, 999)]
+
+        worker = GapRecoveryWorker(
+            fetch, manager.snapshot, manager.merge_verified_recovery,
+            min_request_spacing=0.001)
+        self.assertTrue(worker.request("X"))
+        self.assertTrue(entered.wait(5))
+        manager.update("X", 103, ts(9, 18))
+        release.set()
+        worker.join()
+        history, active = manager.snapshot("X")
+        self.assertEqual([c.timestamp.minute for c in history], [15, 16, 17])
+        self.assertEqual([c.close for c in history], [100, 101, 102])
+        self.assertEqual(active.minute, 18)
+        self.assertEqual(worker.status()["verified_insertions"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()
