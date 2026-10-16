@@ -15,7 +15,7 @@ Branch: `feature/isolated-recovery-worker-manager-integration` into `feature/ato
 | Synthetic snapshot and merge benchmarks | RECORDED | See `docs/candle-history-retention-performance-review.md`; no agreed release SLO |
 | Multi-thread contention benchmark | RECORDED — RISK | [run 38950035431](https://github.com/rukminaiah-dot/nse-momentum-scanner/actions/runs/38950035431): 8 threads / 200 symbols / 1950 bars, update p95 103.4829 ms, p99 126.8856 ms |
 | Retention cap safety | NOT ACCEPTED | Short caps can alter EMA and signal decisions; default cap remains `None`, scanner cap not activated |
-| Approved historical market replay | BLOCKED | No approved dataset / replay sign-off demonstrated |
+| Approved historical market replay | BLOCKED | No approved dataset / replay sign-off demonstrated; safe no-database acquisition procedure in `docs/pr-9-historical-replay-acquisition.md` |
 | Full scanner lifecycle parity | BLOCKED | Synthetic source extraction excludes complete runtime, persistence, staleness and order boundaries |
 | Representative performance acceptance | BLOCKED | Requires owner-approved load model, latency threshold, and measurements |
 | Independent review | BLOCKED | No approvals recorded on PR at status check |
