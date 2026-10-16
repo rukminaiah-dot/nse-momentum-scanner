@@ -385,5 +385,38 @@ class AtomicCandleStateTests(unittest.TestCase):
                          [c.timestamp for c in history])
 
 
+    def test_snapshot_stays_consistent_during_concurrent_updates(self):
+        import threading
+        manager = CandleManager()
+        manager.update('X', 100, millis(9, 15))
+        started = threading.Event()
+        errors = []
+
+        def writer():
+            try:
+                started.set()
+                for minute in range(16, 46):
+                    manager.update('X', minute, millis(9, minute))
+            except Exception as exc:
+                errors.append(exc)
+
+        thread = threading.Thread(target=writer)
+        thread.start()
+        self.assertTrue(started.wait(timeout=5))
+        while thread.is_alive():
+            history, active = manager.snapshot('X')
+            timestamps = [c.timestamp for c in history]
+            self.assertEqual(timestamps, sorted(timestamps))
+            self.assertEqual(len(timestamps), len(set(timestamps)))
+            if timestamps:
+                self.assertLess(timestamps[-1], active)
+        thread.join(timeout=5)
+        self.assertFalse(thread.is_alive())
+        self.assertFalse(errors)
+        history, active = manager.snapshot('X')
+        self.assertEqual(len(history), 30)
+        self.assertEqual(active, datetime(2026, 10, 16, 9, 45))
+
+
 if __name__ == '__main__':
     unittest.main()
