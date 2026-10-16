@@ -93,6 +93,18 @@ class GapRecoveryTests(unittest.TestCase):
         self.assertEqual(merged, [])
         self.assertEqual(added, [])
 
+    def test_off_session_rows_are_not_recovered(self):
+        def at(hour, minute):
+            return [datetime(2026, 10, 13, hour, minute, tzinfo=IST).isoformat(),
+                    100, 103, 99, 102, 10]
+        recovered = validated_completed_rows(
+            [at(9, 14), at(9, 15), at(11, 44), at(15, 30)], NOW
+        )
+        self.assertEqual(
+            sorted((stamp.hour, stamp.minute) for stamp in recovered),
+            [(9, 15), (11, 44)],
+        )
+
     def test_completed_only_and_order(self):
         got = validated_completed_rows([row(44), row(42), row(45)], NOW)
         self.assertEqual([t.minute for t in sorted(got)], [42, 44])
