@@ -3,6 +3,8 @@
 Usage: python -m scripts.benchmark_candle_snapshots --symbols 50 --history 390 --iterations 200
 """
 import argparse
+import resource
+import sys
 import statistics
 import time
 from datetime import datetime, timedelta
@@ -12,6 +14,7 @@ from v2.backend.candles import Candle
 
 
 def benchmark(symbols, history, iterations):
+    baseline_rss_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     manager = CandleManager()
     start = datetime(2026, 10, 16, 9, 15)
     for index in range(symbols):
@@ -21,6 +24,7 @@ def benchmark(symbols, history, iterations):
             candle.timestamp = start + timedelta(minutes=minute)
             candles.append(candle)
         manager.preload_completed(f"SYM{index}", candles)
+    populated_rss_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     samples_ms = []
     start_ns = time.perf_counter_ns()
     for iteration in range(iterations):
@@ -34,7 +38,13 @@ def benchmark(symbols, history, iterations):
     percentile = lambda p: samples_ms[min(len(samples_ms) - 1, int((len(samples_ms) - 1) * p))]
     print(f"symbols={symbols} history={history} iterations={iterations} elapsed_s={elapsed_s:.3f}")
     print(f"snapshot_ms p50={statistics.median(samples_ms):.4f} p95={percentile(.95):.4f} p99={percentile(.99):.4f}")
-    print("Scope: sequential snapshot latency; no RSS measurement.")
+    # Linux reports ru_maxrss in KiB; macOS reports bytes. This is a process
+    # high-water mark, not retained heap size or per-symbol allocation.
+    rss_unit = 1024 if sys.platform == "darwin" else 1
+    print(f"peak_rss_mib={resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / rss_unit / 1024:.2f} "
+          f"baseline_rss_mib={baseline_rss_kb / rss_unit / 1024:.2f} "
+          f"after_preload_peak_rss_mib={populated_rss_kb / rss_unit / 1024:.2f}")
+    print("Scope: sequential snapshot latency; process peak RSS is a high-water mark, not retained heap.")
     # A separate updater thread contends for the same manager lock. Measure
     # end-to-end update latency, including time waiting for snapshots.
     ready = Event()
