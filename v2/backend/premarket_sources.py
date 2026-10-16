@@ -60,3 +60,46 @@ def previous_session_evidence(*, previous_open, previous_close, observed_at_ist,
            for x in (previous_open, previous_close)):
         return None
     return classify_percentage_change((previous_close / previous_open - 1) * 100)
+
+
+def assess_verified_sources(observations, *, now=None):
+    """Assemble evidence only from explicitly source-verified observations.
+
+    Each source entry requires verified=True and a supported observation shape.
+    No implicit conversion of unavailable sources into neutral votes.
+    """
+    from .premarket_prediction import WEIGHTS, assess_premarket
+
+    now = now or datetime.now(IST)
+    if not isinstance(observations, dict):
+        raise TypeError("observations must be a dictionary")
+    if set(observations) - set(WEIGHTS):
+        raise ValueError("Unknown premarket source")
+
+    evidence = {}
+    sources = {}
+    for key, weight in WEIGHTS.items():
+        record = observations.get(key)
+        value = None
+        if isinstance(record, dict) and record.get("verified") is True:
+            if key == "gift_nifty":
+                value = gift_nifty_evidence(
+                    last_price=record.get("last_price"),
+                    reference_close=record.get("reference_close"),
+                    observed_at_ist=record.get("observed_at_ist"), now=now)
+            elif key == "previous_session":
+                value = previous_session_evidence(
+                    previous_open=record.get("previous_open"),
+                    previous_close=record.get("previous_close"),
+                    observed_at_ist=record.get("observed_at_ist"), now=now)
+            # Remaining source categories have no adapters yet.
+        if value is not None:
+            evidence[key] = value
+        sources[key] = {
+            "weight": weight,
+            "value": value,
+            "status": "VERIFIED" if value is not None else "NOT_CONNECTED",
+            "observed_at_ist": record.get("observed_at_ist") if value is not None else None,
+        }
+    prediction = assess_premarket(evidence, now=now)
+    return prediction, sources
