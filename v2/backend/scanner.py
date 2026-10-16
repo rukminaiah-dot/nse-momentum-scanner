@@ -619,4 +619,11 @@ if __name__ == "__main__":
             )
 
     configure_gap_recovery(enabled=False)
-    UpstoxLiveV3(on_tick=on_tick).connect()
+    try:
+        UpstoxLiveV3(on_tick=on_tick).connect()
+    finally:
+        # A bounded shutdown wait prevents abandoning an in-flight recovery
+        # thread during a normal scanner exit; never place this in on_tick.
+        worker = _recovery_worker
+        if worker is not None:
+            worker.join(timeout=5)
