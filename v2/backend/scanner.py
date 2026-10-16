@@ -487,10 +487,20 @@ def on_tick(key, data):
     candles.update(key, price, ts, minute_volume)
     after = len(candles.completed.get(key, []))
 
-    # Analyse only when a minute candle has actually closed.
+    # Read-only timing instrumentation; never affects signal decisions.
     if after > before:
+        from time import perf_counter as diagnostic_perf_counter
+        diagnostic_started = diagnostic_perf_counter()
+        tick_age_ms = max(0, int(time.time() * 1000) - ts)
         write_candle_quality()
         analyse(key)
+        processing_ms = round((diagnostic_perf_counter() - diagnostic_started) * 1000, 1)
+        print(
+            "FEED_TIMING:", key,
+            "| TICK_AGE_MS:", tick_age_ms,
+            "| POST_CLOSE_PROCESSING_MS:", processing_ms,
+            flush=True,
+        )
 
 
 if __name__ == "__main__":
