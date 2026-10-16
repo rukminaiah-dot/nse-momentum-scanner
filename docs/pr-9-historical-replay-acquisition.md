@@ -39,3 +39,13 @@ python scripts/export_upstox_historical_readonly.py --instrument-key 'NSE_EQ|APP
 ```
 
 An authorized operator must substitute a real approved instrument key and separately authorize any `--execute` invocation. Never put tokens in command arguments or logs.
+
+## Offline trace runner (prepared, not executed on historical data)
+
+After an authorized private CSV export, run from the repository root in an isolated environment:
+
+```sh
+python scripts/replay_historical_candles_offline.py --input /private/approved-candles.csv --output /private/replay-trace.json --kind stock
+```
+
+Use `--kind primary-index` or `secondary-index` for approved index datasets. This validates and fingerprints the CSV, reports missing minutes, and produces per-minute offline-model decisions. **It does not establish full scanner parity or acceptance**: a scanner owner must compare the trace against independently approved expected decisions and validate lifecycle/persistence/order boundaries. Do not upload raw data or trace to public CI/artifacts without data-custodian permission.
