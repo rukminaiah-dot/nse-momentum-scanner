@@ -81,7 +81,10 @@ def assess_verified_sources(observations, *, now=None):
     for key, weight in WEIGHTS.items():
         record = observations.get(key)
         value = None
-        if isinstance(record, dict) and record.get("verified") is True:
+        if (isinstance(record, dict) and record.get("verified") is True
+                and isinstance(record.get("source"), str) and bool(record["source"].strip())
+                and isinstance(record.get("instrument"), str) and bool(record["instrument"].strip())
+                and record.get("session_verified") is True):
             if key == "gift_nifty":
                 value = gift_nifty_evidence(
                     last_price=record.get("last_price"),
