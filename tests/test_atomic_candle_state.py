@@ -418,5 +418,24 @@ class AtomicCandleStateTests(unittest.TestCase):
         self.assertEqual(active, datetime(2026, 10, 16, 9, 45))
 
 
+    def test_independent_instruments_do_not_share_recovery_state(self):
+        manager = CandleManager()
+        for key in ("A", "B"):
+            manager.update(key, 100, millis(9, 15))
+            manager.update(key, 101, millis(9, 17))
+        gap = recovered(9, 16, 99)
+        self.assertEqual(manager.insert_missing_completed(
+            "A", {gap.timestamp: gap}), 1)
+        a_history, a_active = manager.snapshot("A")
+        b_history, b_active = manager.snapshot("B")
+        self.assertEqual(a_active, b_active)
+        self.assertEqual([c.timestamp.minute for c in a_history], [15, 16])
+        self.assertEqual([c.timestamp.minute for c in b_history], [15])
+        # Mutating a detached A snapshot must not affect either instrument.
+        a_history[0].update(999)
+        self.assertEqual(manager.snapshot("A")[0][0].close, 100)
+        self.assertEqual(manager.snapshot("B")[0][0].close, 100)
+
+
 if __name__ == '__main__':
     unittest.main()
