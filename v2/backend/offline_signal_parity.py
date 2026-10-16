@@ -32,8 +32,10 @@ def five_minute_trend(history):
 
 
 def evaluate(history, *, session_date, is_index=False, is_stock=False,
-             nifty_market="NEUTRAL"):
+             nifty_market="NEUTRAL", is_primary_index=True):
     """Return pure indicator/decision data; no persistence or trading."""
+    if is_index and is_stock:
+        raise ValueError("instrument cannot be both index and stock")
     if len(history) < 20:
         return {"signal": "BLOCKED", "reason": "WARMUP"}
     if is_index:
@@ -68,7 +70,8 @@ def evaluate(history, *, session_date, is_index=False, is_stock=False,
         rvol = (volumes[-1] / (sum(baseline) / 19)
                 if len(baseline) == 19 and all(v >= 0 for v in volumes)
                 and sum(baseline) > 0 else 0.0)
-    market = index_signal(price, e9, e20, None) if not is_stock else nifty_market
+    market = (index_signal(price, e9, e20, None)
+              if is_index and is_primary_index else nifty_market)
     signal = generate_signal(price, e9, e20, None, mom, rvol, market)
     trend = five_minute_trend(history)
     if is_index:
