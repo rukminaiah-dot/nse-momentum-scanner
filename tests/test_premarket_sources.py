@@ -65,6 +65,10 @@ class PremarketSourceTests(unittest.TestCase):
         self.assertEqual(prediction.direction, "UNKNOWN")
         self.assertIsNone(sources["gift_nifty"]["value"])
 
+    def test_invalid_neutral_band_is_rejected(self):
+        for band in (None, True, -1, float("nan"), float("inf")):
+            self.assertIsNone(classify_percentage_change(1.0, neutral_band_pct=band))
+
     def test_previous_session_staleness(self):
         self.assertIsNone(previous_session_evidence(
             previous_open=25000, previous_close=25100,
