@@ -76,6 +76,7 @@ class CandleManager:
         if item is not None and minute < item["minute"]:
             return None
         if item is None or item["minute"] != minute:
+            closed = None
             if item:
                 closed = item["candle"]
                 closed.timestamp = item["minute"]
