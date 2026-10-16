@@ -34,11 +34,14 @@ class GapRecoveryWorker:
         self._stats = {"requested": 0, "rejected_pending": 0, "rejected_cooldown": 0,
                        "completed": 0, "failed": 0, "skipped": 0, "verified_insertions": 0}
         self._threads = set()
+        self._closed = False
         self._lock = threading.Lock()
 
     def request(self, key):
         now = time.monotonic()
         with self._lock:
+            if self._closed:
+                return False
             if key in self._pending or len(self._pending) >= self.max_pending:
                 self._stats["rejected_pending"] += 1
                 return False
@@ -102,6 +105,12 @@ class GapRecoveryWorker:
         """Thread-safe diagnostics; no credentials or market data exposed."""
         with self._lock:
             return {**self._stats, "pending": len(self._pending)}
+
+    def close(self, timeout=5):
+        """Stop accepting requests, then wait boundedly for existing work."""
+        with self._lock:
+            self._closed = True
+        self.join(timeout=timeout)
 
     def join(self, timeout=5):
         """Wait for in-flight workers during tests or graceful shutdown."""
