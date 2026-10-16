@@ -9,6 +9,12 @@ This draft PR is **not production-ready** and must not be deployed or merged sol
 - Invalid batches are rejected before history is modified; duplicate-only batches do not replace the history list.
 - History-limit accounting counts only retained recovered minutes.
 
+## PR #7 worker adapter (draft-only; not connected)
+
+The manager now exposes `merge_verified_recovery(key, recovered, snapshot_active_minute)` to match PR #7's `GapRecoveryWorker.merge` callback signature. The companion `snapshot(key)` already matches the worker's snapshot callback. Both acquire the manager's shared reentrant lock. The merge callback rejects missing, future, and cross-session snapshot boundaries; a delayed response from an earlier minute **within the same session** is allowed only for still-missing completed minutes strictly before the current active minute. Insertion is idempotent and never calls the live close/signal pipeline.
+
+**Do not enable the worker yet.** PR #7 and PR #8 are separate branches. First assemble both in an isolated integration branch, test the actual worker against the actual manager with a fake broker response and deterministic races, and confirm the fetch callback only accesses approved read-only market-data endpoints. The worker's rate limits and market-session validation are additional safeguards, not substitutes for that integration test. Any production wiring or deployment requires separate explicit approval.
+
 ## Remaining integration blockers
 
 - Audit modules **other than** `scanner.py` for direct reads and writes to `CandleManager.completed` or `current`. The scanner has been migrated on this draft branch, but the wider repository is not yet verified.
