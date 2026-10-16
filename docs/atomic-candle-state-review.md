@@ -32,3 +32,20 @@ The following `v2/backend/scanner.py` locations currently bypass the prototype's
 - Lines 518 and 525: direct indexing `candles.completed[key]`.
 
 Line numbers refer to the reviewed main-branch revision and may shift. The preload write needs a separate synchronized initialization API or a guaranteed pre-concurrency startup phase. Snapshot-based readers must account for the mutable Candle objects and the fact that snapshots can become stale immediately after the lock is released. These call sites are **not changed** by this prototype.
+
+## Critical signal-trigger coupling (scanner lines 486-493)
+
+The live `on_tick` path currently determines whether a candle closed by comparing
+`len(candles.completed[key])` **before and after** `candles.update(...)`.
+A recovery worker inserting historical candles concurrently can change that length,
+causing the tick handler to call `analyse(key)` even when the tick did not close a
+live candle. This defeats the intended guarantee that historical repairs do not
+trigger signals, even though `insert_missing_completed()` never invokes
+`update()` itself.
+
+**Required before integration:** use the actual return value of the live
+`CandleManager.update()` call (closed candle vs. `None`) as the close-event
+condition, rather than history-length changes. Test a recovery insertion
+interleaved with a same-minute tick and assert no analysis/trading signal fires.
+Do not wire recovery into the scanner until this is addressed.
+
