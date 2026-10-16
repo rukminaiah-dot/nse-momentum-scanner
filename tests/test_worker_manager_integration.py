@@ -2,6 +2,7 @@
 import unittest
 from datetime import datetime
 from threading import Event
+import time
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
@@ -43,6 +44,9 @@ class WorkerManagerIntegrationTests(unittest.TestCase):
         self.assertEqual([c.close for c in history], [100, 101])
         self.assertEqual(active.minute, 17)
         self.assertEqual(worker.status()["verified_insertions"], 1)
+        self.assertFalse(worker.request("X"))
+        self.assertEqual(worker.status()["rejected_cooldown"], 1)
+        time.sleep(0.01)
         self.assertTrue(worker.request("X"))
         worker.join()
         self.assertEqual(worker.status()["verified_insertions"], 1)
