@@ -22,6 +22,7 @@ small{color:#aaa}
 <div id="feed-status" class="card">Checking market and feed freshness…</div>
 <h3>Pre-Market Study &amp; Direction Forecast</h3>
 <section id="premarket-study" class="card" aria-label="Research-only pre-market outlook">
+<div id="premarket-source-status" class="pm-note">Checking verified source connections…</div>
 <div class="pm-note">Manual evidence assessment • Not a live feed • Not a BUY/SELL call. All five inputs are required. Evidence agreement is NOT prediction accuracy.</div>
 <div class="premarket-grid" id="premarket-inputs"></div>
 <div id="premarket-outlook" class="pm-result pm-wait" role="status" aria-live="polite">WAIT — Evidence unavailable</div>
@@ -66,6 +67,19 @@ function updatePremarket(){
  detail.textContent='Manual research outlook only; not a win probability. WAIT for fresh market-open candles, index trend and volume confirmation. No automatic trades.';
 }
 initPremarket();
+async function loadPremarketSourceStatus(){
+ const panel=document.getElementById('premarket-source-status');
+ try{
+  const response=await fetch('/api/v2/premarket/evidence',{cache:'no-store'});
+  if(!response.ok)throw Error('HTTP '+response.status);
+  const data=await response.json();
+  if(data.mode!=='RESEARCH_ONLY'||data.order_execution_enabled!==false||!data.sources||typeof data.sources!=='object')throw Error('Invalid safety contract');
+  const sources=Object.values(data.sources);
+  const connected=sources.filter(x=>x.status==='VERIFIED'&&x.value!==null).length;
+  panel.textContent='Automatic source connections: '+connected+'/'+sources.length+' verified. '+(connected===sources.length?'Source observations available; manual assessment remains separate.':'Automatic forecast unavailable — manual evidence assessment only.');
+ }catch(e){panel.textContent='Automatic source status unavailable — manual evidence assessment only; no live forecast.';}
+}
+loadPremarketSourceStatus();
 async function loadTrades(){
  try{
   const r=await fetch('/api/v2/trades');
