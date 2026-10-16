@@ -344,5 +344,27 @@ class AtomicCandleStateTests(unittest.TestCase):
         self.assertEqual(repaired.volume, 1)
 
 
+    def test_snapshot_mutation_cannot_change_manager_history(self):
+        manager = CandleManager()
+        manager.update('X', 100, millis(9, 15))
+        manager.update('X', 101, millis(9, 17))
+        snapshot, _ = manager.snapshot('X')
+        snapshot[0].update(999, 10)
+        snapshot[0].timestamp = datetime(2026, 10, 16, 9, 14)
+        stored, _ = manager.snapshot('X')
+        self.assertEqual(stored[0].close, 100)
+        self.assertEqual(stored[0].volume, 0)
+        self.assertEqual(stored[0].timestamp, datetime(2026, 10, 16, 9, 15))
+
+    def test_preload_copies_candle_objects_not_just_list(self):
+        manager = CandleManager()
+        source = recovered(9, 15, 100)
+        manager.preload_completed('X', [source])
+        source.update(999, 10)
+        stored, _ = manager.snapshot('X')
+        self.assertEqual(stored[0].close, 100)
+        self.assertEqual(stored[0].volume, 1)
+
+
 if __name__ == '__main__':
     unittest.main()
