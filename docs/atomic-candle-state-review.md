@@ -21,3 +21,14 @@ This draft PR is **not production-ready** and must not be deployed or merged sol
 - Only after these reviews, test an opt-in read-only staging integration with broker credentials and rate limits, then request explicit approval for any live rollout.
 
 Related isolated recovery primitives: draft PR #7. Do not assume the two draft branches can be merged without resolving integration and conflict semantics.
+
+## Scanner direct-access inventory (main branch review)
+
+The following `v2/backend/scanner.py` locations currently bypass the prototype's lock:
+
+- Line 195: `candles.completed[key] = loaded` (history preload **write**).
+- Lines 73, 249, 486, 488, 515, 545, 550: direct `completed.get(...)` reads.
+- Line 230: iteration over `candles.completed.items()`.
+- Lines 518 and 525: direct indexing `candles.completed[key]`.
+
+Line numbers refer to the reviewed main-branch revision and may shift. The preload write needs a separate synchronized initialization API or a guaranteed pre-concurrency startup phase. Snapshot-based readers must account for the mutable Candle objects and the fact that snapshots can become stale immediately after the lock is released. These call sites are **not changed** by this prototype.
