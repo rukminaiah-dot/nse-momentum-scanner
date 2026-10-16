@@ -91,5 +91,19 @@ class AtomicCandleStateTests(unittest.TestCase):
         self.assertEqual(len(history), 2)
 
 
+    def test_history_limit_counts_only_retained_insertions(self):
+        manager = CandleManager()
+        manager.update('X', 100, millis(9, 15))
+        manager.update('X', 101, millis(9, 19))
+        old = recovered(9, 16)
+        recent = recovered(9, 18)
+        count = manager.insert_missing_completed(
+            'X', {old.timestamp: old, recent.timestamp: recent}, limit=1)
+        history, _ = manager.snapshot('X')
+        self.assertEqual([c.timestamp for c in history],
+                         [datetime(2026, 10, 16, 9, 18)])
+        self.assertEqual(count, 1)
+
+
 if __name__ == '__main__':
     unittest.main()
