@@ -235,5 +235,18 @@ class AtomicCandleStateTests(unittest.TestCase):
         self.assertIsNone(manager.update('X', 999, millis(9, 16)))
 
 
+    def test_recovery_history_growth_is_not_live_close_event(self):
+        manager = CandleManager()
+        manager.update('X', 100, millis(9, 15))
+        manager.update('X', 101, millis(9, 17))
+        before = len(manager.snapshot('X')[0])
+        missing = recovered(9, 16)
+        self.assertEqual(manager.insert_missing_completed(
+            'X', {missing.timestamp: missing}), 1)
+        # A history-length comparison would falsely interpret this as a close.
+        self.assertGreater(len(manager.snapshot('X')[0]), before)
+        self.assertIsNone(manager.update('X', 102, millis(9, 17)))
+
+
 if __name__ == '__main__':
     unittest.main()
