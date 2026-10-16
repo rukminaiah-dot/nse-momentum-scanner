@@ -23,8 +23,8 @@ def source_decision(history, *, is_index, is_stock, primary, nifty_market):
     tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
     analyse = next(n for n in tree.body if isinstance(n, ast.FunctionDef)
                    and n.name == "analyse")
-    # Extract only the source scanner's calculation/decision statements;
-    # exclude save_scan_result(), buy(), printing and global regime mutation.
+    # Extract scanner calculation/decision statements, excluding persistence,
+    # order calls and printing. The market regime mapping is a local fixture.
     begin = next(i for i, n in enumerate(analyse.body)
                  if isinstance(n, ast.Assign)
                  and any(isinstance(t, ast.Name) and t.id == "closes"
@@ -35,17 +35,7 @@ def source_decision(history, *, is_index, is_stock, primary, nifty_market):
                        and isinstance(c.func, ast.Name)
                        and c.func.id == "save_scan_result"
                        for c in ast.walk(n)))
-    chosen = []
-    for node in analyse.body[begin:end]:
-        # The regime bookkeeping branch mutates live global state. Replace it
-        # with a fixed, explicit offline market input.
-        if isinstance(node, ast.If) and any(
-                isinstance(c, ast.Subscript) and isinstance(c.value, ast.Name)
-                and c.value.id == "market_regimes" and isinstance(c.ctx, ast.Store)
-                for c in ast.walk(node)):
-            continue
-        chosen.append(node)
-    code = compile(ast.fix_missing_locations(ast.Module(body=chosen,
+    code = compile(ast.fix_missing_locations(ast.Module(body=analyse.body[begin:end],
                                                          type_ignores=[])),
                    str(SOURCE), "exec")
     key = "PRIMARY" if primary else ("SECONDARY" if is_index else "STOCK")
