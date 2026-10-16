@@ -368,5 +368,22 @@ class AtomicCandleStateTests(unittest.TestCase):
         self.assertEqual(stored[0].volume, 1)
 
 
+    def test_recovery_cannot_bridge_session_boundary(self):
+        manager = CandleManager()
+        manager.update('X', 100, millis(9, 15))
+        manager.update('X', 101, millis(9, 17))
+        # A later session starts a new active candle, but prior completed
+        # history may remain available for EMA warmup.
+        next_day = int(datetime(2026, 10, 19, 9, 15, tzinfo=IST).timestamp() * 1000)
+        manager.update('X', 102, next_day)
+        prior_session_gap = recovered(9, 16, 99)
+        self.assertEqual(manager.insert_missing_completed(
+            'X', {prior_session_gap.timestamp: prior_session_gap}), 0)
+        history, active = manager.snapshot('X')
+        self.assertEqual(active, datetime(2026, 10, 19, 9, 15))
+        self.assertNotIn(prior_session_gap.timestamp,
+                         [c.timestamp for c in history])
+
+
 if __name__ == '__main__':
     unittest.main()
