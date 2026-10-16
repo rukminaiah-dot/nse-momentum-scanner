@@ -40,7 +40,9 @@ class AtomicCandleStateTests(unittest.TestCase):
         history, _ = manager.snapshot('X')
         self.assertEqual([c.timestamp for c in history],
                          [datetime(2026, 10, 16, 9, 15), datetime(2026, 10, 16, 9, 16)])
-        self.assertIs(history[0], original)
+        self.assertIsNot(history[0], original)
+        self.assertEqual(history[0].timestamp, original.timestamp)
+        self.assertEqual(history[0].close, original.close)
         self.assertEqual(manager.insert_missing_completed('X', batch), 0)
 
     def test_rechecks_active_boundary(self):
