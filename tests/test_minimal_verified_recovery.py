@@ -239,5 +239,50 @@ class VerifiedRecoverySmokeTests(unittest.TestCase):
                                   lambda *_: 0, **kwargs)
 
 
+    def test_merge_callback_rechecks_live_minute_after_snapshot(self):
+        import threading
+        broker_waiting = threading.Event()
+        release_broker = threading.Event()
+        state_lock = threading.Lock()
+        original = validated_completed_rows([row(self.t0)], self.now)[self.t0]
+        state = [original]
+        snapshot_active = self.t1 + timedelta(minutes=1)
+        live_active = [snapshot_active]
+
+        def snapshot(_):
+            with state_lock:
+                return list(state), live_active[0]
+
+        def fetch(_):
+            broker_waiting.set()
+            if not release_broker.wait(5):
+                raise TimeoutError("test broker was not released")
+            return [row(self.t1), row(self.t1 + timedelta(minutes=1))]
+
+        def merge(_, recovered, stale_snapshot_boundary):
+            nonlocal state
+            with state_lock:
+                # Ignore the stale boundary and read the active minute under
+                # the same lock that protects websocket state updates.
+                state, inserted = merge_verified_missing(
+                    state, recovered, active_minute=live_active[0])
+                return len(inserted)
+
+        worker = GapRecoveryWorker(fetch, snapshot, merge, min_request_spacing=0.001)
+        try:
+            self.assertTrue(worker.request("ROLLOVER"))
+            self.assertTrue(broker_waiting.wait(5))
+            with state_lock:
+                live_active[0] += timedelta(minutes=1)
+            release_broker.set()
+        finally:
+            release_broker.set()
+            worker.join(timeout=5)
+        self.assertEqual(worker.status()["failed"], 0)
+        self.assertEqual(worker.status()["verified_insertions"], 2)
+        self.assertEqual([c.timestamp for c in state],
+                         [self.t0, self.t1, snapshot_active])
+
+
 if __name__ == "__main__":
     unittest.main()
