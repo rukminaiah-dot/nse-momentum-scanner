@@ -22,9 +22,11 @@ def benchmark(history=390, iterations=100):
     if isinstance(history, bool) or isinstance(iterations, bool) or history < 30 or iterations < 1:
         raise ValueError("history >= 30 and iterations >= 1 required")
     start = datetime(2026, 10, 16, 9, 15)
-    # At most 50 missing minutes per batch, below the worker's 60 cap.
+    # Only same-session recovery candidates; retained preload may span dates.
     all_minutes = [start + timedelta(minutes=i) for i in range(history)]
-    missing = set(all_minutes[::max(10, (history + 49) // 50)])
+    recent = [minute for minute in all_minutes
+              if minute.date() == all_minutes[-1].date()]
+    missing = set(recent[::max(10, (len(recent) + 49) // 50)])
     existing = []
     recovered = {}
     for minute in all_minutes:
