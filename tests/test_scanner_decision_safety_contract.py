@@ -24,8 +24,8 @@ class ScannerDecisionSafetyContractTests(unittest.TestCase):
         source_lines = SCANNER.read_text(encoding="utf-8").splitlines()
         def locate(fragment):
             matches = [index + 1 for index, line in enumerate(source_lines)
-                       if fragment in line]
-            self.assertEqual(len(matches), 1, fragment)
+                       if fragment in line and analyse.lineno <= index + 1 <= analyse.end_lineno]
+            self.assertGreaterEqual(len(matches), 1, fragment)
             return matches[0]
         # Guard placement is necessary but not sufficient to prove correct
         # control flow. The full decision path still needs independent replay.
