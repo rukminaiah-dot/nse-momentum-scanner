@@ -58,5 +58,71 @@ class VerifiedRecoverySmokeTests(unittest.TestCase):
         self.assertEqual(len(state), 2)
 
 
+    def test_rejects_invalid_ohlcv_and_timezone(self):
+        invalid = row(self.t0)
+        invalid[2] = 98  # high below open
+        with self.assertRaises(ValueError):
+            validated_completed_rows([invalid], self.now)
+        naive = row(self.t0)
+        naive[0] = self.t0.isoformat()
+        with self.assertRaises(ValueError):
+            validated_completed_rows([naive], self.now)
+
+    def test_worker_failure_does_not_modify_history(self):
+        existing = validated_completed_rows([row(self.t0)], self.now)[self.t0]
+        state = [existing]
+        def broken_fetch(_):
+            raise RuntimeError("simulated broker outage")
+        worker = GapRecoveryWorker(
+            broken_fetch, lambda _: (list(state), self.t1 + timedelta(minutes=1)),
+            lambda *_: self.fail("merge must not run after broker failure"),
+            min_request_spacing=0.001)
+        self.assertTrue(worker.request("OFFLINE_FAILURE"))
+        worker.join(timeout=5)
+        self.assertEqual(worker.status()["failed"], 1)
+        self.assertEqual(worker.status()["pending"], 0)
+        self.assertEqual(worker.status()["verified_insertions"], 0)
+        self.assertEqual(state, [existing])
+
+    def test_duplicate_request_rejected_while_pending(self):
+        import threading
+        started = threading.Event()
+        release = threading.Event()
+        def blocked_fetch(_):
+            started.set()
+            if not release.wait(5):
+                raise TimeoutError("test worker was not released")
+            return [row(self.t1)]
+        existing = validated_completed_rows([row(self.t0)], self.now)[self.t0]
+        state = [existing]
+        def merge(_, recovered, active):
+            nonlocal state
+            state, added = merge_verified_missing(state, recovered, active_minute=active)
+            return len(added)
+        worker = GapRecoveryWorker(
+            blocked_fetch, lambda _: (list(state), self.t1 + timedelta(minutes=1)),
+            merge, min_request_spacing=0.001)
+        try:
+            self.assertTrue(worker.request("SAME_KEY"))
+            self.assertTrue(started.wait(5))
+            self.assertFalse(worker.request("SAME_KEY"))
+        finally:
+            release.set()
+            worker.join(timeout=5)
+        self.assertEqual(worker.status()["rejected_pending"], 1)
+        self.assertEqual(worker.status()["verified_insertions"], 1)
+
+    def test_cooldown_rejects_immediate_repeat(self):
+        existing = validated_completed_rows([row(self.t0)], self.now)[self.t0]
+        worker = GapRecoveryWorker(
+            lambda _: [row(self.t1)],
+            lambda _: ([existing], self.t1 + timedelta(minutes=1)),
+            lambda *_: 0, cooldown=120, min_request_spacing=0.001)
+        self.assertTrue(worker.request("COOLDOWN_KEY"))
+        worker.join(timeout=5)
+        self.assertFalse(worker.request("COOLDOWN_KEY"))
+        self.assertEqual(worker.status()["rejected_cooldown"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()
