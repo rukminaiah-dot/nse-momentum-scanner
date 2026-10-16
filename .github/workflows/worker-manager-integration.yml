@@ -3,6 +3,14 @@ on:
   push:
     branches:
       - feature/isolated-recovery-worker-manager-integration
+  pull_request:
+    branches:
+      - feature/atomic-candle-state-prototype
+    paths:
+      - 'v2/backend/gap_recovery_worker.py'
+      - 'v2/backend/verified_gap_recovery.py'
+      - 'tests/test_worker_manager_integration.py'
+      - '.github/workflows/worker-manager-integration.yml'
   workflow_dispatch:
 jobs:
   offline:
