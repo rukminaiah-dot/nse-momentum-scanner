@@ -142,5 +142,44 @@ class AtomicCandleStateTests(unittest.TestCase):
         self.assertIs(manager.completed['X'], original_history)
 
 
+    def test_live_update_and_recovery_are_serialized(self):
+        import threading
+        manager = CandleManager()
+        manager.update('X', 100, millis(9, 15))
+        manager.update('X', 101, millis(9, 17))
+        ready = threading.Barrier(3)
+        errors = []
+        missing = recovered(9, 16)
+
+        def live():
+            try:
+                ready.wait(timeout=5)
+                manager.update('X', 102, millis(9, 18))
+            except Exception as exc:
+                errors.append(exc)
+
+        def repair():
+            try:
+                ready.wait(timeout=5)
+                manager.insert_missing_completed('X', {missing.timestamp: missing})
+            except Exception as exc:
+                errors.append(exc)
+
+        threads = [threading.Thread(target=live), threading.Thread(target=repair)]
+        for thread in threads:
+            thread.start()
+        ready.wait(timeout=5)
+        for thread in threads:
+            thread.join(timeout=5)
+        self.assertFalse(errors)
+        self.assertTrue(all(not thread.is_alive() for thread in threads))
+        history, active = manager.snapshot('X')
+        self.assertEqual(active, datetime(2026, 10, 16, 9, 18))
+        self.assertEqual([c.timestamp for c in history],
+                         [datetime(2026, 10, 16, 9, 15),
+                          datetime(2026, 10, 16, 9, 16),
+                          datetime(2026, 10, 16, 9, 17)])
+
+
 if __name__ == '__main__':
     unittest.main()
