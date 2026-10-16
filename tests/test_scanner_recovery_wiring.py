@@ -30,6 +30,25 @@ class ScannerRecoveryWiringTests(unittest.TestCase):
         self.assertIsNone(configure(enabled=False))
         self.assertIsNone(state["_recovery_worker"])
 
+    def test_scanner_staging_requires_two_explicit_flags(self):
+        tree = ast.parse(SCANNER.read_text())
+        main = next(n for n in tree.body if isinstance(n, ast.If)
+                    and isinstance(n.test, ast.Compare)
+                    and isinstance(n.test.left, ast.Name)
+                    and n.test.left.id == "__name__")
+        assignments = [n for n in main.body if isinstance(n, ast.Assign)
+                       and any(isinstance(t, ast.Name) and t.id == "recovery_enabled"
+                               for t in n.targets)]
+        self.assertEqual(len(assignments), 1)
+        expression = assignments[0].value
+        self.assertIsInstance(expression, ast.BoolOp)
+        self.assertIsInstance(expression.op, ast.And)
+        self.assertEqual(len(expression.values), 2)
+        keys = {n.value for n in ast.walk(expression)
+                if isinstance(n, ast.Constant) and isinstance(n.value, str)}
+        self.assertTrue({"NSE_RECOVERY_MODE", "staging",
+                         "NSE_ENABLE_VERIFIED_GAP_RECOVERY", "1"} <= keys)
+
     def test_only_real_same_session_gap_enqueues(self):
         t = lambda hour, minute, day=16: datetime(2026, 10, day, hour, minute)
         worker = Mock()
