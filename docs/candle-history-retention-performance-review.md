@@ -54,3 +54,9 @@ Scanner logic to preserve in the pure model:
 - Compare not only BUY/SELL/HOLD but also continuity blocks, intermediate indicators, and rejection reasons. Report results by instrument class and price regime.
 
 Current synthetic core parity compares only `generate_signal` and must not be represented as complete scanner parity. At `58e1037`, a 60-bar cap produced HOLD→BUY and HOLD→SELL divergences in adversarial histories; those cases are now protected by tests at `da4d300`. Keep all caps disabled.
+
+## CI negative controls and approval interpretation (2026-10-16)
+
+The isolated scanner decision comparison now distinguishes primary index, secondary index, and stock paths. In the four synthetic price regimes at 400 bars, each retention limit is compared across 4,560 instrument/prefix combinations. The 60-bar candidate produced four index-class disagreements (HOLD→BUY and HOLD→SELL in both index classes); 200 bars produced zero in this limited dataset. The comparison is run from the offline worker workflow. `tests/test_offline_scanner_retention_probe.py` asserts the precise 60-bar negative-control set and the current 200-bar baseline so future edits cannot silently remove those cases.
+
+**Important:** the 200-bar zero-disagreement assertion is a regression baseline, **not** a safety approval threshold. Additional realistic or adversarial datasets are expected to expand the coverage and may reveal 200-bar differences. The replay uses synthetic timestamps beyond normal market-session length, a separate calculation implementation, and no actual scanner startup. None of these findings justify a production or staging cap change. Any decision to enable retention requires a reviewed historical-data replay, independently checked scanner-rule equivalence, and explicit deployment authorization.
