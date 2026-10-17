@@ -94,7 +94,7 @@ class FivePageUiTests(unittest.TestCase):
 
     def test_stock_signals_require_live_verified_candle_rating(self):
         self.assertIn("const live=Boolean(state.sessionOpen&&fresh(r)&&rating)", self.html)
-        self.assertIn("rating.rating_basis==='CANDLE_ONLY_HEURISTIC'", self.html)
+        self.assertIn("x.type==='STOCK'&&x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)", self.html)
         self.assertIn("WAIT — not independently verified fresh", self.html)
 
     def test_no_broker_execution_claim(self):
