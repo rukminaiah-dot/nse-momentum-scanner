@@ -57,6 +57,10 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("Date.parse(zoned)", self.html)
         self.assertIn("Date.now()-t<=180000", self.html)
 
+    def test_index_signals_require_fresh_verified_index_ratings(self):
+        self.assertIn("x.type==='INDEX'&&x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)", self.html)
+        self.assertIn("WAIT / UNVERIFIED", self.html)
+
     def test_premarket_bias_does_not_use_stored_index_readings(self):
         self.assertIn("const valid=rows.filter(r=>fresh(r)&&", self.html)
         self.assertIn("NO VERIFIED LIVE BIAS", self.html)
