@@ -116,10 +116,15 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("Trade IDs are missing or duplicated", self.html)
         self.assertIn("Some prices or quantities are invalid", self.html)
 
+    def test_pnl_chart_distinguishes_no_exit_days_from_zero_profit(self):
+        self.assertIn("Last seven IST calendar days", self.html)
+        self.assertIn("No exits", self.html)
+        self.assertIn("no-exit days are not zero P&L", self.html)
+
     def test_recorded_daily_pnl_chart_requires_complete_history(self):
         self.assertIn('id="pnl-chart"', self.html)
         self.assertIn("const historyVerified=activity.status==='RECORDED_HISTORY'", self.html)
-        self.assertIn("const recentDays=[...chartRows.entries()]", self.html)
+        self.assertIn("const recentDays=Array.from({length:7}", self.html)
         self.assertIn("P&L chart unavailable: '+esc(chartIssue)+'.", self.html)
         self.assertIn("signal-based, not broker-confirmed", self.html)
 
