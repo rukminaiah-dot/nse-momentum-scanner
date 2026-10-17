@@ -64,6 +64,10 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("const validRating=x=>{const row=state.rows.find", self.html)
         self.assertIn("r&&fresh(row)&&['BUY','SELL'].includes(r.signal)&&row.signal===r.signal", self.html)
 
+    def test_index_and_stock_detail_reject_malformed_candle_scores(self):
+        self.assertIn("const aligned=Boolean(live&&score&&verifiedCandleScore(score)", self.html)
+        self.assertIn("const live=Boolean(state.sessionOpen&&fresh(r)&&rating&&verifiedCandleScore(rating)", self.html)
+
     def test_candle_scores_must_be_present_and_within_zero_to_hundred(self):
         self.assertIn("const verifiedCandleScore=x=>", self.html)
         self.assertIn("x.rating!==null&&x.rating!==undefined&&x.rating!==''", self.html)
@@ -81,7 +85,7 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("r.signal===rating.signal&&['BUY','SELL'].includes(r.signal)", self.html)
 
     def test_stock_detail_uses_fresh_stock_specific_rating(self):
-        self.assertIn("x.symbol===symbol&&x.type==='STOCK'&&x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)", self.html)
+        self.assertIn("x.symbol===symbol&&x.type==='STOCK'&&x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)&&verifiedCandleScore(x)", self.html)
         self.assertIn("const live=Boolean(state.sessionOpen&&fresh(r)&&rating&&r.signal===rating.signal", self.html)
 
     def test_concurrent_trade_failure_is_caught_before_await(self):
