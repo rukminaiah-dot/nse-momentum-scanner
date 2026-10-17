@@ -62,9 +62,12 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("fresh(x)&&fresh(row)&&row.signal==='BUY'", self.html)
         self.assertIn("state.ratings.filter(verifiedStockBuy)", self.html)
 
+    def test_stock_analysis_requires_scanner_rating_direction_agreement(self):
+        self.assertIn("r.signal===rating.signal&&['BUY','SELL'].includes(r.signal)", self.html)
+
     def test_stock_detail_uses_fresh_stock_specific_rating(self):
         self.assertIn("x.symbol===symbol&&x.type==='STOCK'&&x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)", self.html)
-        self.assertIn("const live=Boolean(state.sessionOpen&&fresh(r)&&rating)", self.html)
+        self.assertIn("const live=Boolean(state.sessionOpen&&fresh(r)&&rating&&r.signal===rating.signal", self.html)
 
     def test_daily_pnl_rejects_timezone_ambiguous_exit_times(self):
         self.assertIn(r"if(!/(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw))return null", self.html)
@@ -105,7 +108,7 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn(".sort((a,b)=>Number(b.rating)-Number(a.rating)).slice(0,10)", self.html)
 
     def test_stock_signals_require_live_verified_candle_rating(self):
-        self.assertIn("const live=Boolean(state.sessionOpen&&fresh(r)&&rating)", self.html)
+        self.assertIn("const live=Boolean(state.sessionOpen&&fresh(r)&&rating&&r.signal===rating.signal", self.html)
         self.assertIn("x.type==='STOCK'&&x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)", self.html)
         self.assertIn("WAIT — not independently verified fresh", self.html)
 
