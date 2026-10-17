@@ -91,6 +91,12 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("history_truncated = len(records) > 500", api)
         self.assertIn("records = records[:500]", api)
 
+    def test_malformed_recorded_history_is_not_shown_as_empty(self):
+        self.assertIn("throw Error('Malformed signal history response')", self.html)
+        self.assertIn("!Array.isArray(activity.completed)", self.html)
+        self.assertIn("!Number.isSafeInteger(activity.incomplete_records)", self.html)
+        self.assertIn("typeof activity.history_truncated!=='boolean'", self.html)
+
     def test_signal_activity_renders_before_legacy_trades_wait(self):
         self.assertLess(self.html.index("try{const result=await activityRequest;"), self.html.index("try{const tradesResult=await tradesRequest;"))
         self.assertIn("const activityRequest=get('/api/v2/signal-activity')", self.html)
