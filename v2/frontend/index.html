@@ -23,7 +23,7 @@ const esc=v=>String(v??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>'
 const num=(v,d=2)=>v==null||v===''||!Number.isFinite(Number(v))?'—':Number(v).toFixed(d);
 const ist=()=>new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata',weekday:'short',hour:'2-digit',minute:'2-digit',hour12:false});
 function openNow(){const p=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kolkata',weekday:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());const x=k=>p.find(a=>a.type===k)?.value;const m=Number(x('hour'))*60+Number(x('minute'));return !['Sat','Sun'].includes(x('weekday'))&&m>=555&&m<930}
-function fresh(row){if(!state.sessionOpen||!row?.updated_at)return false;const t=Date.parse(String(row.updated_at).replace(' ','T')+'+05:30');return Number.isFinite(t)&&t<=Date.now()&&Date.now()-t<=180000}
+function fresh(row){if(!state.sessionOpen)return false;const stamp=row?.updated_at??row?.candle_ist;if(!stamp)return false;const raw=String(stamp).trim().replace(' ','T');const zoned=/(Z|[+-]\\d{2}:?\\d{2})$/i.test(raw)?raw:raw+'+05:30';const t=Date.parse(zoned);return Number.isFinite(t)&&t<=Date.now()&&Date.now()-t<=180000}
 async function get(path){const r=await fetch(path,{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);return r.json()}
 function table(headers,rows){return '<table><thead><tr>'+headers.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>'+rows.join('')+'</tbody></table>'}
 function tr(cells){return '<tr>'+cells.map(x=>'<td>'+x+'</td>').join('')+'</tr>'}
