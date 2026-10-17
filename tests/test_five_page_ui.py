@@ -99,6 +99,11 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("const invalidEntries=completed.filter(x=>istDate(x.buy_time)==null)", self.html)
         self.assertIn("!undatedExits.length&&!invalidEntries.length&&!invalidChronology.length", self.html)
 
+    def test_future_dated_exits_block_daily_pnl_and_chart(self):
+        self.assertIn("const futureExits=completed.filter", self.html)
+        self.assertIn("!invalidChronology.length&&!futureExits.length&&!invalidCompletedPrices.length", self.html)
+        self.assertIn("Some recorded exits are dated in the future", self.html)
+
     def test_pnl_chart_reports_reason_for_missing_verified_data(self):
         self.assertIn("const chartIssue=", self.html)
         self.assertIn("History exceeds the 500-record display limit", self.html)
@@ -170,7 +175,7 @@ class FivePageUiTests(unittest.TestCase):
 
     def test_daily_pnl_does_not_ignore_undated_completed_exits(self):
         self.assertIn("const undatedExits=completed.filter(x=>istDate(x.sell_time)==null)", self.html)
-        self.assertIn("const total=activity.history_truncated===false&&activity.incomplete_records===0&&!undatedExits.length&&!invalidEntries.length&&!invalidChronology.length&&!invalidCompletedPrices.length&&!duplicateLifecycleIds&&!overlappingLifecycle&&todayClosed.length", self.html)
+        self.assertIn("const total=activity.history_truncated===false&&activity.incomplete_records===0&&!undatedExits.length&&!invalidEntries.length&&!invalidChronology.length&&!futureExits.length&&!invalidCompletedPrices.length&&!duplicateLifecycleIds&&!overlappingLifecycle&&todayClosed.length", self.html)
 
     def test_recorded_pnl_requires_chronological_entry_exit(self):
         self.assertIn("Date.parse(x.sell_time)>=Date.parse(x.buy_time)", self.html)
