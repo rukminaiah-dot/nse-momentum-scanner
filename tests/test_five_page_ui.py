@@ -85,6 +85,10 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("const tradesRequest=get('/api/v2/trades').then(value=>({ok:true,value}),error=>({ok:false,error}))", self.html)
         self.assertIn("const result=await activityRequest", self.html)
 
+    def test_daily_pnl_withholds_total_for_impossible_trade_chronology(self):
+        self.assertIn("const invalidChronology=completed.filter", self.html)
+        self.assertIn("const total=!undatedExits.length&&!invalidChronology.length", self.html)
+
     def test_daily_pnl_does_not_ignore_undated_completed_exits(self):
         self.assertIn("const undatedExits=completed.filter(x=>istDate(x.sell_time)==null)", self.html)
         self.assertIn("const total=!undatedExits.length&&todayClosed.length", self.html)
