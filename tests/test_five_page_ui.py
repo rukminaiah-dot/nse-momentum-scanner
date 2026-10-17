@@ -53,7 +53,7 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("function shortTrend", self.html) if "function shortTrend" in self.html else self.assertIn("const shortTrend=", self.html)
 
     def test_rating_freshness_uses_candle_timestamp_and_timezone(self):
-        self.assertIn("row?.updated_at??row?.candle_ist", self.html)
+        self.assertIn("row?.candle_ist??row?.updated_at", self.html)
         self.assertIn("Date.parse(zoned)", self.html)
         self.assertIn("Date.now()-t<=180000", self.html)
 
