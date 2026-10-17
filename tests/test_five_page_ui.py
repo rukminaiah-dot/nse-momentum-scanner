@@ -91,7 +91,7 @@ class FivePageUiTests(unittest.TestCase):
 
     def test_daily_pnl_does_not_ignore_undated_completed_exits(self):
         self.assertIn("const undatedExits=completed.filter(x=>istDate(x.sell_time)==null)", self.html)
-        self.assertIn("const total=!undatedExits.length&&todayClosed.length", self.html)
+        self.assertIn("const total=!undatedExits.length&&!invalidChronology.length&&todayClosed.length", self.html)
 
     def test_recorded_pnl_requires_chronological_entry_exit(self):
         self.assertIn("Date.parse(x.sell_time)>=Date.parse(x.buy_time)", self.html)
