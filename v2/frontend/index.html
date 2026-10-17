@@ -1,147 +1,46 @@
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NSE Momentum Scanner V2</title>
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NSE Momentum Intelligence</title>
 <style>
-body{font-family:Arial;background:#10131a;color:#fff;margin:15px}
-h2{color:#4ade80}
-.card{background:#1c2230;padding:14px;margin:10px 0;border-radius:10px}
-.buy{color:#4ade80}.sell{color:#fb7185}
-small{color:#aaa}
-.target{color:orange;font-weight:bold}
-.profit{color:#4ade80;font-weight:bold}
-.loss{color:#fb7185;font-weight:bold}
-.table-wrap{overflow-x:auto;border-radius:10px;background:#1c2230}table{width:100%;border-collapse:collapse;font-size:13px;white-space:nowrap}th,td{padding:10px;border-bottom:1px solid #394150;text-align:left}th{position:sticky;top:0;background:#293244} .status-ok{color:#4ade80}.status-warn{color:#fbbf24}
-</style>
-</head>
-<body>
-<h2>NSE Momentum Scanner V2</h2>
-<div id="feed-status" class="card">Checking market and feed freshness…</div>
-<h3>Market Index Signals</h3>
-<div id="indices">Loading live indices...</div>
-<h3>203-Instrument Candle Quality Ratings (Research Only)</h3>
-<div id="quality-ratings" class="card">Loading quality ratings…</div>
-<h3>Top 5 Verified Momentum Setups</h3>
-<div id="scanner">Waiting for live market data...</div>
-<h3>Top 10 Intraday Momentum Ranking (Watchlist, Not BUY Calls)</h3>
-<div id="ranked-stocks" class="table-wrap">Waiting for fresh candles…</div>
-<h3>NIFTY 200 Stock Board — Ranked by Momentum</h3>
-<div id="stock-count" class="card">Loading stock coverage…</div>
-<div id="stock-board" class="table-wrap">Loading validation table…</div>
-<h3>Trades</h3>
-<div id="trades">Loading trades...</div>
-
+:root{color-scheme:dark;--bg:#080e1b;--panel:#111d31;--line:#293951;--text:#eef5ff;--muted:#9fb0c9;--cyan:#57d7ee;--green:#5be2a1;--amber:#ffc46d;--red:#ff8192}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px system-ui,-apple-system,Segoe UI,sans-serif}header{position:sticky;top:0;z-index:3;background:#0d1727;border-bottom:1px solid var(--line);padding:14px max(18px,calc((100vw - 1300px)/2));display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.brand{font-size:19px;font-weight:800;letter-spacing:.2px}.brand b{color:var(--cyan)}.sub{color:var(--muted);font-size:12px}nav{display:flex;gap:8px;overflow:auto;padding:12px max(18px,calc((100vw - 1300px)/2));background:#0d1727;border-bottom:1px solid var(--line)}button{font:inherit;cursor:pointer}nav button,.action{border:1px solid var(--line);border-radius:10px;padding:10px 14px;background:#17243a;color:var(--muted);white-space:nowrap}nav button.active,.action:hover{background:#15384b;border-color:#2f7c91;color:#fff}main{max-width:1300px;margin:0 auto;padding:22px 18px 70px}.page{display:none}.page.active{display:block}h1{font-size:25px;margin:0 0 6px}h2{font-size:17px;margin:0 0 12px}p{color:var(--muted);line-height:1.5}.eyebrow{font-size:11px;color:var(--cyan);letter-spacing:1.5px;font-weight:700;text-transform:uppercase}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:18px 0}.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;min-width:0}.metric{font-size:30px;font-weight:800;margin:8px 0}.muted{color:var(--muted)}.green{color:var(--green)}.red{color:var(--red)}.amber{color:var(--amber)}.cyan{color:var(--cyan)}.pill{display:inline-block;border-radius:99px;background:#22334b;padding:5px 9px;color:var(--muted);font-size:12px}.tablewrap{overflow:auto;border-radius:12px;border:1px solid var(--line)}table{width:100%;border-collapse:collapse;min-width:640px}th,td{padding:13px;text-align:left;border-bottom:1px solid #24334a}th{background:#182840;color:#aebfda;font-size:12px}tr:hover{background:#1a2b42}td button{border:0;background:none;color:var(--cyan);font-weight:700;text-align:left;padding:0}.notice{background:#15263b;border-left:3px solid var(--amber);padding:12px 15px;border-radius:7px;margin:16px 0;color:#d9e5f5}.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0}input{background:#15243a;color:#fff;border:1px solid var(--line);padding:11px 12px;border-radius:9px;max-width:100%}.small{font-size:12px}.empty{color:var(--muted);padding:18px}.topline{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}footer{color:var(--muted);font-size:12px;margin-top:30px}a{color:var(--cyan)}@media(max-width:760px){.grid,.grid.two{grid-template-columns:1fr}h1{font-size:21px}.metric{font-size:26px}main{padding:16px 12px 60px}header{padding:14px 12px}nav{padding:10px 12px}}
+</style></head><body>
+<header><div><div class="brand">NSE <b>Momentum Intelligence</b></div><div class="sub">Upstox-backed market research · India</div></div><div><span id="session" class="pill">Checking market…</span> <span id="clock" class="sub"></span></div></header>
+<nav aria-label="Main pages"><button class="active" data-page="premarket">01 · Pre-Market Study</button><button data-page="pulse">02 · Market & Top 10</button><button data-page="analysis">03 · Stock Analysis</button><button data-page="board">04 · NSE 200 Board</button><button data-page="history">05 · History & Health</button></nav>
+<main>
+<section id="premarket" class="page active"><div class="eyebrow">Page 01 / Planning</div><h1>Pre-Market Study & Direction</h1><p>Evidence-based market bias, not a guaranteed prediction. Live confirmation is required after the opening bell.</p><div class="grid"><div class="card"><div class="muted">Indicative market direction</div><div id="bias" class="metric amber">Awaiting evidence</div><div id="bias-reason" class="small muted">Loading last stored index readings</div></div><div class="card"><div class="muted">Nifty 50</div><div id="pm-nifty" class="metric">—</div><div class="small muted">Last stored reading</div></div><div class="card"><div class="muted">Bank Nifty</div><div id="pm-bank" class="metric">—</div><div class="small muted">Last stored reading</div></div></div><div class="notice">Pre-market direction is an indicative scenario based on stored index momentum and EMA alignment. This API does not supply verified overnight global cues, GIFT Nifty, or opening-gap data; no confidence percentage is invented.</div><div class="card"><h2>Opening session checklist</h2><p>Check index direction, 5-minute trend, fresh candles and volume confirmation before acting. The dashboard will never label stored prices as live outside market hours.</p><div id="pm-evidence" class="muted">Loading evidence…</div></div></section>
+<section id="pulse" class="page"><div class="eyebrow">Page 02 / Market action</div><h1>Index Trends & Top 10 Stocks</h1><p>NSE Nifty 50, BSE Sensex and Bank Nifty; candle-based rankings and separately verified volume surges.</p><div id="indices" class="grid"></div><div class="grid two"><div class="card"><h2>Top 10 · Candle Momentum Score</h2><div class="small muted">Verified completed-candle heuristic; not a win probability.</div><div id="top-score" class="tablewrap" style="margin-top:12px"></div></div><div class="card"><h2>Top 10 · Volume Surge</h2><div class="small muted">Requires actual comparative volume (RVOL). No estimated or invented rankings.</div><div id="top-volume" class="empty">Checking verified volume availability…</div></div></div><div class="notice">Tap any stock in a ranking to open its separate analysis page. During market closure, live rankings are unavailable rather than falsely displayed as current.</div></section>
+<section id="analysis" class="page"><div class="eyebrow">Page 03 / Deep dive</div><h1>Individual Stock Analysis</h1><div class="toolbar"><input id="symbol-input" placeholder="Enter stock symbol, e.g. RELIANCE" aria-label="Stock symbol"><button id="find" class="action">Analyze stock</button></div><div id="stock-detail" class="card">Select a stock from Page 2 or Page 4.</div></section>
+<section id="board" class="page"><div class="eyebrow">Page 04 / Full universe</div><h1>NSE 200 Stock Board</h1><div id="coverage" class="notice">Loading coverage…</div><div class="toolbar"><input id="filter" placeholder="Search 200 stocks" aria-label="Filter stocks"><button class="action" id="refresh">Refresh data</button></div><div id="board-table" class="tablewrap"></div></section>
+<section id="history" class="page"><div class="eyebrow">Page 05 / Audit</div><h1>History & Feed Health</h1><p>Read-only scanner health and recorded observations. No orders are placed.</p><div id="health" class="grid"></div><div class="card"><h2>Recorded Trades</h2><div id="trades" class="tablewrap">Loading…</div></div></section>
+<footer>Research dashboard only · Not investment advice · Order execution disabled · Last refreshed: <span id="refreshed">—</span></footer>
+</main>
 <script>
-async function loadTrades(){
- try{
-  const r=await fetch('/api/v2/trades');
-  const trades=await r.json();
-
-  document.getElementById('trades').innerHTML =
-    trades.length ? trades.map(t=>`
-      <div class="card">
-        <b>${t.symbol}</b><br>
-        Status: <b class="${t.status==='CLOSED'?'sell':t.status==='TARGET_1'?'target':'buy'}">${t.status}</b><br>
-        Entry: ${t.entry_price}<br>
-        Current: ${t.current_price}<br>
-        ${t.status!=="CLOSED" ? `<span class="${Number(t.current_price)>=Number(t.entry_price) ? "profit" : "loss"}">Live P&L: ${(Number(t.current_price)-Number(t.entry_price)).toFixed(2)} (${(((Number(t.current_price)-Number(t.entry_price))/Number(t.entry_price))*100).toFixed(2)}%)</span><br>` : ""}
-        ${t.status==="CLOSED" ? `<span class="${Number(t.realized_pnl)>=0 ? "profit" : "loss"}">Realized P&L: ${Number(t.realized_pnl).toFixed(2)} (${Number(t.realized_pnl_pct).toFixed(2)}%)</span><br>` : ""}
-        ${t.status==="CLOSED" ? `Exit: ${t.exit_price}<br>Reason: ${t.exit_reason}<br>` : ""}
-        Target 1: ${t.target_1}<br>
-        Target 2: ${t.target_2}<br>
-        Invalidation: ${t.invalidation}<br>
-        <small>${t.signal_time}</small>
-      </div>
-    `).join('') : 'No trades yet';
- }catch(e){document.getElementById('trades').textContent='Trade history unavailable; retrying.';}
-}
-async function loadScanner(){
- try{
-  const r=await fetch("/api/v2/scanner");
-  if(!r.ok)throw Error("Scanner API HTTP "+r.status);
-  const rows=await r.json();
-  if(!Array.isArray(rows))throw Error("Invalid scanner response");
-  const now=new Date();
-  const istParts=new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Kolkata",weekday:"short",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(now);
-  const part=t=>istParts.find(p=>p.type===t)?.value;
-  const mins=Number(part("hour"))*60+Number(part("minute"));
-  const closed=["Sat","Sun"].includes(part("weekday"))||mins<555||mins>=930;
-  const isFresh=x=>{if(!x?.updated_at)return false;const stamp=Date.parse(String(x.updated_at).replace(" ","T")+"+05:30");return Number.isFinite(stamp)&&stamp<=now.getTime()&&now.getTime()-stamp<=180000;};
-  const liveRows=rows.filter(isFresh);
-  document.getElementById("feed-status").textContent=closed?"MARKET CLOSED — Stored prices are historical. No live BUY signals.":`Market open — ${liveRows.length} fresh records of ${rows.length}; stale signals excluded.`;
-  const names = ["NIFTY 50", "BANK NIFTY", "SENSEX"];
-  document.getElementById("indices").innerHTML = names.map(name => {
-    const x = rows.find(r => r.symbol === name);
-    const signal = closed ? "MARKET CLOSED" : !isFresh(x) ? "STALE DATA — WAIT" : (x?.signal || "WAITING");
-    const cls = signal === "BUY" ? "buy" : signal === "SELL" ? "sell" : "";
-    return `<div class="card"><b>${name}</b><br>
-      Last stored price (not necessarily live): ${x?.price == null ? "Waiting..." : Number(x.price).toFixed(2)}<br>
-      ${x?.previous_close > 0 && x?.price != null ? (() => {
-        const change = Number(x.price) - Number(x.previous_close);
-        const pct = change / Number(x.previous_close) * 100;
-        const up = change >= 0;
-        return `<span class="${up ? "buy" : "sell"}">${up ? "▲ UP" : "▼ DOWN"} ${change >= 0 ? "+" : ""}${change.toFixed(2)} (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%)</span><br>`;
-      })() : "Daily change: Waiting...<br>"}
-      EMA9: ${x?.ema9 == null ? "—" : Number(x.ema9).toFixed(2)} |
-      EMA20: ${x?.ema20 == null ? "—" : Number(x.ema20).toFixed(2)}<br>
-      Momentum: ${x?.momentum == null ? "—" : Number(x.momentum).toFixed(3)}%<br>
-      Suggestion: <b class="${cls}">${signal}</b><br>
-      <small>${x?.updated_at || ""}</small></div>`;
-  }).join("");
-  const setupResponse=await fetch('/api/v2/top-momentum-setups',{cache:'no-store'});
-  if(!setupResponse.ok)throw Error('Setups API unavailable');
-  const shortlist=await setupResponse.json();
-  if(shortlist.order_execution_enabled!==false||shortlist.mode!=='MANUAL_RESEARCH_ONLY'||!Array.isArray(shortlist.setups))throw Error('Invalid safety status');
-  const setups=closed?[]:shortlist.setups;
-  const safeText=v=>String(v??'—').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-  document.getElementById('scanner').innerHTML=setups.length?setups.map((s,i)=>`<div class="card"><b>#${i+1} ${safeText(s.symbol)}</b><br>Direction: BULLISH | Research signal: BUY<br>Indicative entry: ₹${safeText(s.indicative_entry)}<br>Target 1: ${s.target_1==null?'Not verified':safeText(s.target_1)} | Target 2: ${s.target_2==null?'Not verified':safeText(s.target_2)}<br>Stop-loss: ${s.stop_loss==null?'Not verified':safeText(s.stop_loss)}<br>Momentum: ${safeText(s.momentum_pct)}% | EMA9: ${safeText(s.ema9)} | EMA20: ${safeText(s.ema20)}<br>5-minute trend: ${safeText(s.trend_5m)}<br>Why selected: ${(s.reasons||[]).map(safeText).join(', ')}<br><small>Completed candle: ${safeText(s.candle_ist)} IST | Manual research only</small></div>`).join(''):`<div class="card">${closed?'Market closed — no live setups.':'No verified qualifying setups.'}<br><small>API: ${safeText(shortlist.status)} | Fresh stock rows: ${safeText(shortlist.fresh_stock_rows)} | Stale rejected: ${safeText(shortlist.rejected_stale_rows)}</small></div>`;
-
- }catch(e){document.getElementById("feed-status").textContent="Scanner data unavailable — NO LIVE SIGNALS";document.getElementById("indices").textContent="Data unavailable";document.getElementById("scanner").textContent="No verified BUY signals";}
-}
-async function loadQualityRatings(){
- const panel=document.getElementById('quality-ratings');
- const esc=v=>String(v??'—').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
- try{
-  const r=await fetch('/api/v2/quality-ratings',{cache:'no-store'});
-  if(!r.ok)throw Error('HTTP '+r.status);
-  const d=await r.json();
-  if(d.order_execution_enabled!==false||d.mode!=='RESEARCH_ONLY'||!Array.isArray(d.ratings)||d.universe_size!==203)throw Error('Unverified ratings response');
-  const top=d.ratings.slice(0,10);
-  panel.innerHTML='<b>'+esc(d.status)+'</b> | '+top.length+' displayed of '+d.ratings.length+' rated / 203 configured | '+esc(d.unrated_count)+' unrated<br><small>Heuristic candle score, NOT win probability. RVOL and liquidity are not included in the score; manual research only.</small>'+
-   (top.length?'<div class="table-wrap"><table><thead><tr><th>Rank</th><th>Instrument</th><th>Type</th><th>Signal</th><th>Score / 100</th><th>Momentum %</th><th>Candle IST</th></tr></thead><tbody>'+
-    top.map((x,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(x.symbol)+'</td><td>'+esc(x.type)+'</td><td class="'+(x.signal==='BUY'?'buy':'sell')+'">'+esc(x.signal)+'</td><td>'+esc(x.rating)+'</td><td>'+esc(x.momentum)+'</td><td>'+esc(x.candle_ist)+'</td></tr>').join('')+'</tbody></table></div>':'<p>No qualifying fresh candle ratings. No trade signal inferred.</p>');
- }catch(e){panel.textContent='Quality ratings unavailable or unverified — no rated setups displayed.';}
-}
-async function loadStockBoard(){
- const count=document.getElementById('stock-count'),board=document.getElementById('stock-board');
- try{
-  const r=await fetch('/api/v2/nifty200-stock-board',{cache:'no-store'});
-  if(!r.ok)throw Error('Stock board unavailable');
-  const data=await r.json();
-  if(!Array.isArray(data.stocks))throw Error('Invalid stock board');
-  const esc=v=>String(v??'—').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-  count.textContent=`${data.universe_size} NIFTY 200 stocks configured | ${data.stocks_with_stored_data} with stored prices | ${data.stocks_with_fresh_data} fresh | ${data.status}. Historical data is not a live BUY signal.`;
-  const fresh=data.stocks.filter(s=>s.data_status==='LIVE_FRESH'&&Number.isFinite(Number(s.momentum_pct))&&Number(s.last_price)>0);
-  const sorted=[...data.stocks].sort((a,b)=>(b.data_status==='LIVE_FRESH')-(a.data_status==='LIVE_FRESH')||(Number(b.momentum_pct)||-9999)-(Number(a.momentum_pct)||-9999)||a.symbol.localeCompare(b.symbol));
-  const fmt=v=>Number.isFinite(Number(v))&&v!=null?Number(v).toFixed(2):'—';
-  const ranked=document.getElementById('ranked-stocks');
-  const top=[...fresh].sort((a,b)=>Number(b.momentum_pct)-Number(a.momentum_pct)).slice(0,10);
-  ranked.innerHTML=top.length?'<table><thead><tr><th>Rank</th><th>Stock</th><th>Price ₹</th><th>5-bar momentum %</th><th>Signal</th><th>Candle IST</th></tr></thead><tbody>'+top.map((s,i)=>`<tr><td>${i+1}</td><td>${esc(s.symbol)}</td><td>${fmt(s.last_price)}</td><td>${fmt(s.momentum_pct)}%</td><td>${esc(s.signal==='BUY'?'BUY (verify setup)':s.signal==='SELL'?'HOLD / bearish signal':'WATCH — not confirmed BUY')}</td><td>${esc(s.last_candle_ist)}</td></tr>`).join('')+'</tbody></table><small>Ranked by fresh 5-bar price momentum only; volume, VWAP, breakout and risk are not independently validated. Ranking is NOT a BUY recommendation.</small>':'No fresh stock momentum data — ranking withheld.';
-  board.innerHTML='<table><thead><tr><th>Rank</th><th>Stock</th><th>Last price ₹</th><th>Momentum %</th><th>Candle IST</th><th>Data status</th><th>Live signal</th></tr></thead><tbody>'+sorted.map((s,i)=>`<tr><td>${s.data_status==='LIVE_FRESH'?i+1:'—'}</td><td>${esc(s.symbol)}</td><td>${fmt(s.last_price)}</td><td>${fmt(s.momentum_pct)}</td><td>${esc(s.last_candle_ist)}</td><td class="${s.data_status==='LIVE_FRESH'?'status-ok':'status-warn'}">${esc(s.data_status)}</td><td>${esc(s.signal||'NO LIVE SIGNAL')}</td></tr>`).join('')+'</tbody></table>';
-
- }catch(e){count.textContent='NIFTY 200 stock board unavailable';board.textContent='Could not load stock list; retrying.';}
-}
-loadScanner();
-setInterval(loadScanner,10000);
-loadQualityRatings();
-setInterval(loadQualityRatings,10000);
-loadStockBoard();
-setInterval(loadStockBoard,30000);
-
-loadTrades();
-setInterval(loadTrades, 3000);
-</script>
-</body>
-</html>
+'use strict';
+const state={rows:[],board:[],ratings:[],quality:null,feed:null,sessionOpen:false};
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num=(v,d=2)=>v==null||v===''||!Number.isFinite(Number(v))?'—':Number(v).toFixed(d);
+const ist=()=>new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata',weekday:'short',hour:'2-digit',minute:'2-digit',hour12:false});
+function openNow(){const p=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kolkata',weekday:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());const x=k=>p.find(a=>a.type===k)?.value;const m=Number(x('hour'))*60+Number(x('minute'));return !['Sat','Sun'].includes(x('weekday'))&&m>=555&&m<930}
+function fresh(row){if(!state.sessionOpen||!row?.updated_at)return false;const t=Date.parse(String(row.updated_at).replace(' ','T')+'+05:30');return Number.isFinite(t)&&t<=Date.now()&&Date.now()-t<=180000}
+async function get(path){const r=await fetch(path,{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);return r.json()}
+function table(headers,rows){return '<table><thead><tr>'+headers.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>'+rows.join('')+'</tbody></table>'}
+function tr(cells){return '<tr>'+cells.map(x=>'<td>'+x+'</td>').join('')+'</tr>'}
+function buttonSymbol(symbol){return '<button data-symbol="'+esc(symbol)+'">'+esc(symbol)+'</button>'}
+function showPage(id){document.querySelectorAll('.page').forEach(x=>x.classList.toggle('active',x.id===id));document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x.dataset.page===id));location.hash=id;window.scrollTo(0,0)}
+function selectStock(symbol){$('symbol-input').value=symbol;renderStock(symbol);showPage('analysis')}
+document.querySelectorAll('nav button').forEach(x=>x.addEventListener('click',()=>showPage(x.dataset.page)));
+document.addEventListener('click',e=>{const b=e.target.closest('[data-symbol]');if(b)selectStock(b.dataset.symbol)});
+$('find').onclick=()=>renderStock($('symbol-input').value.trim().toUpperCase());$('symbol-input').onkeydown=e=>{if(e.key==='Enter')$('find').click()};
+$('filter').oninput=renderBoard;$('refresh').onclick=load;
+function indexRow(names){return state.rows.find(r=>names.some(n=>String(r.symbol||'').toUpperCase()===n))}
+function renderPre(){const ids=[['NIFTY 50'],['BANK NIFTY','NIFTY BANK'],['SENSEX']];const rows=ids.map(indexRow).filter(Boolean);$('pm-nifty').textContent=num(rows[0]?.price);$('pm-bank').textContent=num(rows[1]?.price);const valid=rows.filter(r=>Number.isFinite(Number(r.momentum))&&Number(r.price)>0&&Number(r.ema9)>0&&Number(r.ema20)>0);const up=valid.filter(r=>Number(r.momentum)>0&&Number(r.ema9)>Number(r.ema20)).length;const down=valid.filter(r=>Number(r.momentum)<0&&Number(r.ema9)<Number(r.ema20)).length;const bias=valid.length<2?'INSUFFICIENT DATA':up>=2?'BULLISH BIAS':down>=2?'BEARISH BIAS':'MIXED / SIDEWAYS';$('bias').textContent=bias;$('bias-reason').textContent=valid.length+' index readings with usable EMA and momentum; indicative only';$('pm-evidence').textContent=rows.map(r=>r.symbol+': '+num(r.price)+' · momentum '+num(r.momentum,3)+'% · '+(fresh(r)?'fresh':'historical')).join(' | ')||'No index data available'}
+function renderIndices(){const groups=[['NIFTY 50',['NIFTY 50']],['BANK NIFTY',['BANK NIFTY','NIFTY BANK']],['BSE SENSEX',['SENSEX']]];$('indices').innerHTML=groups.map(([title,names])=>{const r=indexRow(names);const live=fresh(r);const trend=live?(r?.trend_5m||r?.signal||'WAITING'):'HISTORICAL / WAIT';return '<div class="card"><div class="muted">'+title+'</div><div class="metric">'+num(r?.price)+'</div><div class="'+(live?'green':'amber')+'">'+esc(trend)+'</div><div class="small muted">Momentum '+num(r?.momentum,3)+'% · '+esc(r?.updated_at||'No timestamp')+'</div></div>'}).join('')}
+function renderRanks(){const stockRatings=state.ratings.filter(x=>x.type==='STOCK'&&x.rating_basis==='CANDLE_ONLY_HEURISTIC').slice(0,10);$('top-score').innerHTML=stockRatings.length?table(['Stock','Score','Trend','Signal'],stockRatings.map(x=>tr([buttonSymbol(x.symbol),esc(x.rating)+'/100',esc(x.trend_5m),esc(x.signal)]))):'<div class="empty">No verified fresh candle scores available. Rankings resume when qualifying live candles arrive.</div>';$('top-volume').textContent='Not available: the current API does not provide verified relative-volume surge scores. No top-10 list will be fabricated.'}
+function renderStock(symbol){const r=state.rows.find(x=>String(x.symbol).toUpperCase()===symbol);const b=state.board.find(x=>String(x.symbol).toUpperCase()===symbol);const rating=state.ratings.find(x=>x.symbol===symbol);if(!r&&!b){$('stock-detail').textContent='Stock not found in current scanner data.';return}const live=fresh(r);$('stock-detail').innerHTML='<div class="topline"><h2>'+esc(symbol)+'</h2><span class="pill">'+(live?'LIVE FRESH':'HISTORICAL / NOT VERIFIED LIVE')+'</span></div><div class="grid"><div><div class="muted">Last stored price</div><div class="metric">'+num(r?.price??b?.last_price)+'</div></div><div><div class="muted">Momentum</div><div class="metric">'+num(r?.momentum??b?.momentum_pct,3)+'%</div></div><div><div class="muted">Candle score</div><div class="metric">'+(rating?esc(rating.rating)+'/100':'Not verified')+'</div></div></div><p>EMA 9: '+num(r?.ema9)+' · EMA 20: '+num(r?.ema20)+' · 5-min trend: '+esc(r?.trend_5m)+'</p><p>Signal: <strong>'+(live?esc(r?.signal):'WAIT — historical data')+'</strong> · Last candle: '+esc(r?.updated_at??b?.last_candle_ist)+'</p><div class="notice">Volume-surge verification and independent signal accuracy are not available from this snapshot. No trade recommendation or automatic order.</div>'}
+function renderBoard(){const q=$('filter').value.trim().toUpperCase();const rows=state.board.filter(x=>String(x.symbol).toUpperCase().includes(q));$('board-table').innerHTML=table(['Symbol','Last price','Momentum %','Data status','Last candle'],rows.map(x=>tr([buttonSymbol(x.symbol),num(x.last_price),num(x.momentum_pct,3),esc(x.data_status),esc(x.last_candle_ist)])))}
+async function renderHealth(){const f=state.feed||{};$('health').innerHTML=[['Upstox tick coverage',esc(f.status||'Unavailable'),esc(f.stocks_with_recent_ticks??'—')+' of '+esc(f.universe_size??200)+' recent'],['Market session',state.sessionOpen?'OPEN':'CLOSED','India / NSE hours'],['Order execution','DISABLED','Read-only dashboard']].map(([a,b,c])=>'<div class="card"><div class="muted">'+a+'</div><div class="metric" style="font-size:20px">'+b+'</div><div class="small muted">'+c+'</div></div>').join('');try{const trades=await get('/api/v2/trades');$('trades').innerHTML=Array.isArray(trades)&&trades.length?table(['Symbol','Status','Entry','Time'],trades.slice(0,100).map(t=>tr([esc(t.symbol),esc(t.status),num(t.entry_price),esc(t.signal_time)]))):'<div class="empty">No recorded trades.</div>'}catch(e){$('trades').textContent='Trade history unavailable.'}}
+async function load(){state.sessionOpen=openNow();$('session').textContent=state.sessionOpen?'MARKET OPEN — verify freshness':'MARKET CLOSED — historical view';$('clock').textContent=ist()+' IST';const paths=['/api/v2/scanner','/api/v2/nifty200-stock-board','/api/v2/quality-ratings','/api/v2/nifty200-feed-health'];const results=await Promise.allSettled(paths.map(get));state.rows=results[0].status==='fulfilled'&&Array.isArray(results[0].value)?results[0].value:[];state.board=results[1].status==='fulfilled'&&Array.isArray(results[1].value?.stocks)?results[1].value.stocks:[];state.ratings=results[2].status==='fulfilled'&&Array.isArray(results[2].value?.ratings)?results[2].value.ratings:[];state.feed=results[3].status==='fulfilled'?results[3].value:null;$('coverage').textContent=state.board.length+' configured stocks · '+state.board.filter(x=>x.data_status==='LIVE_FRESH').length+' verified fresh · '+(state.sessionOpen?'Market open':'Market closed — stored data only');renderPre();renderIndices();renderRanks();renderBoard();renderHealth();if($('symbol-input').value)renderStock($('symbol-input').value.trim().toUpperCase());$('refreshed').textContent=ist()+' IST';if(results[0].status==='rejected')$('bias-reason').textContent='Scanner API unavailable: retry Refresh'}
+if(['premarket','pulse','analysis','board','history'].includes(location.hash.slice(1)))showPage(location.hash.slice(1));load();setInterval(load,60000);
+</script></body></html>
