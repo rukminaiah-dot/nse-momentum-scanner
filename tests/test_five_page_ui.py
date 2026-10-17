@@ -57,6 +57,11 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("Date.parse(zoned)", self.html)
         self.assertIn("Date.now()-t<=180000", self.html)
 
+    def test_top_buy_rankings_require_fresh_aligned_scanner_data(self):
+        self.assertIn("function verifiedStockBuy(x)", self.html)
+        self.assertIn("fresh(x)&&fresh(row)&&row.signal==='BUY'", self.html)
+        self.assertIn("state.ratings.filter(verifiedStockBuy)", self.html)
+
     def test_stock_detail_uses_fresh_stock_specific_rating(self):
         self.assertIn("x.symbol===symbol&&x.type==='STOCK'&&x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)", self.html)
         self.assertIn("const live=Boolean(state.sessionOpen&&fresh(r)&&rating)", self.html)
