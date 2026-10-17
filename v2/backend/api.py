@@ -105,6 +105,46 @@ def get_daily_trade_history():
             detail="Trade history temporarily unavailable"
         ) from exc
 
+
+@app.get("/api/v2/signal-activity")
+def signal_activity():
+    """Read-only signal lifecycle from persisted trade history, never infer execution."""
+    import os
+    from fastapi import HTTPException
+    url = os.environ.get("DATABASE_URL")
+    if not url:
+        return {"status": "HISTORY_STORAGE_NOT_CONFIGURED", "active": [], "completed": [],
+                "source": "daily_trade_history", "order_execution_enabled": False}
+    try:
+        import psycopg
+        from psycopg.rows import dict_row
+        with psycopg.connect(url, row_factory=dict_row, connect_timeout=5) as con:
+            records = con.execute("""
+                SELECT id, symbol, buy_time, buy_price, sell_time, sell_price,
+                       quantity, pnl_per_share, pnl_total, pnl_pct, status,
+                       buy_reason, exit_reason, trade_date
+                FROM daily_trade_history
+                ORDER BY trade_date DESC, id DESC LIMIT 500
+            """).fetchall()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Persisted signal history unavailable") from exc
+    active, completed = [], []
+    for record in records:
+        row = dict(record)
+        row["symbol"] = instrument_symbols.get(row["symbol"], row["symbol"])
+        # A recorded entry without exit is an active *record*, not proof of an executed order.
+        if row["buy_price"] is None:
+            continue
+        if row["sell_time"] is not None and row["sell_price"] is not None:
+            row["display_status"] = "SELL / EXIT"
+            completed.append(row)
+        elif row["sell_time"] is None and row["sell_price"] is None:
+            row["display_status"] = "BUY ACTIVE"
+            active.append(row)
+    return {"status": "RECORDED_HISTORY", "active": active, "completed": completed,
+            "source": "daily_trade_history", "mode": "RECORDED_SIGNALS_NOT_BROKER_EXECUTIONS",
+            "order_execution_enabled": False}
+
 @app.get("/history")
 def history_page():
     return FileResponse("v2/frontend/history.html")
