@@ -91,6 +91,11 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("history_truncated = len(records) > 500", api)
         self.assertIn("records = records[:500]", api)
 
+    def test_signal_activity_renders_before_legacy_trades_wait(self):
+        self.assertLess(self.html.index("try{const result=await activityRequest;"), self.html.index("try{const tradesResult=await tradesRequest;"))
+        self.assertIn("const activityRequest=get('/api/v2/signal-activity')", self.html)
+        self.assertIn("const tradesRequest=get('/api/v2/trades')", self.html)
+
     def test_incomplete_lifecycle_records_block_verified_total(self):
         api = (pathlib.Path(__file__).resolve().parents[1] / "v2/backend/api.py").read_text(encoding="utf-8")
         self.assertIn('"incomplete_records": incomplete_records', api)
