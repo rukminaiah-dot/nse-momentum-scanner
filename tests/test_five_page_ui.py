@@ -76,10 +76,13 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("x.symbol===symbol&&x.type==='STOCK'&&x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)", self.html)
         self.assertIn("const live=Boolean(state.sessionOpen&&fresh(r)&&rating&&r.signal===rating.signal", self.html)
 
+    def test_concurrent_trade_failure_is_caught_before_await(self):
+        self.assertIn("const tradesResult=await tradesRequest;if(!tradesResult.ok)throw tradesResult.error", self.html)
+
     def test_signal_activity_request_starts_before_trade_history_wait(self):
         self.assertIn("const activityRequest=get('/api/v2/signal-activity')", self.html)
         self.assertLess(self.html.index("const activityRequest=get('/api/v2/signal-activity')"), self.html.index("const trades=await tradesRequest"))
-        self.assertIn("const tradesRequest=get('/api/v2/trades')", self.html)
+        self.assertIn("const tradesRequest=get('/api/v2/trades').then(value=>({ok:true,value}),error=>({ok:false,error}))", self.html)
         self.assertIn("const result=await activityRequest", self.html)
 
     def test_recorded_pnl_requires_chronological_entry_exit(self):
