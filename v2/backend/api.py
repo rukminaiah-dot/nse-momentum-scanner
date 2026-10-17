@@ -197,8 +197,11 @@ def nifty200_feed_health():
     except (OSError, ValueError, TypeError):
         base["connection_last_event"] = "UNKNOWN"
         base["connection_state_note"] = "No connection event recorded"
-    if base["market_session"] == "CLOSED" and base["status"] == "STALE_REPORT":
-        base["status"] = "MARKET_CLOSED_TICK_REPORT_STALE"
+    if base["market_session"] == "CLOSED":
+        if base["status"] == "STALE_REPORT":
+            base["status"] = "MARKET_CLOSED_TICK_REPORT_STALE"
+        elif base["status"] == "NO_FEED_REPORT":
+            base["status"] = "MARKET_CLOSED_NO_FEED_REPORT"
     return base
 
 
