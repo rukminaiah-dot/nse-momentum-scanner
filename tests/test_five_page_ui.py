@@ -57,6 +57,10 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("Date.parse(zoned)", self.html)
         self.assertIn("Date.now()-t<=180000", self.html)
 
+    def test_daily_pnl_uses_exit_date_not_entry_trade_date(self):
+        self.assertIn("completed.filter(x=>istDate(x.sell_time)===today)", self.html)
+        self.assertNotIn("x.sell_time||x.trade_date", self.html)
+
     def test_pnl_requires_recorded_entry_exit_and_quantity(self):
         self.assertIn("x.buy_price!=null&&x.sell_price!=null&&x.quantity!=null", self.html)
         self.assertIn("qty>0?(sell-buy)*qty:null", self.html)
