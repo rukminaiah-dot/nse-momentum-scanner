@@ -64,6 +64,14 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("const validRating=x=>{const row=state.rows.find", self.html)
         self.assertIn("r&&fresh(row)&&['BUY','SELL'].includes(r.signal)&&row.signal===r.signal", self.html)
 
+    def test_candle_scores_must_be_present_and_within_zero_to_hundred(self):
+        self.assertIn("const verifiedCandleScore=x=>", self.html)
+        self.assertIn("x.rating!==null&&x.rating!==undefined&&x.rating!==''", self.html)
+        self.assertIn("typeof x.rating!=='boolean'", self.html)
+        self.assertIn("Number(x.rating)>=0&&Number(x.rating)<=100", self.html)
+        self.assertIn("verifiedCandleScore(x)", self.html)
+        self.assertIn("verifiedCandleScore(r)", self.html)
+
     def test_top_buy_rankings_require_fresh_aligned_scanner_data(self):
         self.assertIn("function verifiedStockBuy(x)", self.html)
         self.assertIn("fresh(x)&&fresh(row)&&row.signal==='BUY'", self.html)
