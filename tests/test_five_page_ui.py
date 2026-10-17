@@ -295,6 +295,17 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("broker orders disabled.", self.html)
         self.assertIn("300 points is an example, not a fixed threshold", self.html)
 
+    def test_experimental_prediction_uses_only_fresh_aligned_index_evidence(self):
+        self.assertIn('id="ai-prediction-panel"', self.html)
+        self.assertIn('id="ai-prediction-status"', self.html)
+        self.assertIn('function renderAiPrediction()', self.html)
+        self.assertIn("const aligned=Boolean(row&&fresh(row)&&rating&&verifiedCandleScore(rating)&&row.signal===rating.signal", self.html)
+        self.assertIn("if(!state.sessionOpen)", self.html)
+        self.assertIn("if(valid.length<2)", self.html)
+        self.assertIn("not a trained forecast", self.html)
+        self.assertIn("No invented probability", self.html)
+        self.assertIn("renderAiPrediction();", self.html)
+
 
 if __name__ == "__main__":
     unittest.main()
