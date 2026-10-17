@@ -31,6 +31,11 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("Long-term: Not verified", self.html)
         self.assertIn("function shortTrend", self.html) if "function shortTrend" in self.html else self.assertIn("const shortTrend=", self.html)
 
+    def test_rating_freshness_uses_candle_timestamp_and_timezone(self):
+        self.assertIn("row?.updated_at??row?.candle_ist", self.html)
+        self.assertIn("Date.parse(zoned)", self.html)
+        self.assertIn("Date.now()-t<=180000", self.html)
+
     def test_stock_signals_require_live_verified_candle_rating(self):
         self.assertIn("state.sessionOpen&&fresh(r)&&rating&&fresh(rating)", self.html)
         self.assertIn("rating.rating_basis==='CANDLE_ONLY_HEURISTIC'", self.html)
