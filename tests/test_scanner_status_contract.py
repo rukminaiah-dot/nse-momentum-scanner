@@ -13,6 +13,7 @@ def _status_handler():
     module = ast.parse(source.read_text(encoding="utf-8"))
     function = next(node for node in module.body if isinstance(node, ast.FunctionDef)
                     and node.name == "get_scanner_status")
+    function.decorator_list = []  # Route registration is tested by the real API; isolate handler logic here.
     isolated = ast.Module(body=[function], type_ignores=[])
     namespace = {"sqlite3": sqlite3, "DB_PATH": ":memory:"}
     exec(compile(isolated, str(source), "exec"), namespace)
