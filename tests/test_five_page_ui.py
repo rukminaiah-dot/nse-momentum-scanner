@@ -1,6 +1,9 @@
 """Static UI contract checks. Run with python -m unittest discover -s tests -p 'test_five_page_ui.py'."""
 import pathlib
 import re
+import shutil
+import subprocess
+import tempfile
 import unittest
 
 HTML = pathlib.Path(__file__).resolve().parents[1] / "v2" / "frontend" / "index.html"
@@ -10,6 +13,21 @@ class FivePageUiTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.html = HTML.read_text(encoding="utf-8")
+
+    def test_embedded_javascript_parses(self):
+        node = shutil.which("node")
+        self.assertIsNotNone(node, "Node.js is required for UI syntax validation")
+        scripts = re.findall(r"<script(?:\\s[^>]*)?>(.*?)</script>", self.html, re.S)
+        self.assertTrue(scripts, "No inline JavaScript found")
+        for script in scripts:
+            if not script.strip():
+                continue
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".js", encoding="utf-8") as js:
+                js.write(script)
+                js.flush()
+                result = subprocess.run([node, "--check", js.name],
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_five_navigation_pages_in_approved_order(self):
         nav = re.search(r'<nav aria-label="Main pages">(.*?)</nav>', self.html, re.S)
