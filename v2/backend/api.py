@@ -141,7 +141,7 @@ def signal_activity():
         elif row["sell_time"] is None and row["sell_price"] is None:
             row["display_status"] = "BUY ACTIVE"
             active.append(row)
-    return {"status": "RECORDED_HISTORY", "active": active, "completed": completed,
+    return {"status": "RECORDED_HISTORY", "history_limit": 500, "history_truncated": len(records) >= 500, "active": active, "completed": completed,
             "source": "daily_trade_history", "mode": "RECORDED_SIGNALS_NOT_BROKER_EXECUTIONS",
             "order_execution_enabled": False}
 
