@@ -76,6 +76,9 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("x.symbol===symbol&&x.type==='STOCK'&&x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)", self.html)
         self.assertIn("const live=Boolean(state.sessionOpen&&fresh(r)&&rating&&r.signal===rating.signal", self.html)
 
+    def test_recorded_pnl_requires_verified_entry_and_exit_timestamps(self):
+        self.assertIn("istDate(x.buy_time)!=null&&istDate(x.sell_time)!=null", self.html)
+
     def test_daily_pnl_requires_positive_prices(self):
         self.assertIn("buy>0&&sell>0&&qty>0?(sell-buy)*qty:null", self.html)
 
