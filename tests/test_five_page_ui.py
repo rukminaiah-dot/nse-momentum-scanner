@@ -99,6 +99,9 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("const invalidEntries=completed.filter(x=>istDate(x.buy_time)==null)", self.html)
         self.assertIn("!undatedExits.length&&!invalidEntries.length&&!invalidChronology.length", self.html)
 
+    def test_unsafe_numeric_lifecycle_ids_block_daily_pnl(self):
+        self.assertIn("typeof id==='number'&&!Number.isSafeInteger(id)", self.html)
+
     def test_blank_or_non_scalar_lifecycle_ids_block_daily_pnl(self):
         self.assertIn("!['string','number'].includes(typeof id)", self.html)
         self.assertIn("String(id).trim()===''", self.html)
