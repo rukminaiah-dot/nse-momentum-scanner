@@ -116,11 +116,11 @@ class FivePageUiTests(unittest.TestCase):
 
     def test_daily_pnl_withholds_total_for_impossible_trade_chronology(self):
         self.assertIn("const invalidChronology=completed.filter", self.html)
-        self.assertIn("const total=activity.history_truncated===false&&activity.incomplete_records===0&&!undatedExits.length&&!invalidChronology.length", self.html)
+        self.assertIn("const total=activity.history_truncated===false&&activity.incomplete_records===0&&!undatedExits.length&&!invalidEntries.length&&!invalidChronology.length", self.html)
 
     def test_daily_pnl_does_not_ignore_undated_completed_exits(self):
         self.assertIn("const undatedExits=completed.filter(x=>istDate(x.sell_time)==null)", self.html)
-        self.assertIn("const total=activity.history_truncated===false&&activity.incomplete_records===0&&!undatedExits.length&&!invalidChronology.length&&todayClosed.length", self.html)
+        self.assertIn("const total=activity.history_truncated===false&&activity.incomplete_records===0&&!undatedExits.length&&!invalidEntries.length&&!invalidChronology.length&&todayClosed.length", self.html)
 
     def test_recorded_pnl_requires_chronological_entry_exit(self):
         self.assertIn("Date.parse(x.sell_time)>=Date.parse(x.buy_time)", self.html)
