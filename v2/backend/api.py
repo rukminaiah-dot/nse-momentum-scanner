@@ -124,7 +124,7 @@ def signal_activity():
                        quantity, pnl_per_share, pnl_total, pnl_pct, status,
                        buy_reason, exit_reason, trade_date
                 FROM daily_trade_history
-                ORDER BY sell_time DESC NULLS LAST, trade_date DESC, id DESC LIMIT 501
+                ORDER BY GREATEST(COALESCE(sell_time, buy_time), buy_time) DESC NULLS LAST, id DESC LIMIT 501
             """).fetchall()
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Persisted signal history unavailable") from exc
