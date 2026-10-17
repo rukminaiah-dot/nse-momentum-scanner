@@ -128,6 +128,10 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("Trade IDs are missing or duplicated", self.html)
         self.assertIn("Some prices or quantities are invalid", self.html)
 
+    def test_pnl_chart_discloses_persisted_source_and_nonbroker_status(self):
+        self.assertIn("source: persisted daily_trade_history", self.html)
+        self.assertIn("signal-based, not broker-confirmed", self.html)
+
     def test_pnl_chart_includes_exit_counts_and_accessible_labels(self):
         self.assertIn("const chartCounts=new Map()", self.html)
         self.assertIn("chartCounts.set(day,(chartCounts.get(day)||0)+1)", self.html)
