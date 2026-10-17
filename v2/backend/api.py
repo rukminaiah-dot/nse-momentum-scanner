@@ -124,10 +124,12 @@ def signal_activity():
                        quantity, pnl_per_share, pnl_total, pnl_pct, status,
                        buy_reason, exit_reason, trade_date
                 FROM daily_trade_history
-                ORDER BY trade_date DESC, id DESC LIMIT 500
+                ORDER BY trade_date DESC, id DESC LIMIT 501
             """).fetchall()
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Persisted signal history unavailable") from exc
+    history_truncated = len(records) > 500
+    records = records[:500]
     active, completed = [], []
     for record in records:
         row = dict(record)
@@ -141,7 +143,7 @@ def signal_activity():
         elif row["sell_time"] is None and row["sell_price"] is None:
             row["display_status"] = "BUY ACTIVE"
             active.append(row)
-    return {"status": "RECORDED_HISTORY", "history_limit": 500, "history_truncated": len(records) >= 500, "active": active, "completed": completed,
+    return {"status": "RECORDED_HISTORY", "history_limit": 500, "history_truncated": history_truncated, "active": active, "completed": completed,
             "source": "daily_trade_history", "mode": "RECORDED_SIGNALS_NOT_BROKER_EXECUTIONS",
             "order_execution_enabled": False}
 
