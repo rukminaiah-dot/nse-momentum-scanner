@@ -285,6 +285,16 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("Order execution", self.html)
         self.assertIn("DISABLED", self.html)
 
+    def test_shadow_loss_learning_panel_is_connected_and_safe(self):
+        api = (pathlib.Path(__file__).resolve().parents[1] / "v2/backend/api.py").read_text(encoding="utf-8")
+        self.assertIn('@app.get("/api/v2/decision-learning")', api)
+        self.assertIn("'/api/v2/decision-learning'", self.html)
+        self.assertIn("function renderLearning()", self.html)
+        self.assertIn('id="learning-losses"', self.html)
+        self.assertIn("recommendations_enabled===true?'enabled':'disabled'", self.html)
+        self.assertIn("broker orders disabled.", self.html)
+        self.assertIn("300 points is an example, not a fixed threshold", self.html)
+
 
 if __name__ == "__main__":
     unittest.main()

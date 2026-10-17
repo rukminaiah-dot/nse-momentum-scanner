@@ -39,6 +39,14 @@ def create_schema(path):
                 reason TEXT,
                 FOREIGN KEY (trade_id) REFERENCES trades(id)
             );
+            CREATE TABLE trade_decision_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                trade_id INTEGER NOT NULL,
+                stage TEXT NOT NULL,
+                event_time TEXT NOT NULL,
+                context_json TEXT NOT NULL,
+                FOREIGN KEY (trade_id) REFERENCES trades(id)
+            );
         """)
 
 
@@ -61,9 +69,12 @@ class TradeEngineLifecycleTests(unittest.TestCase):
         self.tempdir.cleanup()
 
     def test_buy_state_and_sell_are_persisted_once(self):
-        trade_id = trade_engine.buy("NSE_EQ|TEST", 100, 102, 104, 98, "test BUY")
-        self.assertTrue(trade_engine.update_state(trade_id, 102, "TARGET_1", "target one"))
-        self.assertTrue(trade_engine.sell(trade_id, 103, "target two"))
+        context = {"features": {"rvol": 1.6}, "market_recovery": {
+            "NIFTY 50": {"status": "POSSIBLE_REVERSAL", "recovery_fraction": 0.3}
+        }}
+        trade_id = trade_engine.buy("NSE_EQ|TEST", 100, 102, 104, 98, "test BUY", context=context)
+        self.assertTrue(trade_engine.update_state(trade_id, 102, "TARGET_1", "target one", context=context))
+        self.assertTrue(trade_engine.sell(trade_id, 103, "target two", context=context))
 
         # Repeated callbacks after closure cannot reopen or duplicate the exit.
         self.assertFalse(trade_engine.update_state(trade_id, 101, "BUY", "late update"))
@@ -79,10 +90,16 @@ class TradeEngineLifecycleTests(unittest.TestCase):
                 "SELECT action, price FROM trade_events WHERE trade_id=? ORDER BY id",
                 (trade_id,),
             ).fetchall()
+            snapshots = con.execute(
+                "SELECT stage, context_json FROM trade_decision_snapshots WHERE trade_id=? ORDER BY id",
+                (trade_id,),
+            ).fetchall()
 
         self.assertEqual(row[:6], ("CLOSED", 100.0, 103.0, 103.0, 3.0, 3.0))
         self.assertEqual(row[6], "target two")
         self.assertEqual(events, [("BUY", 100.0), ("TARGET_1", 102.0), ("SELL", 103.0)])
+        self.assertEqual([stage for stage, _ in snapshots], ["BUY", "TARGET_1", "SELL"])
+        self.assertIn('"status":"POSSIBLE_REVERSAL"', snapshots[-1][1])
         self.assertEqual(trade_engine._backup_active_trade.call_args_list,
                          [unittest.mock.call(trade_id), unittest.mock.call(trade_id)])
         trade_engine._sync_completed_history.assert_called_once_with()

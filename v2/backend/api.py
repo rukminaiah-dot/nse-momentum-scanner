@@ -5,6 +5,7 @@ import sqlite3
 from fastapi import FastAPI
 from .database import DB_PATH
 from .stock_universe import NIFTY_200
+from .decision_learning import learning_report
 
 instrument_symbols = {key: symbol for symbol, key in NIFTY_200.items()}
 
@@ -242,6 +243,12 @@ def pnl_history():
         "mode": "RECORDED_SIGNALS_NOT_BROKER_EXECUTIONS",
         "order_execution_enabled": False,
     }
+
+
+@app.get("/api/v2/decision-learning")
+def decision_learning_status():
+    """Read-only loss diagnostics and shadow-model readiness."""
+    return learning_report(DB_PATH)
 
 @app.get("/history")
 def history_page():

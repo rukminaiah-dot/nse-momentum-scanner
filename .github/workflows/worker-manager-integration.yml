@@ -29,6 +29,13 @@ on:
       - 'tests/test_minimal_verified_recovery.py'
       - 'tests/test_trade_engine_lifecycle.py'
       - 'v2/backend/trade_engine.py'
+      - 'tests/test_decision_learning.py'
+      - 'v2/backend/decision_learning.py'
+      - 'v2/backend/database.py'
+      - 'v2/backend/scanner.py'
+      - 'v2/backend/api.py'
+      - 'v2/frontend/index.html'
+      - 'tests/test_five_page_ui.py'
       - 'tests/test_scanner_recovery_wiring.py'
       - 'tests/test_scanner_recovery_real_candles.py'
       - 'scripts/benchmark_candle_snapshots.py'
@@ -68,7 +75,7 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check fastapi pytest
           python -m pytest -q tests/test_scanner_status_contract.py
-      - run: python -m py_compile v2/backend/candle_manager.py v2/backend/gap_recovery_worker.py v2/backend/verified_gap_recovery.py tests/test_worker_manager_integration.py tests/test_minimal_verified_recovery.py
+      - run: python -m py_compile v2/backend/candle_manager.py v2/backend/gap_recovery_worker.py v2/backend/verified_gap_recovery.py v2/backend/trade_engine.py v2/backend/decision_learning.py v2/backend/database.py v2/backend/scanner.py v2/backend/api.py tests/test_worker_manager_integration.py tests/test_minimal_verified_recovery.py tests/test_trade_engine_lifecycle.py tests/test_decision_learning.py
       - run: python -m unittest discover -s tests -p 'test_atomic_candle_state.py' -v
       - run: python -m unittest discover -s tests -p 'test_scanner_close_gate.py' -v
       - run: python -m unittest discover -s tests -p 'test_worker_manager_integration.py' -v
@@ -86,6 +93,7 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_scanner_recovery_wiring.py' -v
       - run: python -m unittest discover -s tests -p 'test_scanner_recovery_real_candles.py' -v
       - run: python -m unittest discover -s tests -p 'test_trade_engine_lifecycle.py' -v
+      - run: python -m unittest discover -s tests -p 'test_decision_learning.py' -v
       - run: python -m scripts.compare_candle_retention --history 400 --cap 60
       - run: python -m scripts.compare_candle_retention --history 400 --cap 200
       - run: python -m scripts.compare_signal_retention --history 400 --cap 60

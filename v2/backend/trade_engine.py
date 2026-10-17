@@ -4,6 +4,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from .database import DB_PATH, init_db
+from .decision_learning import serialize_context
 
 
 TERMINAL_STATUSES = {"SELL", "CLOSED"}
@@ -47,7 +48,23 @@ def _sync_completed_history():
         print(f"PostgreSQL trade history sync failed: {exc}")
 
 
-def buy(symbol, price, t1, t2, invalidation, reason):
+def _record_snapshot(con, trade_id, stage, event_time, context):
+    if context is None:
+        return
+    try:
+        payload = serialize_context(context)
+    except (TypeError, ValueError) as exc:
+        # Optional learning telemetry must never prevent a valid signal record.
+        print(f"Decision context skipped: {type(exc).__name__}")
+        return
+    con.execute("""
+        INSERT INTO trade_decision_snapshots
+        (trade_id,stage,event_time,context_json)
+        VALUES (?,?,?,?)
+    """, (trade_id, stage, event_time, payload))
+
+
+def buy(symbol, price, t1, t2, invalidation, reason, *, context=None):
     price = _positive_price(price, "entry price")
     t1 = _positive_price(t1, "target 1")
     t2 = _positive_price(t2, "target 2")
@@ -82,6 +99,7 @@ def buy(symbol, price, t1, t2, invalidation, reason):
             (trade_id,event_time,action,price,reason)
             VALUES (?,?,?,?,?)
         """, (trade_id, signal_time, "BUY", price, reason))
+        _record_snapshot(con, trade_id, "BUY", signal_time, context)
         con.commit()
     except Exception:
         con.rollback()
@@ -93,7 +111,7 @@ def buy(symbol, price, t1, t2, invalidation, reason):
     return trade_id
 
 
-def update_state(trade_id, price, action="HOLD", reason="Chart remains valid"):
+def update_state(trade_id, price, action="HOLD", reason="Chart remains valid", *, context=None):
     price = _positive_price(price, "current price")
     if action in TERMINAL_STATUSES:
         raise ValueError("terminal trade states must be recorded with sell()")
@@ -114,11 +132,13 @@ def update_state(trade_id, price, action="HOLD", reason="Chart remains valid"):
             (price, action, trade_id),
         )
         if old_status != action:
+            event_time = now()
             con.execute("""
                 INSERT INTO trade_events
                 (trade_id,event_time,action,price,reason)
                 VALUES (?,?,?,?,?)
-            """, (trade_id, now(), action, price, reason))
+            """, (trade_id, event_time, action, price, reason))
+            _record_snapshot(con, trade_id, action, event_time, context)
         con.commit()
         return True
     except Exception:
@@ -128,7 +148,7 @@ def update_state(trade_id, price, action="HOLD", reason="Chart remains valid"):
         con.close()
 
 
-def sell(trade_id, price, reason):
+def sell(trade_id, price, reason, *, context=None):
     price = _positive_price(price, "exit price")
     con = connect()
     try:
@@ -156,6 +176,7 @@ def sell(trade_id, price, reason):
             (trade_id,event_time,action,price,reason)
             VALUES (?,?,?,?,?)
         """, (trade_id, exit_time, "SELL", price, reason))
+        _record_snapshot(con, trade_id, "SELL", exit_time, context)
         con.commit()
     except Exception:
         con.rollback()

@@ -13,6 +13,7 @@ from .signal_engine import generate_signal
 from .market_regime import index_signal
 from .trade_engine import buy, update_state, sell
 from .database import DB_PATH, init_db, reset_scanner_results
+from .decision_learning import classify_market_recovery
 
 candles = CandleManager()
 
@@ -70,6 +71,7 @@ active_trades = {}
 instrument_symbols = {key: symbol for symbol, key in {**NIFTY_200, **INDICES}.items()}
 market_regimes = {}
 previous_closes = {}
+_index_recovery_state = {}
 last_trade_updates = {}
 last_cumulative_volumes = {}
 
@@ -77,6 +79,92 @@ _tick_seen = {}
 _last_accepted_tick_ms = {}
 _last_health_write = 0.0
 _HEALTH_PATH = "/tmp/nse_200_feed_health.json"
+
+
+def update_market_recovery(key, price, tick_time):
+    """Track large index drops and recovery from verified session lows."""
+    if key not in INDICES.values():
+        return None
+    previous_close = previous_closes.get(key)
+    history, _ = candles.snapshot(key)
+    session_day = tick_time.date()
+    today = [c for c in history if getattr(c, "timestamp", None) is not None
+             and c.timestamp.date() == session_day]
+    low_candidates = [float(c.low) for c in today]
+    low_candidates.append(float(price))
+    session_low = min(low_candidates)
+    highs = [float(c.high) for c in today[-20:]]
+    lows = [float(c.low) for c in today[-20:]]
+    closes = [float(c.close) for c in today[-20:]]
+    index_atr = atr(highs, lows, closes, 14) if len(closes) >= 14 else None
+
+    prior = _index_recovery_state.get(key, {})
+    if prior.get("session_date") != session_day.isoformat():
+        prior_fraction = 0.0
+    else:
+        prior_fraction = prior.get("max_recovery_fraction", 0.0)
+    index_name = instrument_symbols.get(key, key)
+    classification = classify_market_recovery(
+        previous_close,
+        session_low,
+        price,
+        index_atr,
+        prior_recovery_fraction=prior_fraction,
+        trend=market_regimes.get("NIFTY 50") if index_name != "NIFTY 50" else market_regimes.get(index_name),
+        # Index VWAP is not yet verified by this feed; do not claim confirmation.
+        above_vwap=None,
+    )
+    fraction = classification.get("recovery_fraction", 0.0)
+    _index_recovery_state[key] = {
+        "session_date": session_day.isoformat(),
+        "max_recovery_fraction": max(prior_fraction, fraction or 0.0),
+        "observed_at_ist": tick_time.isoformat(),
+        "source": "accepted_live_tick_and_completed_candles",
+        "classification": classification,
+    }
+    return classification
+
+
+def market_recovery_context(asof=None):
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    asof = asof or datetime.now(ZoneInfo("Asia/Kolkata"))
+    names = ("NIFTY 50", "SENSEX", "BANK NIFTY")
+    result = {}
+    for name in names:
+        key = INDICES.get(name)
+        state = _index_recovery_state.get(key, {}) if key else {}
+        observed = state.get("observed_at_ist")
+        if observed:
+            try:
+                stamp = datetime.fromisoformat(observed)
+                if stamp.tzinfo is None:
+                    stamp = stamp.replace(tzinfo=ZoneInfo("Asia/Kolkata"))
+                fresh = timedelta(0) <= asof - stamp <= timedelta(seconds=120)
+            except ValueError:
+                fresh = False
+        else:
+            fresh = False
+        result[name] = (dict(state.get("classification", {"status": "UNAVAILABLE"}))
+                        if fresh else {"status": "UNAVAILABLE"})
+        result[name]["feed_fresh"] = fresh
+        if observed:
+            result[name]["observed_at_ist"] = observed
+            result[name]["source"] = state["source"]
+    return result
+
+
+def _decision_context(symbol, price, decision_time, *, features=None):
+    return {
+        "schema_version": 1,
+        "decision_time_ist": decision_time.isoformat() if decision_time else None,
+        "symbol": instrument_symbols.get(symbol, symbol),
+        "price": float(price) if price is not None else None,
+        "market_regime": market_regimes.get("NIFTY 50", "UNAVAILABLE"),
+        "market_recovery": market_recovery_context(decision_time),
+        "features": features or {},
+    }
 
 def record_feed_health(key):
     global _last_health_write
@@ -410,8 +498,11 @@ def analyse(key):
         if len(baseline) == 19 and all(v >= 0 for v in volumes):
             average_volume = sum(baseline) / len(baseline)
             rvol = volumes[-1] / average_volume if average_volume > 0 else 0.0
+        rvol_available = rvol is not None
         if rvol is None:
             rvol = 0.0
+    else:
+        rvol_available = False
 
     market = index_signal(price, ema9, ema20, vwap_value)
     if key == INDICES["NIFTY 50"]:
@@ -459,7 +550,23 @@ def analyse(key):
     if key in NIFTY_200.values() or key in INDICES.values():
         save_scan_result(instrument_symbols.get(key, key), price, ema9, ema20, mom, market, trend_5m, signal, previous_closes.get(key))
     if key in NIFTY_200.values() and signal == "BUY" and atr_value is not None:
-        buy(key, price, price + atr_value, price + (2 * atr_value), price - atr_value, "V2 momentum BUY")
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        prior_price = closes[-6] if len(closes) >= 6 else None
+        features = {
+            "price_vs_ema9_pct": (price - ema9) / ema9 * 100 if ema9 else None,
+            "price_vs_ema20_pct": (price - ema20) / ema20 * 100 if ema20 else None,
+            "momentum_pct": (price - prior_price) / prior_price * 100 if prior_price else None,
+            "rvol": rvol if rvol_available else None,
+            "atr_pct": atr_value / price * 100 if price else None,
+            "trend_5m": trend_5m,
+            "market_regime": market,
+        }
+        context = _decision_context(
+            key, price, datetime.now(ZoneInfo("Asia/Kolkata")), features=features
+        )
+        buy(key, price, price + atr_value, price + (2 * atr_value),
+            price - atr_value, "V2 momentum BUY", context=context)
         load_active_trades()
 
     print(
@@ -502,6 +609,15 @@ def on_tick(key, data):
         return
     _last_accepted_tick_ms[key] = ts
 
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    tick_time = datetime.fromtimestamp(ts / 1000.0, ZoneInfo("Asia/Kolkata"))
+    if key in INDICES.values():
+        try:
+            update_market_recovery(key, price, tick_time)
+        except (TypeError, ValueError, OverflowError) as exc:
+            print("MARKET_RECOVERY_CONTEXT_SKIPPED:", type(exc).__name__, flush=True)
+
     record_feed_health(key)
 
     # Manage open trades from memory instead of querying SQLite every tick.
@@ -513,15 +629,18 @@ def on_tick(key, data):
         invalidation = trade["invalidation"]
 
         if price <= invalidation:
-            sell(trade_id, price, "Invalidation hit")
+            sell(trade_id, price, "Invalidation hit",
+                 context=_decision_context(key, price, tick_time))
             active_trades.pop(key, None)
         elif price >= t2:
-            sell(trade_id, price, "Target 2 hit")
+            sell(trade_id, price, "Target 2 hit",
+                 context=_decision_context(key, price, tick_time))
             active_trades.pop(key, None)
         elif price >= t1:
             if trade["status"] != "TARGET_1":
                 trade["status"] = "TARGET_1"
-                update_state(trade_id, price, "TARGET_1", "Target 1 hit")
+                update_state(trade_id, price, "TARGET_1", "Target 1 hit",
+                             context=_decision_context(key, price, tick_time))
                 last_trade_updates[key] = time.time()
             elif time.time() - last_trade_updates.get(key, 0) >= 5:
                 update_state(trade_id, price, "TARGET_1")
