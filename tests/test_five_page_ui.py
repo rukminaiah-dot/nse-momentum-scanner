@@ -76,6 +76,11 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("x.symbol===symbol&&x.type==='STOCK'&&x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)", self.html)
         self.assertIn("const live=Boolean(state.sessionOpen&&fresh(r)&&rating&&r.signal===rating.signal", self.html)
 
+    def test_daily_pnl_ist_date_is_locale_independent(self):
+        self.assertIn("formatToParts(value)", self.html)
+        self.assertIn("const today=istDay(new Date())", self.html)
+        self.assertIn("return istDay(new Date(parsed))", self.html)
+
     def test_daily_pnl_rejects_timezone_ambiguous_exit_times(self):
         self.assertIn(r"if(!/(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw))return null", self.html)
 
