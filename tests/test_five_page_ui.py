@@ -89,7 +89,7 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn(".sort((a,b)=>Number(b.rating)-Number(a.rating)).slice(0,10)", self.html)
 
     def test_stock_signals_require_live_verified_candle_rating(self):
-        self.assertIn("state.sessionOpen&&fresh(r)&&rating&&fresh(rating)", self.html)
+        self.assertIn("const live=Boolean(state.sessionOpen&&fresh(r)&&rating)", self.html)
         self.assertIn("rating.rating_basis==='CANDLE_ONLY_HEURISTIC'", self.html)
         self.assertIn("WAIT — not independently verified fresh", self.html)
 
