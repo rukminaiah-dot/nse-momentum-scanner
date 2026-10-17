@@ -31,6 +31,11 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("Long-term: Not verified", self.html)
         self.assertIn("function shortTrend", self.html) if "function shortTrend" in self.html else self.assertIn("const shortTrend=", self.html)
 
+    def test_stock_signals_require_live_verified_candle_rating(self):
+        self.assertIn("state.sessionOpen&&fresh(r)&&rating&&fresh(rating)", self.html)
+        self.assertIn("rating.rating_basis==='CANDLE_ONLY_HEURISTIC'", self.html)
+        self.assertIn("WAIT — not independently verified fresh", self.html)
+
     def test_no_broker_execution_claim(self):
         self.assertIn("Order execution", self.html)
         self.assertIn("DISABLED", self.html)
