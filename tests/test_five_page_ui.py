@@ -91,6 +91,10 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("history_truncated = len(records) > 500", api)
         self.assertIn("records = records[:500]", api)
 
+    def test_daily_pnl_blocks_undated_completed_entries(self):
+        self.assertIn("const invalidEntries=completed.filter(x=>istDate(x.buy_time)==null)", self.html)
+        self.assertIn("!undatedExits.length&&!invalidEntries.length&&!invalidChronology.length", self.html)
+
     def test_malformed_recorded_history_is_not_shown_as_empty(self):
         self.assertIn("throw Error('Malformed signal history response')", self.html)
         self.assertIn("!Array.isArray(activity.completed)", self.html)
