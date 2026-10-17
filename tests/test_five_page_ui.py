@@ -91,6 +91,10 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("history_truncated = len(records) > 500", api)
         self.assertIn("records = records[:500]", api)
 
+    def test_daily_pnl_blocks_invalid_completed_prices_any_day(self):
+        self.assertIn("const invalidCompletedPrices=completed.filter(x=>pnlFor(x)==null)", self.html)
+        self.assertIn("!invalidChronology.length&&!invalidCompletedPrices.length&&todayClosed.length", self.html)
+
     def test_daily_pnl_blocks_undated_completed_entries(self):
         self.assertIn("const invalidEntries=completed.filter(x=>istDate(x.buy_time)==null)", self.html)
         self.assertIn("!undatedExits.length&&!invalidEntries.length&&!invalidChronology.length", self.html)
@@ -120,7 +124,7 @@ class FivePageUiTests(unittest.TestCase):
 
     def test_daily_pnl_does_not_ignore_undated_completed_exits(self):
         self.assertIn("const undatedExits=completed.filter(x=>istDate(x.sell_time)==null)", self.html)
-        self.assertIn("const total=activity.history_truncated===false&&activity.incomplete_records===0&&!undatedExits.length&&!invalidEntries.length&&!invalidChronology.length&&todayClosed.length", self.html)
+        self.assertIn("const total=activity.history_truncated===false&&activity.incomplete_records===0&&!undatedExits.length&&!invalidEntries.length&&!invalidChronology.length&&!invalidCompletedPrices.length&&todayClosed.length", self.html)
 
     def test_recorded_pnl_requires_chronological_entry_exit(self):
         self.assertIn("Date.parse(x.sell_time)>=Date.parse(x.buy_time)", self.html)
