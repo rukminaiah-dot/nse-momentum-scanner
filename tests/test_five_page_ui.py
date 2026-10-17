@@ -70,6 +70,10 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("qty>0?(sell-buy)*qty:null", self.html)
         self.assertIn("pnlFor(x)!=null?num(pnlFor(x)):'Not verified'", self.html)
 
+    def test_index_buy_sell_requires_fresh_scanner_row_as_well(self):
+        self.assertIn("const sig=live&&score&&['BUY','SELL'].includes(score.signal)", self.html)
+        self.assertIn("live&&score?esc(score.rating)+'/100':'—'", self.html)
+
     def test_index_signals_require_fresh_verified_index_ratings(self):
         self.assertIn("x.type==='INDEX'&&x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)", self.html)
         self.assertIn("WAIT / UNVERIFIED", self.html)
