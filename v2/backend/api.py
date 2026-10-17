@@ -151,6 +151,98 @@ def signal_activity():
             "source": "daily_trade_history", "mode": "RECORDED_SIGNALS_NOT_BROKER_EXECUTIONS",
             "order_execution_enabled": False}
 
+
+@app.get("/api/v2/pnl-history")
+def pnl_history():
+    """Return a complete, read-only seven-day IST aggregate of recorded exits."""
+    import os
+    from datetime import datetime, time, timedelta
+    from zoneinfo import ZoneInfo
+    from fastapi import HTTPException
+
+    source = "daily_trade_history"
+    url = os.environ.get("DATABASE_URL")
+    if not url:
+        return {
+            "status": "HISTORY_STORAGE_NOT_CONFIGURED",
+            "source": source,
+            "days_requested": 7,
+            "complete": False,
+            "days": [],
+            "order_execution_enabled": False,
+        }
+
+    ist = ZoneInfo("Asia/Kolkata")
+    today = datetime.now(ist).date()
+    first_day = today - timedelta(days=6)
+    start_at = datetime.combine(first_day, time.min, tzinfo=ist)
+    end_at = datetime.combine(today + timedelta(days=1), time.min, tzinfo=ist)
+    try:
+        import psycopg
+        from psycopg.rows import dict_row
+        with psycopg.connect(url, row_factory=dict_row, connect_timeout=5) as con:
+            rows = con.execute("""
+                SELECT
+                    (sell_time AT TIME ZONE 'Asia/Kolkata')::date AS pnl_date,
+                    COUNT(*) AS exit_count,
+                    COUNT(*) FILTER (WHERE
+                        buy_time IS NULL OR buy_price IS NULL OR sell_price IS NULL
+                        OR quantity IS NULL OR buy_price <= 0 OR sell_price <= 0
+                        OR quantity <= 0 OR sell_time < buy_time
+                        OR buy_time > NOW() + INTERVAL '1 minute'
+                        OR sell_time > NOW() + INTERVAL '1 minute'
+                    ) AS invalid_count,
+                    SUM(CASE WHEN
+                        buy_time IS NOT NULL AND buy_price IS NOT NULL
+                        AND sell_price IS NOT NULL AND quantity IS NOT NULL
+                        AND buy_price > 0 AND sell_price > 0 AND quantity > 0
+                        AND sell_time >= buy_time
+                        AND buy_time <= NOW() + INTERVAL '1 minute'
+                        AND sell_time <= NOW() + INTERVAL '1 minute'
+                        THEN (sell_price - buy_price) * quantity
+                        ELSE 0 END) AS total_pnl
+                FROM daily_trade_history
+                WHERE sell_time >= %s AND sell_time < %s
+                GROUP BY pnl_date
+                ORDER BY pnl_date
+            """, (start_at, end_at)).fetchall()
+
+        by_day = {row["pnl_date"].isoformat(): row for row in rows}
+        days = []
+        complete = True
+        for offset in range(7):
+            day = (first_day + timedelta(days=offset)).isoformat()
+            row = by_day.get(day)
+            exits = int(row["exit_count"]) if row else 0
+            invalid = int(row["invalid_count"]) if row else 0
+            total = row["total_pnl"] if row else None
+            if invalid or (exits and total is None):
+                total = None
+                complete = False
+            elif total is not None:
+                total = float(total)
+                if not __import__("math").isfinite(total):
+                    total = None
+                    complete = False
+            days.append({
+                "date": day,
+                "exit_count": exits,
+                "invalid_count": invalid,
+                "total_pnl": total,
+            })
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Persisted P&L history unavailable") from exc
+
+    return {
+        "status": "AGGREGATED_HISTORY",
+        "source": source,
+        "days_requested": 7,
+        "complete": complete,
+        "days": days,
+        "mode": "RECORDED_SIGNALS_NOT_BROKER_EXECUTIONS",
+        "order_execution_enabled": False,
+    }
+
 @app.get("/history")
 def history_page():
     return FileResponse("v2/frontend/history.html")

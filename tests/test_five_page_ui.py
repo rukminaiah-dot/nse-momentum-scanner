@@ -120,23 +120,36 @@ class FivePageUiTests(unittest.TestCase):
     def test_future_dated_exits_block_daily_pnl_and_chart(self):
         self.assertIn("const futureExits=completed.filter", self.html)
         self.assertIn("!invalidChronology.length&&!futureExits.length&&!futureEntries.length&&!invalidCompletedPrices.length", self.html)
-        self.assertIn("Some recorded exits have future timestamps", self.html)
+        self.assertIn("sell_time > NOW() + INTERVAL '1 minute'", (pathlib.Path(__file__).resolve().parents[1] / "v2/backend/api.py").read_text(encoding="utf-8"))
 
     def test_pnl_chart_reports_reason_for_missing_verified_data(self):
-        self.assertIn("const chartIssue=", self.html)
-        self.assertIn("History exceeds the 500-record display limit", self.html)
-        self.assertIn("Trade IDs are missing or duplicated", self.html)
-        self.assertIn("Some prices or quantities are invalid", self.html)
+        self.assertIn("const chartIssue=history&&history.status==='HISTORY_STORAGE_NOT_CONFIGURED'", self.html)
+        self.assertIn("Recent recorded history contains invalid or incomplete exits", self.html)
+        self.assertIn("Seven-day aggregate response failed validation", self.html)
+        self.assertIn("history.history_truncated", self.html) if "history.history_truncated" in self.html else self.assertIn("activity.history_truncated", self.html)
+
+    def test_seven_day_pnl_aggregate_is_read_only_ist_and_validates_all_exits(self):
+        api = (pathlib.Path(__file__).resolve().parents[1] / "v2/backend/api.py").read_text(encoding="utf-8")
+        self.assertIn('@app.get("/api/v2/pnl-history")', api)
+        self.assertIn("datetime.now(ist).date()", api)
+        self.assertIn("first_day = today - timedelta(days=6)", api)
+        self.assertIn("WHERE sell_time >= %s AND sell_time < %s", api)
+        self.assertIn("GROUP BY pnl_date", api)
+        self.assertIn("invalid_count", api)
+        self.assertIn("order_execution_enabled", api)
+        self.assertIn("async function renderPnlChart()", self.html)
+        self.assertIn("get('/api/v2/pnl-history')", self.html)
+        self.assertIn("history.days_requested===7&&history.complete===true", self.html)
 
     def test_pnl_chart_discloses_persisted_source_and_nonbroker_status(self):
         self.assertIn("source: persisted daily_trade_history", self.html)
         self.assertIn("signal-based, not broker-confirmed", self.html)
 
     def test_pnl_chart_includes_exit_counts_and_accessible_labels(self):
-        self.assertIn("const chartCounts=new Map()", self.html)
-        self.assertIn("chartCounts.set(day,(chartCounts.get(day)||0)+1)", self.html)
+        self.assertIn("x.exit_count===0?'no recorded exits':x.exit_count+' recorded exits", self.html)
         self.assertIn('role="group"', self.html)
         self.assertIn("numbers in parentheses are exit counts", self.html)
+        self.assertIn("x.exit_count+' recorded exits, signal P&L '", self.html)
 
     def test_pnl_chart_distinguishes_no_exit_days_from_zero_profit(self):
         self.assertIn("Last seven IST calendar days", self.html)
@@ -145,10 +158,11 @@ class FivePageUiTests(unittest.TestCase):
 
     def test_recorded_daily_pnl_chart_requires_complete_history(self):
         self.assertIn('id="pnl-chart"', self.html)
-        self.assertIn("const historyVerified=activity.status==='RECORDED_HISTORY'", self.html)
-        self.assertIn("const recentDays=Array.from({length:7}", self.html)
+        self.assertIn("history.complete===true", self.html)
+        self.assertIn("const validDays=Array.isArray(rows)&&rows.length===7", self.html)
         self.assertIn("P&L chart unavailable: '+esc(chartIssue)+'.", self.html)
         self.assertIn("signal-based, not broker-confirmed", self.html)
+        self.assertIn("/api/v2/pnl-history", self.html)
 
     def test_overlapping_active_and_completed_entries_block_daily_total(self):
         self.assertIn("const overlappingLifecycle=active.some", self.html)
