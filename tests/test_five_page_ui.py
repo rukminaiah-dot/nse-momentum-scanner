@@ -116,6 +116,12 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("Trade IDs are missing or duplicated", self.html)
         self.assertIn("Some prices or quantities are invalid", self.html)
 
+    def test_pnl_chart_includes_exit_counts_and_accessible_labels(self):
+        self.assertIn("const chartCounts=new Map()", self.html)
+        self.assertIn("chartCounts.set(day,(chartCounts.get(day)||0)+1)", self.html)
+        self.assertIn('role="group"', self.html)
+        self.assertIn("numbers in parentheses are exit counts", self.html)
+
     def test_pnl_chart_distinguishes_no_exit_days_from_zero_profit(self):
         self.assertIn("Last seven IST calendar days", self.html)
         self.assertIn("No exits", self.html)
