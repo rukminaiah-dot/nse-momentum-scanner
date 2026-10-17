@@ -99,6 +99,9 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("const invalidEntries=completed.filter(x=>istDate(x.buy_time)==null)", self.html)
         self.assertIn("!undatedExits.length&&!invalidEntries.length&&!invalidChronology.length", self.html)
 
+    def test_whitespace_normalized_lifecycle_ids_cannot_duplicate(self):
+        self.assertIn("String(other).trim()===String(id).trim()", self.html)
+
     def test_unsafe_numeric_lifecycle_ids_block_daily_pnl(self):
         self.assertIn("typeof id==='number'&&!Number.isSafeInteger(id)", self.html)
 
@@ -108,7 +111,7 @@ class FivePageUiTests(unittest.TestCase):
 
     def test_duplicate_active_and_completed_ids_block_daily_pnl(self):
         self.assertIn("const lifecycleIds=[...active,...completed]", self.html)
-        self.assertIn("String(other)===String(id)", self.html)
+        self.assertIn("String(other).trim()===String(id).trim()", self.html)
         self.assertIn("!duplicateLifecycleIds&&todayClosed.length", self.html)
 
     def test_duplicate_completed_ids_block_daily_pnl(self):
