@@ -86,7 +86,7 @@ class FivePageUiTests(unittest.TestCase):
 
     def test_stock_detail_uses_fresh_stock_specific_rating(self):
         self.assertIn("x.symbol===symbol&&x.type==='STOCK'&&x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)&&verifiedCandleScore(x)", self.html)
-        self.assertIn("const live=Boolean(state.sessionOpen&&fresh(r)&&rating&&r.signal===rating.signal", self.html)
+        self.assertIn("const live=Boolean(state.sessionOpen&&fresh(r)&&rating&&verifiedCandleScore(rating)&&r.signal===rating.signal", self.html)
 
     def test_concurrent_trade_failure_is_caught_before_await(self):
         self.assertIn("const tradesResult=await tradesRequest;if(!tradesResult.ok)throw tradesResult.error", self.html)
@@ -259,7 +259,7 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn(".sort((a,b)=>Number(b.rating)-Number(a.rating)).slice(0,10)", self.html)
 
     def test_stock_signals_require_live_verified_candle_rating(self):
-        self.assertIn("const live=Boolean(state.sessionOpen&&fresh(r)&&rating&&r.signal===rating.signal", self.html)
+        self.assertIn("const live=Boolean(state.sessionOpen&&fresh(r)&&rating&&verifiedCandleScore(rating)&&r.signal===rating.signal", self.html)
         self.assertIn("x.type==='STOCK'&&x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)", self.html)
         self.assertIn("WAIT — not independently verified fresh", self.html)
 
