@@ -57,6 +57,11 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("Date.parse(zoned)", self.html)
         self.assertIn("Date.now()-t<=180000", self.html)
 
+    def test_pnl_requires_recorded_entry_exit_and_quantity(self):
+        self.assertIn("x.buy_price!=null&&x.sell_price!=null&&x.quantity!=null", self.html)
+        self.assertIn("qty>0?(sell-buy)*qty:null", self.html)
+        self.assertIn("pnlFor(x)!=null?num(pnlFor(x)):'Not verified'", self.html)
+
     def test_index_signals_require_fresh_verified_index_ratings(self):
         self.assertIn("x.type==='INDEX'&&x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)", self.html)
         self.assertIn("WAIT / UNVERIFIED", self.html)
