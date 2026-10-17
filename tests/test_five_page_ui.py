@@ -27,6 +27,9 @@ class FivePageUiTests(unittest.TestCase):
                          "nse-dashboard-section-order-v1"):
             self.assertIn(required, self.html)
 
+    def test_dashboard_does_not_leave_empty_grid_wrappers(self):
+        self.assertIn("if(!wrapper.children.length)wrapper.remove()", self.html)
+
     def test_no_unverified_long_term_claim(self):
         self.assertIn("Long-term: Not verified", self.html)
         self.assertIn("function shortTrend", self.html) if "function shortTrend" in self.html else self.assertIn("const shortTrend=", self.html)
