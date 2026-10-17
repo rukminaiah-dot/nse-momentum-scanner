@@ -57,6 +57,9 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("Date.parse(zoned)", self.html)
         self.assertIn("Date.now()-t<=180000", self.html)
 
+    def test_freshness_prefers_completed_candle_time(self):
+        self.assertIn("const stamp=row?.candle_ist??row?.updated_at", self.html)
+
     def test_scorecard_requires_fresh_aligned_scanner_data(self):
         self.assertIn("const validRating=x=>{const row=state.rows.find", self.html)
         self.assertIn("r&&fresh(row)&&['BUY','SELL'].includes(r.signal)&&row.signal===r.signal", self.html)
