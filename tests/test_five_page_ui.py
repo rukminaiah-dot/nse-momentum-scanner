@@ -99,6 +99,9 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("const invalidEntries=completed.filter(x=>istDate(x.buy_time)==null)", self.html)
         self.assertIn("!undatedExits.length&&!invalidEntries.length&&!invalidChronology.length", self.html)
 
+    def test_array_signal_activity_payload_is_rejected(self):
+        self.assertIn("typeof activity!=='object'||Array.isArray(activity)", self.html)
+
     def test_unknown_signal_activity_status_fails_closed(self):
         self.assertIn("!['RECORDED_HISTORY','HISTORY_STORAGE_NOT_CONFIGURED'].includes(activity.status)", self.html)
 
