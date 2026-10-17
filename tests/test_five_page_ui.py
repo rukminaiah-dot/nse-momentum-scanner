@@ -99,11 +99,17 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("const invalidEntries=completed.filter(x=>istDate(x.buy_time)==null)", self.html)
         self.assertIn("!undatedExits.length&&!invalidEntries.length&&!invalidChronology.length", self.html)
 
+    def test_pnl_chart_reports_reason_for_missing_verified_data(self):
+        self.assertIn("const chartIssue=", self.html)
+        self.assertIn("History exceeds the 500-record display limit", self.html)
+        self.assertIn("Trade IDs are missing or duplicated", self.html)
+        self.assertIn("Some prices or quantities are invalid", self.html)
+
     def test_recorded_daily_pnl_chart_requires_complete_history(self):
         self.assertIn('id="pnl-chart"', self.html)
         self.assertIn("const historyVerified=activity.status==='RECORDED_HISTORY'", self.html)
         self.assertIn("const recentDays=[...chartRows.entries()]", self.html)
-        self.assertIn("P&L chart unavailable: recorded history is incomplete or unverified.", self.html)
+        self.assertIn("P&L chart unavailable: '+esc(chartIssue)+'.", self.html)
         self.assertIn("signal-based, not broker-confirmed", self.html)
 
     def test_overlapping_active_and_completed_entries_block_daily_total(self):
