@@ -42,6 +42,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Verify scanner-status API contract offline
+        run: |
+          python -m pip install --disable-pip-version-check fastapi pytest
+          python -m pytest -q tests/test_scanner_status_contract.py
       - run: python -m py_compile v2/backend/candle_manager.py v2/backend/gap_recovery_worker.py v2/backend/verified_gap_recovery.py tests/test_worker_manager_integration.py tests/test_minimal_verified_recovery.py
       - run: python -m unittest discover -s tests -p 'test_atomic_candle_state.py' -v
       - run: python -m unittest discover -s tests -p 'test_scanner_close_gate.py' -v
