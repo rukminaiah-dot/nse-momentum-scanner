@@ -131,11 +131,13 @@ def signal_activity():
     history_truncated = len(records) > 500
     records = records[:500]
     active, completed = [], []
+    incomplete_records = 0
     for record in records:
         row = dict(record)
         row["symbol"] = instrument_symbols.get(row["symbol"], row["symbol"])
         # A recorded entry without exit is an active *record*, not proof of an executed order.
         if row["buy_price"] is None:
+            incomplete_records += 1
             continue
         if row["sell_time"] is not None and row["sell_price"] is not None:
             row["display_status"] = "SELL / EXIT"
@@ -143,7 +145,9 @@ def signal_activity():
         elif row["sell_time"] is None and row["sell_price"] is None:
             row["display_status"] = "BUY ACTIVE"
             active.append(row)
-    return {"status": "RECORDED_HISTORY", "history_limit": 500, "history_truncated": history_truncated, "active": active, "completed": completed,
+        else:
+            incomplete_records += 1
+    return {"status": "RECORDED_HISTORY", "history_limit": 500, "history_truncated": history_truncated, "incomplete_records": incomplete_records, "active": active, "completed": completed,
             "source": "daily_trade_history", "mode": "RECORDED_SIGNALS_NOT_BROKER_EXECUTIONS",
             "order_execution_enabled": False}
 
