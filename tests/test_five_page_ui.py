@@ -57,6 +57,10 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("Date.parse(zoned)", self.html)
         self.assertIn("Date.now()-t<=180000", self.html)
 
+    def test_stock_detail_uses_fresh_stock_specific_rating(self):
+        self.assertIn("x.symbol===symbol&&x.type==='STOCK'&&x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)", self.html)
+        self.assertIn("const live=Boolean(state.sessionOpen&&fresh(r)&&rating)", self.html)
+
     def test_daily_pnl_uses_exit_date_not_entry_trade_date(self):
         self.assertIn("completed.filter(x=>istDate(x.sell_time)===today)", self.html)
         self.assertNotIn("x.sell_time||x.trade_date", self.html)
