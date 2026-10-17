@@ -86,7 +86,7 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("const result=await activityRequest", self.html)
 
     def test_activity_history_uses_lookahead_for_exact_limit(self):
-        api = (ROOT / "v2/backend/api.py").read_text(encoding="utf-8")
+        api = (Path(__file__).resolve().parents[1] / "v2/backend/api.py").read_text(encoding="utf-8")
         self.assertIn("ORDER BY trade_date DESC, id DESC LIMIT 501", api)
         self.assertIn("history_truncated = len(records) > 500", api)
         self.assertIn("records = records[:500]", api)
