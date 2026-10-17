@@ -39,6 +39,11 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("Date.parse(zoned)", self.html)
         self.assertIn("Date.now()-t<=180000", self.html)
 
+    def test_scorecard_hides_stale_candle_scores(self):
+        self.assertIn("const validRating=x=>", self.html)
+        self.assertIn("r.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(r)?r:null", self.html)
+        self.assertIn("const score=x=>validRating(x)?.rating??'—'", self.html)
+
     def test_top_buy_ranking_excludes_stale_ratings(self):
         self.assertIn("x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)", self.html)
         self.assertIn(".sort((a,b)=>Number(b.rating)-Number(a.rating)).slice(0,10)", self.html)
