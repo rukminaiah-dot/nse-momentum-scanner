@@ -39,6 +39,11 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("Date.parse(zoned)", self.html)
         self.assertIn("Date.now()-t<=180000", self.html)
 
+    def test_premarket_bias_does_not_use_stored_index_readings(self):
+        self.assertIn("const valid=rows.filter(r=>fresh(r)&&", self.html)
+        self.assertIn("NO VERIFIED LIVE BIAS", self.html)
+        self.assertIn("not an opening forecast", self.html)
+
     def test_scorecard_hides_stale_candle_scores(self):
         self.assertIn("const validRating=x=>", self.html)
         self.assertIn("r.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(r)?r:null", self.html)
