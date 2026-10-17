@@ -99,6 +99,9 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("const invalidEntries=completed.filter(x=>istDate(x.buy_time)==null)", self.html)
         self.assertIn("!undatedExits.length&&!invalidEntries.length&&!invalidChronology.length", self.html)
 
+    def test_signal_activity_rejects_non_object_response(self):
+        self.assertIn("!activity||typeof activity!=='object'", self.html)
+
     def test_malformed_recorded_history_is_not_shown_as_empty(self):
         self.assertIn("throw Error('Malformed signal history response')", self.html)
         self.assertIn("!Array.isArray(activity.completed)", self.html)
