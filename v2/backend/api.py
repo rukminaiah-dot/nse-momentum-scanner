@@ -41,6 +41,29 @@ def get_scanner_results():
     return [dict(row) for row in rows]
 
 
+@app.get("/api/v2/scanner-status")
+def get_scanner_status():
+    """Read-only stored-result visibility; does not claim live feed freshness."""
+    from fastapi import HTTPException
+    try:
+        with sqlite3.connect(DB_PATH, timeout=10) as con:
+            count, latest = con.execute(
+                "SELECT COUNT(*), MAX(updated_at) FROM scanner_results"
+            ).fetchone()
+    except sqlite3.Error as exc:
+        raise HTTPException(
+            status_code=503, detail="Scanner result storage unavailable"
+        ) from exc
+    return {
+        "status": "STORED_RESULTS_AVAILABLE" if count else "NO_STORED_RESULTS",
+        "result_count": count,
+        "latest_result_updated_at": latest,
+        "live_feed_verified": False,
+        "signal_freshness_verified": False,
+        "order_execution_enabled": False,
+    }
+
+
 @app.get("/api/v2/history")
 def get_daily_trade_history():
     import os
