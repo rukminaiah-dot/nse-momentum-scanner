@@ -1,0 +1,40 @@
+name: Read-only Production API Response Probe
+on:
+  push:
+    branches:
+      - feature/isolated-recovery-worker-manager-integration
+    paths:
+      - '.github/workflows/read-only-api-probe.yml'
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe deployed scanner API without secrets or writes
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, urllib.request, urllib.error
+          base = "https://nse-momentum-scanner-api.onrender.com"
+          for path in ("/api/v2/scanner", "/api/v2/nifty200-feed-health", "/api/v2/top-momentum-setups"):
+              print("CHECK", path, flush=True)
+              try:
+                  req = urllib.request.Request(base + path, headers={"User-Agent": "read-only-scanner-probe/1"})
+                  with urllib.request.urlopen(req, timeout=35) as response:
+                      payload = json.load(response)
+                      print("HTTP", response.status, "type", type(payload).__name__, flush=True)
+                      if path.endswith("/scanner"):
+                          assert isinstance(payload, list), "scanner response must be a list"
+                          print("stored_rows", len(payload), flush=True)
+                          if payload:
+                              print("sample_keys", sorted(payload[0].keys()), flush=True)
+                              print("sample_updated_at", payload[0].get("updated_at"), flush=True)
+                      else:
+                          assert isinstance(payload, dict), "health/setup response must be an object"
+                          print("status", payload.get("status"), "order_execution_enabled", payload.get("order_execution_enabled"), flush=True)
+                          assert payload.get("order_execution_enabled") is False
+              except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+                  raise SystemExit(f"API PROBE FAILED at {path}: {type(exc).__name__}: {exc}")
+          print("READ_ONLY_API_PROBE_PASSED")
+          PY

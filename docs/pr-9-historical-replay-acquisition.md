@@ -1,0 +1,51 @@
+# PR #9 — Historical replay acquisition and authorization
+
+Status: **not executed; waiting for authorized historical data**. This is a handoff procedure, not replay evidence or approval.
+
+## Existing source and why no database is required
+
+`v2/backend/scanner.py` already contains an Upstox HistoryV3 API client and historical/intraday candle fetch calls. Historical data can be obtained in a separately authorized **read-only** offline/staging process and held in a sanitized local file; a new database is not required. Source code access does not grant API access, and no GitHub secret or broker credential should be copied into the repository, CI logs, issues, or ChatGPT.
+
+## Safe data acquisition contract
+
+1. An authorized operator uses their existing approved Upstox account/session in an isolated environment, with read-only market-data access and **no live scanner, order placement or recovery worker activation**.
+2. Select approved instruments and several trading sessions including normal intraday minutes, session boundaries, and any known feed gaps. Record instrument key, exchange, timezone (Asia/Kolkata), date range, API endpoint/interval and provenance.
+3. Fetch 1-minute OHLCV rows through the existing Upstox historical/intraday API integration or an approved data export. Keep tokens in the operator's environment only; never persist them in the replay dataset. Respect provider permissions and rate limits.
+4. Normalize rows to `timestamp,symbol,open,high,low,close,volume` with timezone documented. Reject duplicate timestamps, impossible OHLC, negative volume, malformed rows, future/incomplete candles, and unintended off-session data; record missing minutes rather than fabricating candles.
+5. Store a sanitized CSV/JSON artifact in an approved private location, **not in the Git repository**. Record a SHA-256 checksum, instrument/session inventory, missing-minute counts and the operator's explicit authorization for offline replay.
+6. Run an isolated replay with persistence, broker orders, network side effects and production database access disabled. Compare decisions, warmup, session boundary behavior, market regime routing, gap handling and staleness against the agreed baseline; record discrepancies.
+7. Have the scanner/replay owner sign off the provenance and results. Only then update the release checklist gate from BLOCKED to PASS/FAIL based on evidence.
+
+## Minimum acceptance evidence
+
+- Explicit data-use authorization and owner, with no secrets in artifacts
+- Sanitized input file checksum, instrument/session/timezone metadata, data quality summary
+- Exact replay command/environment and code commit SHA
+- Baseline decision source, comparison report, mismatches and explanations
+- Owner acceptance decision and link to privately retained evidence
+
+## Current blocker
+
+No authorized dataset, usable runtime access or baseline outputs have been demonstrated in this repository review. Existing synthetic test fixtures are **not** a substitute. Do not run live broker requests from CI or mark historical replay complete. The user does not need to create a database or manually write a CSV; the authorized operator can use the existing read-only Upstox integration when access is available.
+
+## Prepared offline exporter (not executed)
+
+`scripts/export_upstox_historical_readonly.py` uses the existing `HistoryV3Api.get_historical_candle_data1` read-only endpoint. By default it only validates CLI inputs and prints a dry-run notice; `--execute` is required to make a request. It imports no scanner, order, or database code, rejects malformed/off-session/duplicate rows and refuses to overwrite files. Use a private path outside the repository and an approved completed-date range. **The tool has not been run against Upstox, and the resulting data would still require provenance and owner approval before replay acceptance.**
+
+Example dry run (no network):
+
+```sh
+python scripts/export_upstox_historical_readonly.py --instrument-key 'NSE_EQ|APPROVED_KEY' --from-date 2026-10-12 --to-date 2026-10-13 --output /tmp/approved-private-candles.csv
+```
+
+An authorized operator must substitute a real approved instrument key and separately authorize any `--execute` invocation. Never put tokens in command arguments or logs.
+
+## Offline trace runner (prepared, not executed on historical data)
+
+After an authorized private CSV export, run from the repository root in an isolated environment:
+
+```sh
+python scripts/replay_historical_candles_offline.py --input /private/approved-candles.csv --output /private/replay-trace.json --kind stock
+```
+
+Use `--kind primary-index` or `secondary-index` for approved index datasets. This validates and fingerprints the CSV, reports missing minutes, and produces per-minute offline-model decisions. **It does not establish full scanner parity or acceptance**: a scanner owner must compare the trace against independently approved expected decisions and validate lifecycle/persistence/order boundaries. Do not upload raw data or trace to public CI/artifacts without data-custodian permission.

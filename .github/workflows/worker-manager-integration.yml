@@ -1,0 +1,119 @@
+name: Isolated Worker Manager Integration Tests
+on:
+  push:
+    branches:
+      - feature/isolated-recovery-worker-manager-integration
+  pull_request:
+    branches:
+      - feature/atomic-candle-state-prototype
+    paths:
+      - 'v2/backend/gap_recovery_worker.py'
+      - 'v2/backend/verified_gap_recovery.py'
+      - 'tests/test_worker_manager_integration.py'
+      - 'tests/test_offline_recovery_isolation.py'
+      - 'tests/test_candle_retention.py'
+      - 'tests/test_offline_signal_parity.py'
+      - 'tests/test_offline_preload_selection.py'
+      - 'tests/test_scanner_trend_source_parity.py'
+      - 'tests/test_offline_restart_preload.py'
+      - 'tests/test_scanner_decision_safety_contract.py'
+      - 'tests/test_scanner_source_decision_parity.py'
+      - 'tests/test_recovery_update_interleavings.py'
+      - 'v2/backend/offline_preload_selection.py'
+      - 'tests/test_offline_scanner_retention_probe.py'
+      - 'v2/backend/offline_signal_parity.py'
+      - 'scripts/compare_candle_retention.py'
+      - 'scripts/compare_signal_retention.py'
+      - 'scripts/compare_offline_scanner_retention.py'
+      - 'v2/backend/candle_manager.py'
+      - 'tests/test_minimal_verified_recovery.py'
+      - 'tests/test_trade_engine_lifecycle.py'
+      - 'v2/backend/trade_engine.py'
+      - 'tests/test_decision_learning.py'
+      - 'v2/backend/decision_learning.py'
+      - 'v2/backend/database.py'
+      - 'v2/backend/scanner.py'
+      - 'v2/backend/api.py'
+      - 'v2/frontend/index.html'
+      - 'tests/test_five_page_ui.py'
+      - 'tests/test_scanner_recovery_wiring.py'
+      - 'tests/test_scanner_recovery_real_candles.py'
+      - 'scripts/benchmark_candle_snapshots.py'
+      - 'scripts/benchmark_recovery_merge.py'
+      - 'scripts/benchmark_candle_contention.py'
+      - '.github/workflows/worker-manager-integration.yml'
+  workflow_dispatch:
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Optional read-only deployed scanner API probe
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          python - <<'PY'
+          import json, urllib.request
+          base = "https://nse-momentum-scanner-api.onrender.com"
+          for route in ("/api/v2/scanner", "/api/v2/nifty200-feed-health", "/api/v2/top-momentum-setups"):
+              with urllib.request.urlopen(base + route, timeout=40) as response:
+                  data = json.load(response)
+                  assert response.status == 200, (route, response.status)
+                  if route.endswith("/scanner"):
+                      assert isinstance(data, list)
+                      print(route, "stored_rows", len(data))
+                      if data:
+                          print("latest_stored_at", data[0].get("updated_at"))
+                  else:
+                      assert isinstance(data, dict)
+                      assert data.get("order_execution_enabled") is False
+                      print(route, "status", data.get("status"))
+          print("DEPLOYED_API_READ_ONLY_PROBE_PASSED")
+          PY
+      - name: Verify scanner-status API contract offline
+        run: |
+          python -m pip install --disable-pip-version-check fastapi pytest
+          python -m pytest -q tests/test_scanner_status_contract.py
+      - run: python -m py_compile v2/backend/candle_manager.py v2/backend/gap_recovery_worker.py v2/backend/verified_gap_recovery.py v2/backend/trade_engine.py v2/backend/decision_learning.py v2/backend/database.py v2/backend/scanner.py v2/backend/api.py tests/test_worker_manager_integration.py tests/test_minimal_verified_recovery.py tests/test_trade_engine_lifecycle.py tests/test_decision_learning.py
+      - run: python -m unittest discover -s tests -p 'test_atomic_candle_state.py' -v
+      - run: python -m unittest discover -s tests -p 'test_scanner_close_gate.py' -v
+      - run: python -m unittest discover -s tests -p 'test_worker_manager_integration.py' -v
+      - run: python -m unittest discover -s tests -p 'test_offline_recovery_isolation.py' -v
+      - run: python -m unittest discover -s tests -p 'test_candle_retention.py' -v
+      - run: python -m unittest discover -s tests -p 'test_offline_signal_parity.py' -v
+      - run: python -m unittest discover -s tests -p 'test_offline_preload_selection.py' -v
+      - run: python -m unittest discover -s tests -p 'test_scanner_trend_source_parity.py' -v
+      - run: python -m unittest discover -s tests -p 'test_offline_restart_preload.py' -v
+      - run: python -m unittest discover -s tests -p 'test_scanner_decision_safety_contract.py' -v
+      - run: python -m unittest discover -s tests -p 'test_scanner_source_decision_parity.py' -v
+      - run: python -m unittest discover -s tests -p 'test_recovery_update_interleavings.py' -v
+      - run: python -m unittest discover -s tests -p 'test_offline_scanner_retention_probe.py' -v
+      - run: python -m unittest discover -s tests -p 'test_minimal_verified_recovery.py' -v
+      - run: python -m unittest discover -s tests -p 'test_scanner_recovery_wiring.py' -v
+      - run: python -m unittest discover -s tests -p 'test_scanner_recovery_real_candles.py' -v
+      - run: python -m unittest discover -s tests -p 'test_trade_engine_lifecycle.py' -v
+      - run: python -m unittest discover -s tests -p 'test_decision_learning.py' -v
+      - run: python -m scripts.compare_candle_retention --history 400 --cap 60
+      - run: python -m scripts.compare_candle_retention --history 400 --cap 200
+      - run: python -m scripts.compare_signal_retention --history 400 --cap 60
+      - run: python -m scripts.compare_signal_retention --history 400 --cap 200
+      - run: python -m scripts.compare_offline_scanner_retention --history 400 --cap 60
+      - run: python -m scripts.compare_offline_scanner_retention --history 400 --cap 200
+      - run: python -m scripts.benchmark_candle_snapshots --symbols 50 --history 390 --iterations 200
+      - run: python -m scripts.benchmark_candle_snapshots --symbols 200 --history 390 --iterations 200
+      - run: python -m scripts.benchmark_candle_snapshots --symbols 500 --history 390 --iterations 200
+      - run: python -m scripts.benchmark_candle_snapshots --symbols 50 --history 1950 --iterations 200
+      - run: python -m scripts.benchmark_candle_snapshots --symbols 50 --history 60 --iterations 200
+      - run: python -m scripts.benchmark_candle_snapshots --symbols 200 --history 60 --iterations 200
+      - run: python -m scripts.benchmark_candle_snapshots --symbols 500 --history 60 --iterations 200
+      - run: python -m scripts.benchmark_candle_snapshots --symbols 200 --history 1950 --iterations 200
+      - run: python -m scripts.benchmark_candle_snapshots --symbols 500 --history 1950 --iterations 200
+
+      - run: python -m scripts.benchmark_recovery_merge --history 60 --iterations 100
+      - run: python -m scripts.benchmark_recovery_merge --history 390 --iterations 100
+      - run: python -m scripts.benchmark_recovery_merge --history 1950 --iterations 100
+
+      - run: python -m scripts.benchmark_candle_contention --symbols 50 --history 390 --workers 4 --iterations 100
+      - run: python -m scripts.benchmark_candle_contention --symbols 200 --history 1950 --workers 8 --iterations 100

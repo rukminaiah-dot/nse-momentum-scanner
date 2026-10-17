@@ -7,17 +7,71 @@ from .stock_universe import NIFTY_200
 from .candles import Candle
 from .upstox_live import UpstoxLiveV3
 from .candle_manager import CandleManager
+from .gap_recovery_worker import GapRecoveryWorker
 from .indicators import ema, momentum, atr
 from .signal_engine import generate_signal
 from .market_regime import index_signal
 from .trade_engine import buy, update_state, sell
 from .database import DB_PATH, init_db, reset_scanner_results
+from .decision_learning import classify_market_recovery
 
 candles = CandleManager()
+
+_recovery_worker = None
+
+
+def fetch_recovery_rows(key):
+    """Fetch Upstox intraday rows off the websocket callback thread."""
+    config = upstox_client.Configuration()
+    config.access_token = os.environ["UPSTOX_ACCESS_TOKEN"]
+    api = upstox_client.HistoryV3Api(upstox_client.ApiClient(config))
+    response = api.get_intra_day_candle_data(key, "minutes", "1")
+    return response.data.candles or []
+
+
+def configure_gap_recovery(*, enabled=False, fetch_rows=None):
+    """Explicit opt-in after preload; production default stays disabled."""
+    global _recovery_worker
+    if not enabled:
+        previous = _recovery_worker
+        _recovery_worker = None
+        if previous is not None:
+            previous.close(timeout=5)
+        return None
+    if _recovery_worker is not None:
+        return _recovery_worker
+    _recovery_worker = GapRecoveryWorker(
+        fetch_rows if fetch_rows is not None else fetch_recovery_rows,
+        candles.snapshot,
+        candles.merge_verified_recovery,
+    )
+    return _recovery_worker
+
+
+def request_recovery_on_gap(key):
+    """Enqueue only for an observed same-session missing minute."""
+    worker = _recovery_worker
+    if worker is None:
+        return False
+    history, active = candles.snapshot(key)
+    if active is None or not history:
+        return False
+    latest = history[-1].timestamp
+    if latest.date() != active.date() or latest >= active:
+        return False
+    from datetime import timedelta
+    # A missing completed minute lies between the last closed candle and
+    # the newly active minute. Earlier history gaps also matter, but must not
+    # repeatedly trigger requests once this boundary is contiguous.
+    if active - latest <= timedelta(minutes=1):
+        return False
+    return worker.request(key)
+
 active_trades = {}
 instrument_symbols = {key: symbol for symbol, key in {**NIFTY_200, **INDICES}.items()}
 market_regimes = {}
 previous_closes = {}
+_index_recovery_state = {}
 last_trade_updates = {}
 last_cumulative_volumes = {}
 
@@ -25,6 +79,92 @@ _tick_seen = {}
 _last_accepted_tick_ms = {}
 _last_health_write = 0.0
 _HEALTH_PATH = "/tmp/nse_200_feed_health.json"
+
+
+def update_market_recovery(key, price, tick_time):
+    """Track large index drops and recovery from verified session lows."""
+    if key not in INDICES.values():
+        return None
+    previous_close = previous_closes.get(key)
+    history, _ = candles.snapshot(key)
+    session_day = tick_time.date()
+    today = [c for c in history if getattr(c, "timestamp", None) is not None
+             and c.timestamp.date() == session_day]
+    low_candidates = [float(c.low) for c in today]
+    low_candidates.append(float(price))
+    session_low = min(low_candidates)
+    highs = [float(c.high) for c in today[-20:]]
+    lows = [float(c.low) for c in today[-20:]]
+    closes = [float(c.close) for c in today[-20:]]
+    index_atr = atr(highs, lows, closes, 14) if len(closes) >= 14 else None
+
+    prior = _index_recovery_state.get(key, {})
+    if prior.get("session_date") != session_day.isoformat():
+        prior_fraction = 0.0
+    else:
+        prior_fraction = prior.get("max_recovery_fraction", 0.0)
+    index_name = instrument_symbols.get(key, key)
+    classification = classify_market_recovery(
+        previous_close,
+        session_low,
+        price,
+        index_atr,
+        prior_recovery_fraction=prior_fraction,
+        trend=market_regimes.get("NIFTY 50") if index_name != "NIFTY 50" else market_regimes.get(index_name),
+        # Index VWAP is not yet verified by this feed; do not claim confirmation.
+        above_vwap=None,
+    )
+    fraction = classification.get("recovery_fraction", 0.0)
+    _index_recovery_state[key] = {
+        "session_date": session_day.isoformat(),
+        "max_recovery_fraction": max(prior_fraction, fraction or 0.0),
+        "observed_at_ist": tick_time.isoformat(),
+        "source": "accepted_live_tick_and_completed_candles",
+        "classification": classification,
+    }
+    return classification
+
+
+def market_recovery_context(asof=None):
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    asof = asof or datetime.now(ZoneInfo("Asia/Kolkata"))
+    names = ("NIFTY 50", "SENSEX", "BANK NIFTY")
+    result = {}
+    for name in names:
+        key = INDICES.get(name)
+        state = _index_recovery_state.get(key, {}) if key else {}
+        observed = state.get("observed_at_ist")
+        if observed:
+            try:
+                stamp = datetime.fromisoformat(observed)
+                if stamp.tzinfo is None:
+                    stamp = stamp.replace(tzinfo=ZoneInfo("Asia/Kolkata"))
+                fresh = timedelta(0) <= asof - stamp <= timedelta(seconds=120)
+            except ValueError:
+                fresh = False
+        else:
+            fresh = False
+        result[name] = (dict(state.get("classification", {"status": "UNAVAILABLE"}))
+                        if fresh else {"status": "UNAVAILABLE"})
+        result[name]["feed_fresh"] = fresh
+        if observed:
+            result[name]["observed_at_ist"] = observed
+            result[name]["source"] = state["source"]
+    return result
+
+
+def _decision_context(symbol, price, decision_time, *, features=None):
+    return {
+        "schema_version": 1,
+        "decision_time_ist": decision_time.isoformat() if decision_time else None,
+        "symbol": instrument_symbols.get(symbol, symbol),
+        "price": float(price) if price is not None else None,
+        "market_regime": market_regimes.get("NIFTY 50", "UNAVAILABLE"),
+        "market_recovery": market_recovery_context(decision_time),
+        "features": features or {},
+    }
 
 def record_feed_health(key):
     global _last_health_write
@@ -358,8 +498,11 @@ def analyse(key):
         if len(baseline) == 19 and all(v >= 0 for v in volumes):
             average_volume = sum(baseline) / len(baseline)
             rvol = volumes[-1] / average_volume if average_volume > 0 else 0.0
+        rvol_available = rvol is not None
         if rvol is None:
             rvol = 0.0
+    else:
+        rvol_available = False
 
     market = index_signal(price, ema9, ema20, vwap_value)
     if key == INDICES["NIFTY 50"]:
@@ -407,7 +550,23 @@ def analyse(key):
     if key in NIFTY_200.values() or key in INDICES.values():
         save_scan_result(instrument_symbols.get(key, key), price, ema9, ema20, mom, market, trend_5m, signal, previous_closes.get(key))
     if key in NIFTY_200.values() and signal == "BUY" and atr_value is not None:
-        buy(key, price, price + atr_value, price + (2 * atr_value), price - atr_value, "V2 momentum BUY")
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        prior_price = closes[-6] if len(closes) >= 6 else None
+        features = {
+            "price_vs_ema9_pct": (price - ema9) / ema9 * 100 if ema9 else None,
+            "price_vs_ema20_pct": (price - ema20) / ema20 * 100 if ema20 else None,
+            "momentum_pct": (price - prior_price) / prior_price * 100 if prior_price else None,
+            "rvol": rvol if rvol_available else None,
+            "atr_pct": atr_value / price * 100 if price else None,
+            "trend_5m": trend_5m,
+            "market_regime": market,
+        }
+        context = _decision_context(
+            key, price, datetime.now(ZoneInfo("Asia/Kolkata")), features=features
+        )
+        buy(key, price, price + atr_value, price + (2 * atr_value),
+            price - atr_value, "V2 momentum BUY", context=context)
         load_active_trades()
 
     print(
@@ -450,6 +609,15 @@ def on_tick(key, data):
         return
     _last_accepted_tick_ms[key] = ts
 
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    tick_time = datetime.fromtimestamp(ts / 1000.0, ZoneInfo("Asia/Kolkata"))
+    if key in INDICES.values():
+        try:
+            update_market_recovery(key, price, tick_time)
+        except (TypeError, ValueError, OverflowError) as exc:
+            print("MARKET_RECOVERY_CONTEXT_SKIPPED:", type(exc).__name__, flush=True)
+
     record_feed_health(key)
 
     # Manage open trades from memory instead of querying SQLite every tick.
@@ -461,15 +629,18 @@ def on_tick(key, data):
         invalidation = trade["invalidation"]
 
         if price <= invalidation:
-            sell(trade_id, price, "Invalidation hit")
+            sell(trade_id, price, "Invalidation hit",
+                 context=_decision_context(key, price, tick_time))
             active_trades.pop(key, None)
         elif price >= t2:
-            sell(trade_id, price, "Target 2 hit")
+            sell(trade_id, price, "Target 2 hit",
+                 context=_decision_context(key, price, tick_time))
             active_trades.pop(key, None)
         elif price >= t1:
             if trade["status"] != "TARGET_1":
                 trade["status"] = "TARGET_1"
-                update_state(trade_id, price, "TARGET_1", "Target 1 hit")
+                update_state(trade_id, price, "TARGET_1", "Target 1 hit",
+                             context=_decision_context(key, price, tick_time))
                 last_trade_updates[key] = time.time()
             elif time.time() - last_trade_updates.get(key, 0) >= 5:
                 update_state(trade_id, price, "TARGET_1")
@@ -499,6 +670,7 @@ def on_tick(key, data):
     # Only a live rollover may trigger analysis. Recovery can grow completed
     # history without closing the active candle.
     if closed is not None:
+        request_recovery_on_gap(key)
         write_candle_quality()
         analyse(key)
 
@@ -572,4 +744,19 @@ if __name__ == "__main__":
                 previous_closes.get(key),
             )
 
-    UpstoxLiveV3(on_tick=on_tick).connect()
+    # Double opt-in: never turn recovery on in existing production settings.
+    # Staging operator must explicitly set both values.
+    recovery_enabled = (
+        os.environ.get("NSE_RECOVERY_MODE") == "staging"
+        and os.environ.get("NSE_ENABLE_VERIFIED_GAP_RECOVERY") == "1"
+    )
+    configure_gap_recovery(enabled=recovery_enabled)
+    print("VERIFIED_GAP_RECOVERY:", "ENABLED_STAGING" if recovery_enabled else "DISABLED", flush=True)
+    try:
+        UpstoxLiveV3(on_tick=on_tick).connect()
+    finally:
+        # A bounded shutdown wait prevents abandoning an in-flight recovery
+        # thread during a normal scanner exit; never place this in on_tick.
+        worker = _recovery_worker
+        if worker is not None:
+            worker.close(timeout=5)
