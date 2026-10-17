@@ -62,7 +62,7 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("const live=Boolean(state.sessionOpen&&fresh(r)&&rating)", self.html)
 
     def test_daily_pnl_rejects_timezone_ambiguous_exit_times(self):
-        self.assertIn("if(!/(?:Z|[+-]\\\\d{2}:?\\\\d{2})$/i.test(raw))return null", self.html)
+        self.assertIn(r"if(!/(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw))return null", self.html)
 
     def test_daily_pnl_uses_exit_date_not_entry_trade_date(self):
         self.assertIn("completed.filter(x=>istDate(x.sell_time)===today)", self.html)
