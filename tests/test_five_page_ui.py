@@ -1,4 +1,5 @@
 """Static UI contract checks. Run with python -m unittest discover -s tests -p 'test_five_page_ui.py'."""
+import json
 import pathlib
 import re
 import shutil
@@ -306,6 +307,29 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("No invented probability", self.html)
         self.assertIn("renderAiPrediction();", self.html)
 
+
+
+    def test_vercel_rewrites_only_allowlisted_read_only_scanner_routes(self):
+        root = pathlib.Path(__file__).resolve().parents[1]
+        config = json.loads((root / "v2/frontend/vercel.json").read_text(encoding="utf-8"))
+        expected = {
+            "/api/v2/scanner",
+            "/api/v2/nifty200-stock-board",
+            "/api/v2/quality-ratings",
+            "/api/v2/nifty200-feed-health",
+            "/api/v2/trades",
+        }
+        rewrites = config.get("rewrites", [])
+        self.assertEqual({item["source"] for item in rewrites}, expected)
+        for item in rewrites:
+            self.assertEqual(
+                item["destination"],
+                "https://nse-momentum-scanner-api.onrender.com" + item["source"],
+            )
+            self.assertNotIn("*", item["source"])
+        self.assertNotIn("/api/v2/preview-status", expected)
+        self.assertNotIn("/api/v2/decision-learning", expected)
+        self.assertNotIn("/api/v2/pnl-history", expected)
 
 if __name__ == "__main__":
     unittest.main()
