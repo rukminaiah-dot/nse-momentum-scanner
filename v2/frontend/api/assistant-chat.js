@@ -100,7 +100,7 @@ module.exports = async function assistantChat(req, res) {
   if (rateLimited(req)) {
     return res.status(429).json({ error: "RATE_LIMITED" });
   }
-  if (!process.env.OPENAI_API_KEY) {
+  if (!process.env.GEMINI_API_KEY) {
     return res.status(503).json({ error: "ASSISTANT_NOT_CONFIGURED" });
   }
 
@@ -133,7 +133,7 @@ module.exports = async function assistantChat(req, res) {
       JSON.stringify(context),
   };
 
-  const model = process.env.OPENAI_MODEL || "gpt-6-luna";
+  const model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
   if (!/^[A-Za-z0-9._-]{1,80}$/.test(model)) {
     return res.status(500).json({ error: "INVALID_MODEL_CONFIGURATION" });
   }
@@ -151,36 +151,42 @@ module.exports = async function assistantChat(req, res) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
   try {
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        "Authorization": "Bearer " + process.env.OPENAI_API_KEY,
-        "Content-Type": "application/json",
+    const response = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent",
+      {
+        method: "POST",
+        headers: {
+          "x-goog-api-key": process.env.GEMINI_API_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: instructions }] },
+          contents: messages.map((message) => ({
+            role: message.role === "assistant" ? "model" : "user",
+            parts: [{ text: message.content }],
+          })),
+          generationConfig: {
+            temperature: 0.4,
+            maxOutputTokens: 700,
+          },
+        }),
+        signal: controller.signal,
       },
-      body: JSON.stringify({
-        model,
-        store: false,
-        instructions,
-        input: messages,
-        max_output_tokens: 700,
-      }),
-      signal: controller.signal,
-    });
+    );
     if (!response.ok) {
-      console.error("OpenAI Responses request failed with status", response.status);
+      console.error("Gemini generateContent request failed with status", response.status);
       return res.status(502).json({ error: "AI_PROVIDER_UNAVAILABLE" });
     }
     const result = await response.json();
-    const answer = (result.output || [])
-      .flatMap((item) => item.content || [])
-      .filter((item) => item.type === "output_text" && typeof item.text === "string")
-      .map((item) => item.text)
+    const answer = (result.candidates?.[0]?.content?.parts || [])
+      .filter((part) => typeof part.text === "string")
+      .map((part) => part.text)
       .join("\n")
       .trim();
     if (!answer) return res.status(502).json({ error: "EMPTY_AI_RESPONSE" });
     return res.status(200).json({ answer });
   } catch (error) {
-    console.error("OpenAI Responses request failed", error.name === "AbortError" ? "timeout" : "network error");
+    console.error("Gemini generateContent request failed", error.name === "AbortError" ? "timeout" : "network error");
     return res.status(502).json({ error: "AI_PROVIDER_UNAVAILABLE" });
   } finally {
     clearTimeout(timeout);
