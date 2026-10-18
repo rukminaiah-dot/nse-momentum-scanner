@@ -78,6 +78,39 @@ class FivePageUiTests(unittest.TestCase):
                          "read-only AI Learning summaries"):
             self.assertIn(required, self.html)
 
+    def test_assistant_learning_summary_formats_loaded_records(self):
+        node = shutil.which("node")
+        self.assertIsNotNone(node, "Node.js is required for assistant behavior validation")
+        start = self.html.index("function assistantExplainLearning()")
+        end = self.html.index("function assistantLocalReply", start)
+        function_source = self.html[start:end].strip()
+        learning = {
+            "model": {"status": "SHADOW_VALIDATED"},
+            "complete_records": 4,
+            "gross_loss_count": 2,
+            "invalid_records_excluded": 1,
+            "gross_loss_reasons": {"STOP_LOSS": 2},
+            "gross_losses_by_nifty_recovery_state": {"RECOVERING": 1},
+            "recommendations_enabled": False,
+        }
+        script = "\\n".join([
+            'const assert = require("node:assert/strict");',
+            "const state = Object.freeze({learning: Object.freeze(" + json.dumps(learning) + ")});",
+            function_source,
+            "const summary = assistantExplainLearning();",
+            'assert.match(summary, /Model status: SHADOW VALIDATED/);',
+            'assert.match(summary, /Complete recorded outcomes: 4/);',
+            'assert.match(summary, /Gross losses: 2/);',
+            'assert.match(summary, /STOP LOSS: 2/);',
+            'assert.match(summary, /RECOVERING: 1/);',
+            'assert.match(summary, /Recommendations: disabled/);',
+            'assert.match(summary, /cannot edit training data or model settings/);',
+            "state.learning = null;",
+            'assert.match(assistantExplainLearning(), /summary is unavailable/);',
+        ])
+        result = subprocess.run([node, "-e", script], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_assistant_uses_local_checks_and_explicit_google_search_handoff(self):
         for required in ("function assistantGoogleSearch(question)",
                          "function assistantLocalReply(question)",
