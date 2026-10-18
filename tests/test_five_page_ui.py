@@ -36,6 +36,24 @@ class FivePageUiTests(unittest.TestCase):
         self.assertEqual(re.findall(r'data-page="([^"]+)"', nav.group(1)),
                          ["pulse", "board", "analysis", "premarket", "history"])
 
+    def test_mobile_bottom_navigation_has_all_five_destinations(self):
+        mobile = re.search(r'<nav class="mobile-nav" aria-label="Mobile pages">(.*?)</nav>', self.html, re.S)
+        self.assertIsNotNone(mobile)
+        self.assertEqual(re.findall(r'data-mobile-page="([^"]+)"', mobile.group(1)),
+                         ["premarket", "pulse", "signals", "positions", "history"])
+        for label in ("Pre-Market", "Dashboard", "Signals", "Positions", "Settings"):
+            self.assertIn(label, mobile.group(1))
+
+    def test_mobile_positions_route_opens_recorded_position_history(self):
+        self.assertIn("function navigateMobile(id)", self.html)
+        self.assertIn("if(id==='positions'){showPage('pulse')", self.html)
+        self.assertIn("$('active-positions')?.closest('.card')?.scrollIntoView", self.html)
+        self.assertIn("location.hash.slice(1)==='positions'", self.html)
+
+    def test_mobile_signals_page_links_to_full_nse_200_scorecard(self):
+        self.assertIn('id="browse-scorecard"', self.html)
+        self.assertIn("$('browse-scorecard').onclick=()=>showPage('board')", self.html)
+
     def test_mobile_favourites_and_limit(self):
         for required in ("board-mobile", "favourites-list", "fav-count",
                          "fav.length<20", "localStorage.setItem('nse-favourites-v1'"):
