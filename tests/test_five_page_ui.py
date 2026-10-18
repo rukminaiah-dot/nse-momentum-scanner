@@ -98,6 +98,7 @@ class FivePageUiTests(unittest.TestCase):
             "const state = {learning: " + json.dumps(learning) + "};",
             function_source,
             "const summary = assistantExplainLearning();",
+            'assert.ok(summary.includes(String.fromCharCode(10) + "• Model status:"));',
             'assert.match(summary, /Model status: SHADOW VALIDATED/);',
             'assert.match(summary, /Complete recorded outcomes: 4/);',
             'assert.match(summary, /Gross losses: 2/);',
