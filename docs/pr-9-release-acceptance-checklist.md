@@ -51,12 +51,11 @@ Branch: `feature/isolated-recovery-worker-manager-integration` into `feature/ato
 Do not add further synthetic tests merely to increase test count. New tests or implementation changes should be tied to a documented failing gate or reviewer finding. Keep existing defaults and live behavior unchanged until acceptance is explicit.
 
 
-## 2026-10-18 Assistant chatbot contract update
+## 2026-10-18 Assistant local-only update
 
-- Latest chatbot changes: `ffae5ca` adds exact key setup and Preview redeploy guidance; `768cf19` adds runtime coverage for the server-side Gemini proxy; `b1022dc` wires the runtime test into the UI contract workflow.
-- At `b1022dc`, the Five-Page UI Contract Tests, Atomic Candle State Prototype Tests, and Isolated Worker Manager Integration Tests all passed; Vercel reported the Preview deployment ready.
-- Runtime proxy coverage checks allowed-origin enforcement, absent-key handling, response shape, server-only key handling, app-context allowlisting, malformed/oversized messages, per-IP request limits, and provider failure handling.
-- The chatbot uses Google Gemini's free-tier API when configured. The user interface discloses that prompts and the limited app snapshot are sent to Google, that free-tier content may be used to improve Google products, and that the assistant has no web search. Do not send sensitive information.
-- No Gemini API key was added or tested. General chatbot replies require the project owner to add `GEMINI_API_KEY` privately to Vercel Preview and redeploy. The built-in data validation and stock explanation remain available without it.
-- No live-market verification was performed. This chatbot check does not close historical replay, scanner lifecycle, performance, retention or independent-review gates; keep PR draft and unmerged.
+- Gemini API calls and the server-side proxy were removed from the Preview branch. No API key or AI provider is required.
+- The assistant keeps local app-data validation, candle-based stock explanations, and reviewable GitHub modification requests.
+- General or current outside questions show an optional Google Search link. The query leaves the app only if the user taps that link.
+- The Five-Page UI Contract Tests were updated for the local-only assistant behavior. Latest CI and Vercel Preview status are recorded by the branch checks; they do not verify market data.
+- No live-market verification was performed. This does not close historical replay, scanner lifecycle, performance, retention or independent-review gates; keep PR draft and unmerged.
 
