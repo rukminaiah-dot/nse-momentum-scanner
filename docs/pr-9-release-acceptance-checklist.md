@@ -25,6 +25,15 @@ Branch: `feature/isolated-recovery-worker-manager-integration` into `feature/ato
 | Branch protection | CONFIRMED ABSENT — repository setting | User-provided screenshot of repository Settings → Branches shows “Classic branch protections have not been configured”; the repository rulesets API returned `[]` on 2026-10-18. No classic branch protection rules or repository rulesets were found. The direct branch-protection API 403 is a GitHub integration scope limitation, not evidence of a configured rule. |
 | Merge | NOT DONE | PR open/draft |
 
+## 2026-10-18 Preview integration update
+
+- Latest UI/API wiring commit: `e79a74e0e80ecb1c67591bf4e62023cd2ddfb474`.
+- GitHub UI contract, atomic candle-state, and worker-manager workflows all passed at this commit: [UI contract](https://github.com/rukminaiah-dot/nse-momentum-scanner/actions/runs/39096086055), [atomic state](https://github.com/rukminaiah-dot/nse-momentum-scanner/actions/runs/39096086054), [worker manager](https://github.com/rukminaiah-dot/nse-momentum-scanner/actions/runs/39096086076). Vercel reported the Preview deployment complete.
+- Mobile navigation now shows all five tabs, rejects invalid page IDs without blanking the app, and times out stalled API requests after 12 seconds.
+- The five scanner/feed GET routes remain wired to the existing live API. `preview-status` aliases the read-only feed-health endpoint. `decision-learning`, `pnl-history`, and `signal-activity` are routed to the isolated offline Preview API, avoiding missing-route responses while returning explicit offline or storage-unavailable states.
+- Isolated Render Preview deployment `dep-dba4clh124ks73e8dfdg` is live at the same commit and runs only `v2.backend.offline_preview_api`. It has no market data, broker, database, or order-execution path. This does not create or verify recorded history.
+- No browser-driven smoke test of the Vercel page or live-market check was performed. Verify the market feed and completed candles during the Monday session; keep this PR draft and unmerged pending the existing release gates.
+
 ## Required actions and decision owners
 
 1. **Replay owner / data custodian:** supply an authorized, sanitized historical dataset, expected decision outputs, replay environment and permission to use it offline. Record provenance, sessions, symbols, missing-minute behavior, and acceptance criteria. Never ingest unapproved private or broker data.
