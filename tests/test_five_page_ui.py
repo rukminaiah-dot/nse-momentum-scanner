@@ -76,22 +76,25 @@ class FivePageUiTests(unittest.TestCase):
                          "fetch('/api/assistant-chat'",
                          "messages:assistantHistory.slice(-10)",
                          "context:assistantContext(question)",
-                         "Your messages and this snapshot are sent to OpenAI",
-                         "It has no web search"):
+                         "Your message and this snapshot are sent to Google",
+                         "free-tier prompts may be used to improve Google products",
+                         "It has no live web search"):
             self.assertIn(required, self.html)
-        self.assertNotIn("OPENAI_API_KEY", self.html)
+        self.assertNotIn("GEMINI_API_KEY", self.html)
 
-    def test_chat_proxy_keeps_provider_key_server_side_and_limits_requests(self):
+    def test_chat_proxy_keeps_gemini_key_server_side_and_limits_requests(self):
         root = pathlib.Path(__file__).resolve().parents[1]
         proxy = (root / "v2/frontend/api/assistant-chat.js").read_text(encoding="utf-8")
-        for required in ("process.env.OPENAI_API_KEY",
-                         "\"Authorization\": \"Bearer \" + process.env.OPENAI_API_KEY",
-                         "https://api.openai.com/v1/responses",
-                         "store: false",
+        for required in ("process.env.GEMINI_API_KEY",
+                         '"x-goog-api-key": process.env.GEMINI_API_KEY',
+                         "https://generativelanguage.googleapis.com/v1beta/models/",
+                         ":generateContent",
+                         "systemInstruction",
+                         'role: message.role === "assistant" ? "model" : "user"',
                          "function originAllowed(req)",
                          "function rateLimited(req)",
                          "ASSISTANT_NOT_CONFIGURED",
-                         "max_output_tokens: 700"):
+                         "maxOutputTokens: 700"):
             self.assertIn(required, proxy)
 
     def test_mobile_positions_route_opens_recorded_position_history(self):
