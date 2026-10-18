@@ -20,6 +20,22 @@
     {
       "source": "/api/v2/trades",
       "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/trades"
+    },
+    {
+      "source": "/api/v2/preview-status",
+      "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/nifty200-feed-health"
+    },
+    {
+      "source": "/api/v2/decision-learning",
+      "destination": "https://nse-v2-offline-preview.onrender.com/api/v2/decision-learning"
+    },
+    {
+      "source": "/api/v2/pnl-history",
+      "destination": "https://nse-v2-offline-preview.onrender.com/api/v2/pnl-history"
+    },
+    {
+      "source": "/api/v2/signal-activity",
+      "destination": "https://nse-v2-offline-preview.onrender.com/api/v2/signal-activity"
     }
   ]
 }
