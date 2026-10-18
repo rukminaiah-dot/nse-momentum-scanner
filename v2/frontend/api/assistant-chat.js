@@ -152,7 +152,7 @@ module.exports = async function assistantChat(req, res) {
   const timeout = setTimeout(() => controller.abort(), 20000);
   try {
     const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent",
+      "https://generativelanguage.googleapis.com/v1beta/interactions",
       {
         method: "POST",
         headers: {
@@ -160,16 +160,17 @@ module.exports = async function assistantChat(req, res) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: instructions }] },
-          contents: messages.map((message) => ({
-            role: message.role === "assistant" ? "model" : "user",
-            parts: [{ text: message.content }],
-          })),
-          generationConfig: {
-            temperature: 0.4,
-            maxOutputTokens: 700,
-          },
-        }),
+        model,
+        store: false,
+        system_instruction: instructions,
+        input: messages.map((message) =>
+          (message.role === "assistant" ? "Assistant: " : "User: ") + message.content
+        ).join("\\n\\n"),
+        generation_config: {
+          max_output_tokens: 700,
+          thinking_level: "low",
+        },
+      }),
         signal: controller.signal,
       },
     );
@@ -178,10 +179,11 @@ module.exports = async function assistantChat(req, res) {
       return res.status(502).json({ error: "AI_PROVIDER_UNAVAILABLE" });
     }
     const result = await response.json();
-    const answer = (result.candidates?.[0]?.content?.parts || [])
+    const lastStep = Array.isArray(result.steps) ? result.steps[result.steps.length - 1] : null;
+    const answer = (Array.isArray(lastStep?.content) ? lastStep.content : [])
       .filter((part) => typeof part.text === "string")
       .map((part) => part.text)
-      .join("\n")
+      .join("\\n")
       .trim();
     if (!answer) return res.status(502).json({ error: "EMPTY_AI_RESPONSE" });
     return res.status(200).json({ answer });
