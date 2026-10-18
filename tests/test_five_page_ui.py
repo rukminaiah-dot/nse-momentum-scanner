@@ -72,7 +72,7 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn('target="_blank" rel="noopener noreferrer"', self.html)
 
     def test_assistant_explains_read_only_learning_summary(self):
-        for required in ("function assistantExplainLearning()", "state.learning",
+        for required in ("function assistantExplainLearning(question='')", "state.learning",
                          "gross_loss_reasons", "gross_losses_by_nifty_recovery_state",
                          "Read-only AI Learning", "Chat cannot edit training data or model settings",
                          "read-only AI Learning summaries"):
@@ -89,7 +89,7 @@ class FivePageUiTests(unittest.TestCase):
             "complete_records": 4,
             "gross_loss_count": 2,
             "invalid_records_excluded": 1,
-            "gross_loss_reasons": {"STOP_LOSS": 2},
+            "gross_loss_reasons": {"STOP_LOSS": 2, "TARGET_EXIT": 3, "INVALID_NEGATIVE": -5},
             "gross_losses_by_nifty_recovery_state": {"RECOVERING": 1},
             "recommendations_enabled": False,
         }
@@ -105,6 +105,16 @@ class FivePageUiTests(unittest.TestCase):
             'assert.match(summary, /RECOVERING: 1/);',
             'assert.match(summary, /Recommendations: disabled/);',
             'assert.match(summary, /cannot edit training data or model settings/);',
+            'const shadow = assistantExplainLearning("What does shadow mean?");',
+            'assert.match(shadow, /reviews saved signal outcomes/);',
+            'assert.match(shadow, /without changing the scanner/);',
+            'const recommendation = assistantExplainLearning("Are recommendations enabled?");',
+            'assert.match(recommendation, /Recommendations are disabled/);',
+            'assert.match(recommendation, /read-only from chat/);',
+            'const loss = assistantExplainLearning("Which loss reason occurs most?");',
+            'assert.match(loss, /Most frequently recorded loss exit category: TARGET EXIT/);',
+            'assert.match(loss, /do not prove what caused a loss or predict future results/);',
+            'assert.doesNotMatch(loss, /INVALID NEGATIVE/);',
             "state.learning = null;",
             'assert.match(assistantExplainLearning(), /summary is unavailable/);',
         ])
