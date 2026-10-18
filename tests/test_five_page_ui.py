@@ -71,6 +71,13 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("The request is not sent until you submit the GitHub form", self.html)
         self.assertIn('target="_blank" rel="noopener noreferrer"', self.html)
 
+    def test_missing_gemini_key_explains_preview_setup_and_local_fallback(self):
+        for required in ("Settings → Environment Variables", "GEMINI_API_KEY",
+                         "Google AI Studio key for Preview", "redeploy this Preview",
+                         "Never paste the key into this chat",
+                         "built-in stock explanation still work"):
+            self.assertIn(required, self.html)
+
     def test_assistant_sends_limited_app_context_to_chat_proxy(self):
         for required in ("function assistantContext(question)",
                          "fetch('/api/assistant-chat'",
