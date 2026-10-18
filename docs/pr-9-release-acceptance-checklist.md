@@ -22,7 +22,7 @@ Branch: `feature/isolated-recovery-worker-manager-integration` into `feature/ato
 | Full scanner lifecycle parity | BLOCKED | Synthetic source extraction excludes complete runtime, persistence, staleness and order boundaries |
 | Representative performance acceptance | BLOCKED | Requires owner-approved load model, latency threshold, and measurements |
 | Independent review | BLOCKED | No approvals recorded on PR at status check |
-| Branch protection and merge eligibility | UNVERIFIED | No verified branch-protection decision or completed acceptance approvals |
+| Branch protection | CONFIRMED ABSENT — repository setting | User-provided screenshot of repository Settings → Branches shows “Classic branch protections have not been configured”; the repository rulesets API returned `[]` on 2026-10-18. No classic branch protection rules or repository rulesets were found. The direct branch-protection API 403 is a GitHub integration scope limitation, not evidence of a configured rule. |
 | Merge | NOT DONE | PR open/draft |
 
 ## Required actions and decision owners
@@ -31,11 +31,11 @@ Branch: `feature/isolated-recovery-worker-manager-integration` into `feature/ato
 2. **Scanner owner:** verify end-to-end warmup, session rollover, staleness, market regime routing, persistence boundary and order safety against the approved replay. Record a signed-off parity report; do not claim parity from the extracted-source test alone.
 3. **Performance owner:** specify realistic symbol count, feed rate, number of workers, hardware, acceptable p95/p99 update latency and recovery workload. Evaluate the measured 103.48 ms update p95 and 126.89 ms p99 under the synthetic heavy case. Record a pass/fail against the agreed thresholds, not against an invented target.
 4. **Retention owner:** decide whether a history cap is necessary and define an indicator-equivalent retention/seeding policy. Existing evidence shows 60/200-bar caps can change EMA/signal outcomes; **do not enable a cap without explicit acceptance**.
-5. **Independent reviewers / repository maintainers:** inspect code and evidence, provide genuine review decisions, confirm branch protection, then decide whether to mark ready and merge. Do not self-approve or infer approval from green CI.
+5. **Independent reviewers / repository maintainers:** inspect code and evidence, provide genuine review decisions, and decide whether branch protection should be configured before marking ready or merging. No classic protections or repository rulesets are currently configured. Do not self-approve or infer approval from green CI; do not add branch rules without an owner-selected policy.
 
 ## Release decision
 
-**HOLD / keep draft and unmerged.** CI and the read-only historical acquisition/trace are green, but independent historical decision parity, lifecycle parity, performance acceptance, retention approval, independent reviews and branch-protection verification are outstanding. No live trading, broker configuration, production database or retention activation is authorized by this checklist.
+**HOLD / keep draft and unmerged.** CI and the read-only historical acquisition/trace are green, but independent historical decision parity, lifecycle parity, performance acceptance, retention approval and independent review are outstanding. Branch protection was checked and is absent; repository maintainers must decide whether to configure it before merge. No live trading, broker configuration, production database or retention activation is authorized by this checklist.
 
 ## Scope control
 
