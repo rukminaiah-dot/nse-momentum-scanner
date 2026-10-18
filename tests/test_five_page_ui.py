@@ -309,27 +309,26 @@ class FivePageUiTests(unittest.TestCase):
 
 
 
-    def test_vercel_rewrites_only_allowlisted_read_only_scanner_routes(self):
+    def test_vercel_rewrites_only_explicit_read_only_app_routes(self):
         root = pathlib.Path(__file__).resolve().parents[1]
         config = json.loads((root / "v2/frontend/vercel.json").read_text(encoding="utf-8"))
         expected = {
-            "/api/v2/scanner",
-            "/api/v2/nifty200-stock-board",
-            "/api/v2/quality-ratings",
-            "/api/v2/nifty200-feed-health",
-            "/api/v2/trades",
+            "/api/v2/scanner": "https://nse-momentum-scanner-api.onrender.com/api/v2/scanner",
+            "/api/v2/nifty200-stock-board": "https://nse-momentum-scanner-api.onrender.com/api/v2/nifty200-stock-board",
+            "/api/v2/quality-ratings": "https://nse-momentum-scanner-api.onrender.com/api/v2/quality-ratings",
+            "/api/v2/nifty200-feed-health": "https://nse-momentum-scanner-api.onrender.com/api/v2/nifty200-feed-health",
+            "/api/v2/trades": "https://nse-momentum-scanner-api.onrender.com/api/v2/trades",
+            "/api/v2/preview-status": "https://nse-momentum-scanner-api.onrender.com/api/v2/nifty200-feed-health",
+            "/api/v2/decision-learning": "https://nse-v2-offline-preview.onrender.com/api/v2/decision-learning",
+            "/api/v2/pnl-history": "https://nse-v2-offline-preview.onrender.com/api/v2/pnl-history",
+            "/api/v2/signal-activity": "https://nse-v2-offline-preview.onrender.com/api/v2/signal-activity",
         }
         rewrites = config.get("rewrites", [])
-        self.assertEqual({item["source"] for item in rewrites}, expected)
+        self.assertEqual(
+            {item["source"]: item["destination"] for item in rewrites}, expected
+        )
         for item in rewrites:
-            self.assertEqual(
-                item["destination"],
-                "https://nse-momentum-scanner-api.onrender.com" + item["source"],
-            )
             self.assertNotIn("*", item["source"])
-        self.assertNotIn("/api/v2/preview-status", expected)
-        self.assertNotIn("/api/v2/decision-learning", expected)
-        self.assertNotIn("/api/v2/pnl-history", expected)
 
     def test_page_switcher_ignores_unknown_ids_and_hashes(self):
         self.assertIn("if(!target||!target.classList.contains('page'))return", self.html)
