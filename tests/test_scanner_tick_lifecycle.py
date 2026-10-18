@@ -94,6 +94,21 @@ class ScannerTickLifecycleTests(unittest.TestCase):
         self.assertEqual(self.context["last_cumulative_volumes"], {})
         self.assertEqual(self.context["active_trades"]["STOCK"]["status"], "OPEN")
 
+    def test_invalid_cumulative_volume_does_not_poison_baseline_or_crash(self):
+        now_ms = int(time.time() * 1000)
+        values = ("not-a-volume", float("nan"), float("inf"), -1)
+        for offset, value in enumerate(values):
+            with self.subTest(volume=value):
+                self.context["on_tick"](
+                    "STOCK",
+                    {"ltp": 100.5, "ltt": now_ms + offset * 1000, "vtt": value},
+                )
+
+        self.assertEqual(self.context["last_cumulative_volumes"], {})
+        candles = [call for call in self.calls if call[0] == "candle"]
+        self.assertEqual(len(candles), len(values))
+        self.assertTrue(all(call[4] == 0 for call in candles))
+
     def test_position_advances_to_target_one_then_closes_at_target_two(self):
         trade = {
             "id": 7, "target_1": 101, "target_2": 102,
