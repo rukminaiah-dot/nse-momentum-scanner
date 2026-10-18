@@ -71,6 +71,29 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("The request is not sent until you submit the GitHub form", self.html)
         self.assertIn('target="_blank" rel="noopener noreferrer"', self.html)
 
+    def test_assistant_sends_limited_app_context_to_chat_proxy(self):
+        for required in ("function assistantContext(question)",
+                         "fetch('/api/assistant-chat'",
+                         "messages:assistantHistory.slice(-10)",
+                         "context:assistantContext(question)",
+                         "Your messages and this snapshot are sent to OpenAI",
+                         "It has no web search"):
+            self.assertIn(required, self.html)
+        self.assertNotIn("OPENAI_API_KEY", self.html)
+
+    def test_chat_proxy_keeps_provider_key_server_side_and_limits_requests(self):
+        root = pathlib.Path(__file__).resolve().parents[1]
+        proxy = (root / "v2/frontend/api/assistant-chat.js").read_text(encoding="utf-8")
+        for required in ("process.env.OPENAI_API_KEY",
+                         "Authorization: \"Bearer \" + process.env.OPENAI_API_KEY",
+                         "https://api.openai.com/v1/responses",
+                         "store: false",
+                         "function originAllowed(req)",
+                         "function rateLimited(req)",
+                         "ASSISTANT_NOT_CONFIGURED",
+                         "max_output_tokens: 700"):
+            self.assertIn(required, proxy)
+
     def test_mobile_positions_route_opens_recorded_position_history(self):
         self.assertIn("function navigateMobile(id)", self.html)
         self.assertIn("if(id==='positions'){showPage('pulse')", self.html)
