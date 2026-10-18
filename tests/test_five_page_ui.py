@@ -88,14 +88,15 @@ class FivePageUiTests(unittest.TestCase):
         proxy = (root / "v2/frontend/api/assistant-chat.js").read_text(encoding="utf-8")
         for required in ("process.env.GEMINI_API_KEY",
                          '"x-goog-api-key": process.env.GEMINI_API_KEY',
-                         "https://generativelanguage.googleapis.com/v1beta/models/",
-                         ":generateContent",
-                         "systemInstruction",
-                         'role: message.role === "assistant" ? "model" : "user"',
+                         "https://generativelanguage.googleapis.com/v1beta/interactions",
+                         "system_instruction: instructions",
+                         "store: false",
+                         "generation_config:",
+                         "max_output_tokens: 700",
+                         "thinking_level: \"low\"",
                          "function originAllowed(req)",
                          "function rateLimited(req)",
-                         "ASSISTANT_NOT_CONFIGURED",
-                         "maxOutputTokens: 700"):
+                         "ASSISTANT_NOT_CONFIGURED"):
             self.assertIn(required, proxy)
 
     def test_mobile_positions_route_opens_recorded_position_history(self):
