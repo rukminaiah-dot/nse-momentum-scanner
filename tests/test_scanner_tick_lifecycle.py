@@ -5,6 +5,7 @@ fake candle, persistence, feed-health, and trade functions; no network, broker,
 or database is available to this test.
 """
 import ast
+import math
 import pathlib
 import time
 import unittest
@@ -33,6 +34,7 @@ class ScannerTickLifecycleTests(unittest.TestCase):
 
         self.context = {
             "time": time,
+            "math": math,
             "INDICES": {"NIFTY 50": "INDEX"},
             "NIFTY_200": {"TEST": "STOCK"},
             "_last_accepted_tick_ms": {},
@@ -57,6 +59,23 @@ class ScannerTickLifecycleTests(unittest.TestCase):
             "STOCK", {"ltp": price, "ltt": timestamp_ms, "vtt": volume}
         )
         return timestamp_ms
+
+    def test_invalid_prices_are_rejected_before_position_or_feed_updates(self):
+        now_ms = int(time.time() * 1000)
+        self.context["active_trades"]["STOCK"] = {
+            "id": 4, "target_1": 101, "target_2": 102,
+            "invalidation": 99, "status": "OPEN",
+        }
+        for price in ("not-a-price", float("nan"), float("inf"), 0, -1):
+            with self.subTest(price=price):
+                self.context["on_tick"](
+                    "STOCK", {"ltp": price, "ltt": now_ms, "vtt": 500}
+                )
+
+        self.assertEqual(self.calls, [])
+        self.assertEqual(self.context["_last_accepted_tick_ms"], {})
+        self.assertEqual(self.context["last_cumulative_volumes"], {})
+        self.assertEqual(self.context["active_trades"]["STOCK"]["status"], "OPEN")
 
     def test_stale_future_and_malformed_ticks_have_no_lifecycle_effects(self):
         now_ms = int(time.time() * 1000)
