@@ -1,11 +1,12 @@
 # PR #9 — Release acceptance and handoff
 
-Status checked: 2026-10-17. This is an evidence-based gate ledger, **not** a release approval.
+Status checked: 2026-10-18. This is an evidence-based gate ledger, **not** a release approval.
 PR: https://github.com/rukminaiah-dot/nse-momentum-scanner/pull/9
 Branch: `feature/isolated-recovery-worker-manager-integration` into `feature/atomic-candle-state-prototype`.
 
 ## Verified evidence
 
+| V2 frontend Preview and page navigation | PASS — UI only | Commit `db56a7b` Vercel check passed and browser screenshots confirmed page navigation; follow-up `40e96a5` adds an explicit notice when the Preview has no scanner API connection. No market data verified. |
 | Gate | Status | Evidence / boundary |
 |---|---|---|
 | Atomic Candle State CI | PASS | [run 38950575459](https://github.com/rukminaiah-dot/nse-momentum-scanner/actions/runs/38950575459), latest checked commit `192faf9` |
