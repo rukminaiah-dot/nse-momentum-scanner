@@ -81,7 +81,7 @@ class FivePageUiTests(unittest.TestCase):
     def test_assistant_learning_summary_formats_loaded_records(self):
         node = shutil.which("node")
         self.assertIsNotNone(node, "Node.js is required for assistant behavior validation")
-        start = self.html.index("function assistantExplainLearning()")
+        start = self.html.index("function assistantExplainLearning(question='')")
         end = self.html.index("function assistantLocalReply", start)
         function_source = self.html[start:end].strip()
         learning = {
