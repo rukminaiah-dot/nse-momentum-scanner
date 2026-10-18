@@ -56,6 +56,15 @@ class FivePageUiTests(unittest.TestCase):
                          "does not compare quotes with NSE/Upstox independently"):
             self.assertIn(required, self.html)
 
+    def test_assistant_explains_stock_signal_from_current_candle_evidence(self):
+        for required in ("function assistantFindSymbol(text)",
+                         "compact.includes('ICICIBANK')",
+                         "function assistantExplainStock(symbol)",
+                         "EMA-separation points", "momentum points",
+                         "This score is not a probability or price prediction",
+                         "otherwise the app should show WAIT"):
+            self.assertIn(required, self.html)
+
     def test_assistant_prepares_reviewable_github_request_without_auto_submission(self):
         self.assertIn("function assistantIssueDraft(message,kind='modification')", self.html)
         self.assertIn("https://github.com/rukminaiah-dot/nse-momentum-scanner/issues/new?", self.html)
