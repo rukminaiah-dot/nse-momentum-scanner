@@ -71,46 +71,17 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("The request is not sent until you submit the GitHub form", self.html)
         self.assertIn('target="_blank" rel="noopener noreferrer"', self.html)
 
-    def test_missing_gemini_key_explains_preview_setup_and_local_fallback(self):
-        for required in ("Settings → Environment Variables", "GEMINI_API_KEY",
-                         "Google AI Studio key for Preview", "redeploy this Preview",
-                         "Never paste the key into this chat",
-                         "built-in stock explanation still work"):
+    def test_assistant_uses_local_checks_and_explicit_google_search_handoff(self):
+        for required in ("function assistantGoogleSearch(question)",
+                         "function assistantLocalReply(question)",
+                         "assistantGoogleSearch(value)",
+                         "https://www.google.com/search?",
+                         "Your question will be sent to Google only if you tap this link",
+                         "does not send your chat to an AI provider"):
             self.assertIn(required, self.html)
-
-    def test_assistant_sends_limited_app_context_to_chat_proxy(self):
-        for required in ("function assistantContext(question)",
-                         "fetch('/api/assistant-chat'",
-                         "messages:assistantHistory.slice(-10)",
-                         "context:assistantContext(question)",
-                         "Your message and this snapshot are sent to Google",
-                         "free-tier prompts may be used to improve Google products",
-                         "It has no live web search"):
-            self.assertIn(required, self.html)
-        self.assertNotIn("process.env.GEMINI_API_KEY", self.html)
-        self.assertNotIn("AIza", self.html)
-        self.assertIn("plain-language explanation", self.html)
-        self.assertIn("check the relevant app or official source separately", self.html)
-        self.assertIn("prepare a GitHub request for you to review", self.html)
-
-    def test_chat_proxy_keeps_gemini_key_server_side_and_limits_requests(self):
-        root = pathlib.Path(__file__).resolve().parents[1]
-        proxy = (root / "v2/frontend/api/assistant-chat.js").read_text(encoding="utf-8")
-        for required in ("process.env.GEMINI_API_KEY",
-                         '"x-goog-api-key": process.env.GEMINI_API_KEY',
-                         "https://generativelanguage.googleapis.com/v1beta/interactions",
-                         "system_instruction: instructions",
-                         "store: false",
-                         "generation_config:",
-                         "max_output_tokens: 700",
-                         "thinking_level: \"low\"",
-                         "function originAllowed(req)",
-                         "function rateLimited(req)",
-                         "ASSISTANT_NOT_CONFIGURED",
-                         "one useful next check or improvement",
-                         "Never imply that you searched it",
-                         "the user must review and submit a GitHub request"):
-            self.assertIn(required, proxy)
+        for removed in ("assistant-chat", "GEMINI_API_KEY",
+                        "generativelanguage.googleapis.com", "assistantAskGemini"):
+            self.assertNotIn(removed, self.html)
 
     def test_mobile_positions_route_opens_recorded_position_history(self):
         self.assertIn("function navigateMobile(id)", self.html)
