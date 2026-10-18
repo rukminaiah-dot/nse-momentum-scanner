@@ -93,9 +93,9 @@ class FivePageUiTests(unittest.TestCase):
             "gross_losses_by_nifty_recovery_state": {"RECOVERING": 1},
             "recommendations_enabled": False,
         }
-        script = "\\n".join([
+        script = "\n".join([
             'const assert = require("node:assert/strict");',
-            "const state = Object.freeze({learning: Object.freeze(" + json.dumps(learning) + ")});",
+            "const state = {learning: " + json.dumps(learning) + "};",
             function_source,
             "const summary = assistantExplainLearning();",
             'assert.match(summary, /Model status: SHADOW VALIDATED/);',
