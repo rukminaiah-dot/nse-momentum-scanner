@@ -664,7 +664,10 @@ def on_tick(key, data):
     minute_volume = 0
     if cumulative is not None:
         try:
-            cumulative = int(float(cumulative))
+            volume_value = float(cumulative)
+            if not math.isfinite(volume_value) or volume_value < 0:
+                raise ValueError("invalid cumulative volume")
+            cumulative = int(volume_value)
             previous = last_cumulative_volumes.get(key)
             if previous is not None and cumulative >= previous:
                 minute_volume = cumulative - previous
@@ -672,7 +675,7 @@ def on_tick(key, data):
             if key in NIFTY_200.values() and previous is not None and cumulative > previous and not getattr(on_tick, "_volume_verified", False):
                 print("VOLUME_VERIFIED:", key, "previous:", previous, "current:", cumulative, "minute_increment:", minute_volume, flush=True)
                 on_tick._volume_verified = True
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, OverflowError):
             pass
 
     closed = candles.update(key, price, ts, minute_volume)
