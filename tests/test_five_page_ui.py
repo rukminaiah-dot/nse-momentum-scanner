@@ -36,6 +36,11 @@ class FivePageUiTests(unittest.TestCase):
         self.assertEqual(re.findall(r'data-page="([^"]+)"', nav.group(1)),
                          ["pulse", "board", "analysis", "premarket", "history"])
 
+    def test_desktop_navigation_calls_page_five_assistant(self):
+        nav = re.search(r'<nav aria-label="Main pages">(.*?)</nav>', self.html, re.S)
+        self.assertIsNotNone(nav)
+        self.assertRegex(nav.group(1), r'data-page="history">05 · Assistant</button>')
+
     def test_mobile_bottom_navigation_has_all_five_destinations(self):
         mobile = re.search(r'<nav class="mobile-nav" aria-label="Mobile pages">(.*?)</nav>', self.html, re.S)
         self.assertIsNotNone(mobile)
