@@ -6,9 +6,9 @@ Branch: `feature/isolated-recovery-worker-manager-integration` into `feature/ato
 
 ## Verified evidence
 
-| V2 frontend Preview and page navigation | PASS — UI only | Commit `db56a7b` Vercel check passed and browser screenshots confirmed page navigation; follow-up `40e96a5` adds an explicit notice when the Preview has no scanner API connection. No market data verified. |
 | Gate | Status | Evidence / boundary |
 |---|---|---|
+| V2 frontend Preview and page navigation | PASS — UI only | Commit `db56a7b` Vercel check passed and browser screenshots confirmed page navigation; follow-up `40e96a5` adds an explicit notice when the Preview has no scanner API connection. No market data verified. |
 | Atomic Candle State CI | PASS | [run 38950575459](https://github.com/rukminaiah-dot/nse-momentum-scanner/actions/runs/38950575459), latest checked commit `192faf9` |
 | Worker Manager Integration CI | PASS | [run 38950575542](https://github.com/rukminaiah-dot/nse-momentum-scanner/actions/runs/38950575542), latest checked commit `192faf9` |
 | Synthetic scanner decision regression | PASS (limited scope) | Source-extracted calculation/decision paths; synthetic inputs, not full scanner lifecycle or approved replay |
