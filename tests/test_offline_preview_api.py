@@ -28,7 +28,9 @@ class OfflinePreviewApiTests(unittest.TestCase):
         response = connection.getresponse()
         body = response.read()
         connection.close()
-        return response.status, response.getheader("Content-Type"), json.loads(body) if body else None
+        content_type = response.getheader("Content-Type") or ""
+        payload = json.loads(body) if body and "application/json" in content_type else None
+        return response.status, content_type, payload
 
     def test_preview_status_explicitly_disables_data_and_orders(self):
         status, content_type, payload = self.request("GET", "/api/v2/preview-status")
