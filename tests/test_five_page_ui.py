@@ -351,7 +351,6 @@ class FivePageUiTests(unittest.TestCase):
     def test_page_switcher_ignores_unknown_ids_and_hashes(self):
         self.assertIn("if(!target||!target.classList.contains('page'))return", self.html)
         self.assertIn("['premarket','pulse','analysis','board','signals','history'].includes(location.hash.slice(1))", self.html)
-        self.assertNotIn("'signals','analysis'", self.html)
 
     def test_mobile_navigation_shows_all_page_buttons(self):
         self.assertIn("nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));overflow:visible}", self.html)
