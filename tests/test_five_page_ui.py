@@ -71,6 +71,13 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("The request is not sent until you submit the GitHub form", self.html)
         self.assertIn('target="_blank" rel="noopener noreferrer"', self.html)
 
+    def test_assistant_explains_read_only_learning_summary(self):
+        for required in ("function assistantExplainLearning()", "state.learning",
+                         "gross_loss_reasons", "gross_losses_by_nifty_recovery_state",
+                         "Read-only AI Learning", "Chat cannot edit training data or model settings",
+                         "read-only AI Learning summaries"):
+            self.assertIn(required, self.html)
+
     def test_assistant_uses_local_checks_and_explicit_google_search_handoff(self):
         for required in ("function assistantGoogleSearch(question)",
                          "function assistantLocalReply(question)",
