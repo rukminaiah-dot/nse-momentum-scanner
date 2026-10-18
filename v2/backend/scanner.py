@@ -1,6 +1,7 @@
 import sqlite3
 import time
 import os
+import math
 import upstox_client
 from .market_config import INDICES
 from .stock_universe import NIFTY_200
@@ -587,6 +588,15 @@ def on_tick(key, data):
     price = data.get("ltp")
     ts = data.get("ltt")
     if price is None or ts is None:
+        return
+
+    # Validate prices before touching an active position. NaN, infinity,
+    # non-numeric and non-positive values must not reach trade or candle state.
+    try:
+        price = float(price)
+        if not math.isfinite(price) or price <= 0:
+            return
+    except (TypeError, ValueError, OverflowError):
         return
 
     # Reject delayed, future-dated and malformed exchange ticks before they
