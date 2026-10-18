@@ -80,7 +80,8 @@ class FivePageUiTests(unittest.TestCase):
                          "free-tier prompts may be used to improve Google products",
                          "It has no live web search"):
             self.assertIn(required, self.html)
-        self.assertNotIn("GEMINI_API_KEY", self.html)
+        self.assertNotIn("process.env.GEMINI_API_KEY", self.html)
+        self.assertNotIn("AIza", self.html)
 
     def test_chat_proxy_keeps_gemini_key_server_side_and_limits_requests(self):
         root = pathlib.Path(__file__).resolve().parents[1]
