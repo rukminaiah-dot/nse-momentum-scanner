@@ -28,6 +28,7 @@ on:
       - 'v2/backend/candle_manager.py'
       - 'tests/test_minimal_verified_recovery.py'
       - 'tests/test_trade_engine_lifecycle.py'
+      - 'tests/test_scanner_tick_lifecycle.py'
       - 'v2/backend/trade_engine.py'
       - 'tests/test_decision_learning.py'
       - 'v2/backend/decision_learning.py'
@@ -94,6 +95,7 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_scanner_recovery_wiring.py' -v
       - run: python -m unittest discover -s tests -p 'test_scanner_recovery_real_candles.py' -v
       - run: python -m unittest discover -s tests -p 'test_trade_engine_lifecycle.py' -v
+      - run: python -m unittest discover -s tests -p 'test_scanner_tick_lifecycle.py' -v
       - run: python -m unittest discover -s tests -p 'test_decision_learning.py' -v
       - run: python -m scripts.compare_candle_retention --history 400 --cap 60
       - run: python -m scripts.compare_candle_retention --history 400 --cap 200
