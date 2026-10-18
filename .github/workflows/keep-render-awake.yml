@@ -2,13 +2,30 @@ name: Keep Render Scanner Awake
 
 on:
   schedule:
-    - cron: '*/10 3-9 * * 1-5'
-    - cron: '0 10 * * 1-5'
+    # Wake the free Render API shortly before the NSE session opens (IST).
+    - cron: '58 2 * * 1-5'
+    # Use off-hour minute marks and short intervals to reduce idle gaps.
+    - cron: '3-58/5 3-9 * * 1-5'
+    - cron: '3,8,13,18 10 * * 1-5'
   workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/keep-render-awake.yml
 
 jobs:
   ping:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - name: Ping scanner API
-        run: curl -fsS --max-time 60 "https://nse-momentum-scanner-api.onrender.com/api/v2/trades?source=github-keepalive" > /dev/null
+      - name: Ping scanner API with cold-start retries
+        env:
+          API_URL: https://nse-momentum-scanner-api.onrender.com/api/v2/trades?source=github-keepalive
+        run: |
+          curl --fail --silent --show-error --location \
+            --connect-timeout 20 \
+            --max-time 120 \
+            --retry 2 \
+            --retry-all-errors \
+            --retry-delay 10 \
+            --retry-max-time 240 \
+            "$API_URL" > /dev/null
