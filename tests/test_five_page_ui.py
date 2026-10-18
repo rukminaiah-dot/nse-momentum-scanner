@@ -82,6 +82,9 @@ class FivePageUiTests(unittest.TestCase):
             self.assertIn(required, self.html)
         self.assertNotIn("process.env.GEMINI_API_KEY", self.html)
         self.assertNotIn("AIza", self.html)
+        self.assertIn("plain-language explanation", self.html)
+        self.assertIn("check the relevant app or official source separately", self.html)
+        self.assertIn("prepare a GitHub request for you to review", self.html)
 
     def test_chat_proxy_keeps_gemini_key_server_side_and_limits_requests(self):
         root = pathlib.Path(__file__).resolve().parents[1]
@@ -96,7 +99,10 @@ class FivePageUiTests(unittest.TestCase):
                          "thinking_level: \"low\"",
                          "function originAllowed(req)",
                          "function rateLimited(req)",
-                         "ASSISTANT_NOT_CONFIGURED"):
+                         "ASSISTANT_NOT_CONFIGURED",
+                         "one useful next check or improvement",
+                         "Never imply that you searched it",
+                         "the user must review and submit a GitHub request"):
             self.assertIn(required, proxy)
 
     def test_mobile_positions_route_opens_recorded_position_history(self):
