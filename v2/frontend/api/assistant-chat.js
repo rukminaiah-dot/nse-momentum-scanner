@@ -165,7 +165,7 @@ module.exports = async function assistantChat(req, res) {
         system_instruction: instructions,
         input: messages.map((message) =>
           (message.role === "assistant" ? "Assistant: " : "User: ") + message.content
-        ).join("\\n\\n"),
+        ).join("\n\n"),
         generation_config: {
           max_output_tokens: 700,
           thinking_level: "low",
@@ -183,7 +183,7 @@ module.exports = async function assistantChat(req, res) {
     const answer = (Array.isArray(lastStep?.content) ? lastStep.content : [])
       .filter((part) => typeof part.text === "string")
       .map((part) => part.text)
-      .join("\\n")
+      .join("\n")
       .trim();
     if (!answer) return res.status(502).json({ error: "EMPTY_AI_RESPONSE" });
     return res.status(200).json({ answer });
