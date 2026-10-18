@@ -85,7 +85,7 @@ class FivePageUiTests(unittest.TestCase):
         root = pathlib.Path(__file__).resolve().parents[1]
         proxy = (root / "v2/frontend/api/assistant-chat.js").read_text(encoding="utf-8")
         for required in ("process.env.OPENAI_API_KEY",
-                         "Authorization: \"Bearer \" + process.env.OPENAI_API_KEY",
+                         "\"Authorization\": \"Bearer \" + process.env.OPENAI_API_KEY",
                          "https://api.openai.com/v1/responses",
                          "store: false",
                          "function originAllowed(req)",
