@@ -175,7 +175,7 @@ module.exports = async function assistantChat(req, res) {
       },
     );
     if (!response.ok) {
-      console.error("Gemini generateContent request failed with status", response.status);
+      console.error("Gemini Interactions request failed with status", response.status);
       return res.status(502).json({ error: "AI_PROVIDER_UNAVAILABLE" });
     }
     const result = await response.json();
@@ -188,7 +188,7 @@ module.exports = async function assistantChat(req, res) {
     if (!answer) return res.status(502).json({ error: "EMPTY_AI_RESPONSE" });
     return res.status(200).json({ answer });
   } catch (error) {
-    console.error("Gemini generateContent request failed", error.name === "AbortError" ? "timeout" : "network error");
+    console.error("Gemini Interactions request failed", error.name === "AbortError" ? "timeout" : "network error");
     return res.status(502).json({ error: "AI_PROVIDER_UNAVAILABLE" });
   } finally {
     clearTimeout(timeout);
