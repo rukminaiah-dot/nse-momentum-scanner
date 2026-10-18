@@ -41,8 +41,26 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIsNotNone(mobile)
         self.assertEqual(re.findall(r'data-mobile-page="([^"]+)"', mobile.group(1)),
                          ["premarket", "pulse", "signals", "positions", "history"])
-        for label in ("Pre-Market", "Dashboard", "Signals", "Positions", "Settings"):
+        for label in ("Pre-Market", "Dashboard", "Signals", "Positions", "Assistant"):
             self.assertIn(label, mobile.group(1))
+
+    def test_assistant_page_has_guided_validation_and_request_controls(self):
+        for required in ("id="assistant-log"", "id="assistant-validate"",
+                         "id="assistant-modify"", "id="assistant-input"",
+                         "id="assistant-send"", "id="assistant-clear""):
+            self.assertIn(required, self.html)
+
+    def test_assistant_validation_uses_loaded_data_and_states_limits(self):
+        for required in ("function assistantValidation()", "state.rows.filter(fresh)",
+                         "verifiedCandleScore(x)", "state.offlinePreview",
+                         "does not compare quotes with NSE/Upstox independently"):
+            self.assertIn(required, self.html)
+
+    def test_assistant_prepares_reviewable_github_request_without_auto_submission(self):
+        self.assertIn("function assistantIssueDraft(message,kind='modification')", self.html)
+        self.assertIn("https://github.com/rukminaiah-dot/nse-momentum-scanner/issues/new?", self.html)
+        self.assertIn("The request is not sent until you submit the GitHub form", self.html)
+        self.assertIn("target="_blank" rel="noopener noreferrer"", self.html)
 
     def test_mobile_positions_route_opens_recorded_position_history(self):
         self.assertIn("function navigateMobile(id)", self.html)
