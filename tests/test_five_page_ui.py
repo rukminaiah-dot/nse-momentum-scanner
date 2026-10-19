@@ -452,12 +452,15 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("x.type==='INDEX'&&x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)", self.html)
         self.assertIn("WAIT / UNVERIFIED", self.html)
 
-    def test_premarket_uses_stored_index_context_when_market_is_closed(self):
-        self.assertIn("const storedValid=x=>", self.html)
-        self.assertIn("state.sessionOpen||fresh(x.row)", self.html)
-        self.assertIn("LAST STORED SESSION · ", self.html)
-        self.assertIn("historical close context only, not an opening forecast", self.html)
-        self.assertIn("EMA/momentum aligned up", self.html)
+    def test_premarket_uses_upstox_global_context_when_market_is_closed(self):
+        api = (pathlib.Path(__file__).resolve().parents[1] / "v2/backend/api.py").read_text(encoding="utf-8")
+        self.assertIn('@app.get("/api/v2/premarket-data")', api)
+        self.assertIn("global.json.gz", api)
+        self.assertIn("Full Market Quotes V3", api)
+        self.assertIn("GIFT NIFTY", self.html)
+        self.assertIn("PRE-MARKET CUES UNAVAILABLE", self.html)
+        self.assertIn("INDICATIVE PRE-MARKET · BULLISH", self.html)
+        self.assertIn("No confidence percentage is invented", self.html)
 
     def test_scorecard_hides_stale_candle_scores(self):
         self.assertIn("const validRating=x=>", self.html)
@@ -541,6 +544,7 @@ class FivePageUiTests(unittest.TestCase):
             "/api/v2/nifty200-feed-health": "https://nse-momentum-scanner-api.onrender.com/api/v2/nifty200-feed-health",
             "/api/v2/trades": "https://nse-momentum-scanner-api.onrender.com/api/v2/trades",
             "/api/v2/preview-status": "https://nse-momentum-scanner-api.onrender.com/api/v2/nifty200-feed-health",
+            "/api/v2/premarket-data": "https://nse-momentum-scanner-api.onrender.com/api/v2/premarket-data",
             "/api/v2/decision-learning": "https://nse-momentum-scanner-api.onrender.com/api/v2/decision-learning",
             "/api/v2/pnl-history": "https://nse-momentum-scanner-api.onrender.com/api/v2/pnl-history",
             "/api/v2/signal-activity": "https://nse-momentum-scanner-api.onrender.com/api/v2/signal-activity",
