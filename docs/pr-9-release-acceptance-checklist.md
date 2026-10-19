@@ -110,3 +110,11 @@ Do not add further synthetic tests merely to increase test count. New tests or i
 - Feed health: `REPORTING`, 200/200 NIFTY 200 stocks with recent ticks, snapshot age 5.2 seconds; order execution disabled. Scanner returned 203 rows (200 stocks + 3 indices), latest row timestamp 12:26 IST. Board reported 199/200 fresh stock rows.
 - Candle quality reported 199/200 stocks with six consecutive completed candles, 200/200 with recent ticks and positive last-candle volume, one missing-minute stock, zero overnight gaps and zero warmup rows. Top setups returned `NO_QUALIFYING_SETUPS` (199 fresh considered, 1 stale rejected); no ranking was fabricated.
 - These checks verify live response shape, route wiring and freshness at one time. Feed `REPORTING` does not guarantee a continuous connection; the one stale stock remains excluded. RVOL/volume-surge ranking and persisted P&L/history remain unavailable. Historical real-data trace remains completed, while expected-decision parity and owner sign-off remain blocked. No production settings, databases, orders or deployments were changed.
+
+
+### 13:14 IST live market recheck
+
+- Production Render API returned HTTP 200 for feed health, candle quality, top momentum setups, scanner, and stock board. The production Vercel same-origin proxy returned HTTP 200 for feed health, scanner, and stock board.
+- Feed health: `REPORTING`, snapshot age 3.6 seconds, 200/200 stock symbols with recent ticks; order execution disabled. Scanner returned 203 rows with the newest completed row at 13:13 IST and included all three configured index labels.
+- Stock board: 198/200 fresh rows. Candle quality: 198/200 with six consecutive completed candles, 200/200 recent ticks and positive last-candle volume, 2 missing-minute rows, 0 overnight gaps, 0 warmup rows. Top setups explicitly returned `NO_QUALIFYING_SETUPS` (198 fresh considered, 2 stale rejected).
+- This is a point-in-time live feed and route check. Feed status is not a guarantee of uninterrupted connectivity; stale rows remain excluded. Independent current SENSEX quote parity, historical expected-decision parity, owner sign-off, performance acceptance, and independent review remain open. No production configuration or deployment changed.
