@@ -26,13 +26,13 @@ Status: **historical fetch and offline trace executed; acceptance remains blocke
 
 ## Completed trace evidence and current blocker
 
-The release checklist records a successful manual PR #9 historical workflow run on 2026-10-19. It fetched 750 one-minute candles for `NSE_EQ|INE974X01010` (`stock`) over 2026-10-15 through 2026-10-16, ran the offline trace, and completed successfully. The raw CSV and trace were kept in temporary private runner storage and deleted at job end; they were not committed to GitHub or retained in Render. The exact run #5 checksum and summary counts were not independently captured in the release ledger.
+GitHub Actions [PR #9 historical replay run #5](https://github.com/rukminaiah-dot/nse-momentum-scanner/actions/runs/38958470845) completed successfully on 2026-10-16 UTC (job `offline-historical-trace`, ID `117167202498`). Its logs confirm that the exporter fetched 750 one-minute candles for `NSE_EQ|INE974X01010` (`stock`) over 2026-10-15 through 2026-10-16, ran the offline trace, and completed successfully. The raw CSV and trace were kept in temporary private runner storage and deleted at job end; they were not committed to GitHub or retained in Render. The raw file and trace were deleted by the workflow after the job. Its logs do not expose the trace checksum or signal-count summary.
 
 This confirms the read-only export and trace path ran on real Upstox candles. It does **not** establish decision parity or acceptance: no independently produced expected-decision baseline, discrepancy report, or scanner-owner sign-off is recorded. Existing Render history contains aggregate signal readings rather than raw OHLCV candles. Synthetic fixtures are not a substitute. Keep the replay acceptance gate blocked until the baseline and owner decision are recorded; do not describe the successful trace as a parity pass.
 
 ## Read-only exporter
 
-`scripts/export_upstox_historical_readonly.py` uses the existing `HistoryV3Api.get_historical_candle_data1` read-only endpoint. By default it only validates CLI inputs and prints a dry-run notice; `--execute` is required to make a request. It imports no scanner, order, or database code, rejects malformed/off-session/duplicate rows and refuses to overwrite files. Use a private path outside the repository and an approved completed-date range. **The tool has not been run against Upstox, and the resulting data would still require provenance and owner approval before replay acceptance.**
+`scripts/export_upstox_historical_readonly.py` uses Upstox's read-only HistoryV3 historical-candle endpoint. By default it only validates CLI inputs and prints a dry-run notice; `--execute` is required to make a request. It imports no scanner, order, or database code, rejects malformed/off-session/duplicate rows and refuses to overwrite files. Use a private path outside the repository and an approved completed-date range. The tool was run by workflow #5 against Upstox. That successful trace is not replay acceptance: an independently produced expected-decision baseline, discrepancy report, and scanner-owner sign-off are still missing.
 
 Example dry run (no network):
 
