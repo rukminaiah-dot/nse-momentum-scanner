@@ -49,6 +49,24 @@ class FivePageUiTests(unittest.TestCase):
         for label in ("Pre-Market", "Dashboard", "Signals", "Positions", "Assistant"):
             self.assertIn(label, mobile.group(1))
 
+    def test_mobile_page_selector_is_at_the_top_and_stays_visible(self):
+        header_end = self.html.index("</header>")
+        nav_start = self.html.index('<nav class="mobile-nav"')
+        main_start = self.html.index("<main>")
+        self.assertLess(header_end, nav_start)
+        self.assertLess(nav_start, main_start)
+        self.assertIn(".mobile-nav{position:sticky;top:0", self.html)
+        self.assertNotIn(".mobile-nav{position:fixed", self.html)
+
+    def test_trade_and_learning_panels_use_persistent_pnl_history(self):
+        api = (pathlib.Path(__file__).resolve().parents[1] / "v2/backend/api.py").read_text(encoding="utf-8")
+        trades = api[api.index('@app.get("/api/v2/trades")'):api.index('from fastapi.responses import FileResponse')]
+        learning = api[api.index('@app.get("/api/v2/decision-learning")'):api.index('@app.get("/history")')]
+        self.assertIn("rows = get_daily_trade_history()", trades)
+        self.assertNotIn("sqlite3.connect(DB_PATH", trades)
+        self.assertIn("FROM daily_trade_history", learning)
+        self.assertIn("learning_report_from_records(rows)", learning)
+
     def test_assistant_page_has_guided_validation_and_request_controls(self):
         for required in ('id="assistant-log"', 'id="assistant-validate"',
                          'id="assistant-modify"', 'id="assistant-input"',
@@ -469,3 +487,4 @@ class FivePageUiTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
