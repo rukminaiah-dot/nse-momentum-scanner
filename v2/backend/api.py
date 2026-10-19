@@ -12,6 +12,121 @@ instrument_symbols = {key: symbol for symbol, key in NIFTY_200.items()}
 app = FastAPI(title="NSE Momentum Scanner V2")
 app.include_router(smart_option_router)
 
+@app.get("/api/v2/premarket-data")
+def get_premarket_data():
+    """Read Upstox global-index quotes for pre-market context, never trading signals."""
+    import gzip
+    import json
+    import os
+    import time
+    import urllib.parse
+    import urllib.request
+    from datetime import datetime, timezone
+    from fastapi import HTTPException
+
+    now = time.monotonic()
+    cache = getattr(get_premarket_data, "_cache", None)
+    cache_at = getattr(get_premarket_data, "_cache_at", 0.0)
+    if cache and now - cache_at < 60:
+        return {**cache, "cache_age_seconds": round(now - cache_at, 1)}
+
+    token = os.environ.get("UPSTOX_ACCESS_TOKEN")
+    if not token:
+        return {"status": "UPSTOX_TOKEN_UNAVAILABLE", "source": "Upstox Global Instruments",
+                "as_of": None, "instruments": [], "order_execution_enabled": False}
+
+    try:
+        catalog = getattr(get_premarket_data, "_catalog", None)
+        catalog_at = getattr(get_premarket_data, "_catalog_at", 0.0)
+        if not catalog or now - catalog_at >= 86400:
+            request = urllib.request.Request(
+                "https://assets.upstox.com/market-quote/instruments/exchange/global.json.gz",
+                headers={"User-Agent": "NSE-Momentum-Scanner/1.0", "Accept": "application/gzip"},
+            )
+            with urllib.request.urlopen(request, timeout=8) as response:
+                raw = gzip.decompress(response.read())
+            catalog = json.loads(raw.decode("utf-8"))
+            if not isinstance(catalog, list):
+                raise ValueError("Unexpected Upstox global instruments format")
+            get_premarket_data._catalog = catalog
+            get_premarket_data._catalog_at = now
+
+        wanted = {
+            "GIFT NIFTY": ("GIFT NIFTY",),
+            "S&P 500": ("S&P 500", "S&P"),
+            "DOW JONES": ("DOW JONES",),
+            "NASDAQ": ("NASDAQ", "US TECH 100"),
+            "FTSE 100": ("FTSE 100",),
+            "DAX": ("DAX",),
+            "NIKKEI 225": ("NIKKEI 225",),
+            "HANG SENG": ("HANG SENG",),
+        }
+        selected = {}
+        for instrument in catalog:
+            if not isinstance(instrument, dict) or instrument.get("segment") != "GLOBAL_INDEX":
+                continue
+            aliases = {str(instrument.get(field, "")).strip().upper()
+                       for field in ("name", "trading_symbol")}
+            key = instrument.get("instrument_key")
+            if not isinstance(key, str) or not key.startswith("GLOBAL_INDEX|"):
+                continue
+            for display_name, candidates in wanted.items():
+                if display_name not in selected and aliases.intersection(candidates):
+                    selected[display_name] = {"key": key, "latency": instrument.get("latency")}
+        if "GIFT NIFTY" not in selected:
+            raise ValueError("GIFT NIFTY is not present in the Upstox global instruments file")
+
+        keys = [item["key"] for item in selected.values()]
+        query = urllib.parse.urlencode({"instrument_key": ",".join(keys)})
+        request = urllib.request.Request(
+            "https://api.upstox.com/v3/market-quote/quotes?" + query,
+            headers={"Authorization": "Bearer " + token, "Accept": "application/json"},
+        )
+        with urllib.request.urlopen(request, timeout=8) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        if not isinstance(payload, dict) or payload.get("status") != "success" or not isinstance(payload.get("data"), dict):
+            raise ValueError("Upstox quote response was not successful")
+
+        quotes = payload["data"]
+        instruments = []
+        for name, meta in selected.items():
+            quote_key = meta["key"].replace("|", ":")
+            quote = quotes.get(quote_key)
+            if not isinstance(quote, dict):
+                instruments.append({"name": name, "status": "NO_QUOTE", "latency": meta["latency"]})
+                continue
+            try:
+                price = float(quote["last_price"])
+                previous_close = float(quote["prev_close_price"])
+                trade_ms = int(float(quote["last_trade_time"]))
+                if price <= 0 or previous_close <= 0 or trade_ms <= 0:
+                    raise ValueError("Invalid quote values")
+                quote_time = datetime.fromtimestamp(trade_ms / 1000, timezone.utc).isoformat()
+                change = price - previous_close
+                instruments.append({
+                    "name": name, "status": "QUOTED", "price": price,
+                    "previous_close": previous_close, "change": change,
+                    "change_pct": change / previous_close * 100,
+                    "last_trade_at": quote_time, "latency": meta["latency"],
+                })
+            except (KeyError, TypeError, ValueError, OverflowError, OSError):
+                instruments.append({"name": name, "status": "INVALID_QUOTE", "latency": meta["latency"]})
+
+        result = {"status": "UPSTOX_QUOTES_AVAILABLE", "source": "Upstox Full Market Quotes V3",
+                  "as_of": datetime.now(timezone.utc).isoformat(), "instruments": instruments,
+                  "order_execution_enabled": False}
+        get_premarket_data._cache = result
+        get_premarket_data._cache_at = now
+        return {**result, "cache_age_seconds": 0}
+    except Exception as exc:
+        # Never replace missing or failed upstream data with estimates.
+        print("PREMARKET_UPSTOX_QUOTES_UNAVAILABLE:", type(exc).__name__, flush=True)
+        if cache:
+            return {**cache, "status": "UPSTOX_REFRESH_FAILED_USING_CACHED_QUOTE",
+                    "cache_age_seconds": round(max(0, now - cache_at), 1)}
+        return {"status": "UPSTOX_QUOTES_UNAVAILABLE", "source": "Upstox Full Market Quotes V3",
+                "as_of": None, "instruments": [], "order_execution_enabled": False}
+
 @app.get("/api/v2/trades")
 def get_trades():
     """Return the same persistent recorded history used by Positions and P&L."""
