@@ -174,7 +174,7 @@ class ScannerCloseGateTests(unittest.TestCase):
         analyses = []
         scope = {
             "candles": fake, "key": "X", "price": 100,
-            "ts": 1, "minute_volume": 0,
+            "ts": 1, "minute_volume": 0, "active_trades": {},
             "write_candle_quality": lambda: None,
             "request_recovery_on_gap": lambda key: False,
             "analyse": lambda key: analyses.append(key),
