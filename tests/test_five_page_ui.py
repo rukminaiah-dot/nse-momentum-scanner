@@ -67,7 +67,7 @@ class FivePageUiTests(unittest.TestCase):
 
     def test_partial_api_failures_are_reported_even_when_scanner_endpoint_works(self):
         self.assertIn("apiFailures:[]", self.html)
-        self.assertIn("state.apiFailures=results.flatMap", self.html)
+        self.assertIn("state.apiFailures=coreOk.flatMap", self.html)
         self.assertIn("const partial=ready&&failures.length>0", self.html)
         self.assertIn("PARTIAL DATA — ", self.html)
         self.assertIn("Some data sources could not be reached:", self.html)
@@ -439,7 +439,21 @@ class FivePageUiTests(unittest.TestCase):
     def test_scorecard_hides_stale_candle_scores(self):
         self.assertIn("const validRating=x=>", self.html)
         self.assertIn("y.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(y)", self.html)
-        self.assertIn("const score=x=>validRating(x)?.rating??'—'", self.html)
+        self.assertIn("const score=x=>{const live=validRating(x),last=cached(x)", self.html)
+        self.assertIn("Last '+Number(last.rating)+'/100 '+last.signal", self.html)
+        self.assertIn("· historical", self.html)
+
+    def test_market_data_refreshes_more_often_during_session_than_closed(self):
+        self.assertIn("const delay=document.visibilityState==='visible'&&openNow()?10000:60000", self.html)
+        self.assertIn("clearTimeout(refreshTimer)", self.html)
+        self.assertIn("Date.now()-state.lastAuxLoadedAt>=60000", self.html)
+        self.assertIn("state.lastHistoryLoadedAt<60000", self.html)
+
+    def test_last_verified_score_cache_only_saves_fresh_aligned_scanner_ratings(self):
+        self.assertIn("localStorage.getItem(SCORE_CACHE_KEY)", self.html)
+        self.assertIn("!fresh(rating)||!fresh(row)||row.signal!==rating.signal", self.html)
+        self.assertIn("localStorage.setItem(SCORE_CACHE_KEY,JSON.stringify(next))", self.html)
+        self.assertIn("const counts={ALL:searched.length,BUY:searched.filter(x=>validRating(x)?.signal==='BUY')", self.html)
 
     def test_top_buy_ranking_excludes_stale_ratings(self):
         self.assertIn("x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)", self.html)
