@@ -25,12 +25,12 @@ class OfflinePreloadSelectionTests(unittest.TestCase):
             historical, intraday, session_date=self.today,
             current_minute=self.cutoff, **kwargs)
 
-    def test_latest_sixty_completed_candles_are_chronological(self):
+    def test_all_completed_candles_are_chronological(self):
         intraday = list(reversed(bars(self.start, 100)))
         selected = self.select([], intraday)
-        self.assertEqual(len(selected), 60)
+        self.assertEqual(len(selected), 100)
         self.assertEqual([c.timestamp for c in selected],
-                         [c.timestamp for c in bars(self.start + timedelta(minutes=40), 60)])
+                         [c.timestamp for c in bars(self.start, 100)])
 
     def test_current_forming_minute_and_future_are_excluded(self):
         intraday = bars(self.start, 102)
@@ -52,12 +52,6 @@ class OfflinePreloadSelectionTests(unittest.TestCase):
         self.assertEqual(self.select(historical, bars(self.cutoff, 2)), historical)
         first_current = bars(self.start, 1)
         self.assertEqual(self.select(historical, first_current), first_current)
-
-    def test_invalid_limit_rejected(self):
-        for limit in (0, -1, True, 1.5):
-            with self.subTest(limit=limit):
-                with self.assertRaises(ValueError):
-                    self.select([], [], limit=limit)
 
     def test_selection_does_not_mutate_source_lists(self):
         historical = bars(self.start - timedelta(days=1), 3)
