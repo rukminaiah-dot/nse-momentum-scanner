@@ -254,8 +254,15 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("r.signal===rating.signal&&['BUY','SELL'].includes(r.signal)", self.html)
 
     def test_stock_detail_uses_fresh_stock_specific_rating(self):
-        self.assertIn("x.symbol===symbol&&x.type==='STOCK'&&x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)&&verifiedCandleScore(x)", self.html)
+        self.assertIn("String(x.symbol||'').toUpperCase()===symbol&&x.type==='STOCK'&&x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)&&verifiedCandleScore(x)", self.html)
         self.assertIn("const live=Boolean(state.sessionOpen&&fresh(r)&&rating&&verifiedCandleScore(rating)&&r.signal===rating.signal", self.html)
+
+    def test_stock_analysis_shows_historical_score_when_market_is_closed(self):
+        self.assertIn("const historical=state.historicalRatings.find", self.html)
+        self.assertIn("const score=live?rating:historical", self.html)
+        self.assertIn("LAST STORED · HISTORICAL", self.html)
+        self.assertIn("historical indicator heuristic", self.html)
+        self.assertIn("This is the last stored indicator snapshot, not a current signal.", self.html)
 
     def test_concurrent_trade_failure_is_caught_before_await(self):
         self.assertIn("const tradesResult=await tradesRequest;if(!tradesResult.ok)throw tradesResult.error", self.html)
@@ -445,10 +452,12 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("x.type==='INDEX'&&x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)", self.html)
         self.assertIn("WAIT / UNVERIFIED", self.html)
 
-    def test_premarket_bias_does_not_use_stored_index_readings(self):
-        self.assertIn("const valid=rows.filter(r=>fresh(r)&&", self.html)
-        self.assertIn("NO VERIFIED LIVE BIAS", self.html)
-        self.assertIn("not an opening forecast", self.html)
+    def test_premarket_uses_stored_index_context_when_market_is_closed(self):
+        self.assertIn("const storedValid=x=>", self.html)
+        self.assertIn("state.sessionOpen||fresh(x.row)", self.html)
+        self.assertIn("LAST STORED SESSION · ", self.html)
+        self.assertIn("historical close context only, not an opening forecast", self.html)
+        self.assertIn("EMA/momentum aligned up", self.html)
 
     def test_scorecard_hides_stale_candle_scores(self):
         self.assertIn("const validRating=x=>", self.html)
