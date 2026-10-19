@@ -15,6 +15,7 @@ from .market_regime import index_signal
 from .trade_engine import buy, update_state, sell
 from .database import DB_PATH, init_db, reset_scanner_results
 from .decision_learning import classify_market_recovery
+from .offline_preload_selection import select_completed_preload
 
 candles = CandleManager()
 
@@ -326,9 +327,11 @@ def preload_history(key):
                 c.timestamp = stamp
                 current.append(c)
             current.sort(key=lambda c: c.timestamp)
-            if current:
-                # Keep a bounded, chronological same-session history.
-                loaded = current[-60:]
+            # Preserve the full completed session so EMA initialization remains
+            # stable across scanner restarts; the manager has no active cap.
+            loaded = select_completed_preload(
+                loaded, current, session_date=today, current_minute=current_minute
+            )
                 print("INTRADAY PRELOAD:", key, len(loaded), "completed candles", flush=True)
         except Exception as exc:
             print("INTRADAY PRELOAD FAILED:", key, type(exc).__name__, flush=True)
