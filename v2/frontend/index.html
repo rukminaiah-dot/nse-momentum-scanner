@@ -83,7 +83,7 @@ main{padding-inline:9px}
 </main>
 <script>
 'use strict';
-const state={rows:[],board:[],ratings:[],volumeSurges:null,quality:null,feed:null,learning:null,sessionOpen:false,offlinePreview:false,apiReady:false,lastLoadedAt:null};let boardFilter='ALL';
+const state={rows:[],board:[],ratings:[],volumeSurges:null,quality:null,feed:null,learning:null,sessionOpen:false,offlinePreview:false,apiReady:false,apiFailures:[],lastLoadedAt:null};let boardFilter='ALL';
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=(v,d=2)=>v==null||v===''||!Number.isFinite(Number(v))?'—':Number(v).toFixed(d);
@@ -121,10 +121,12 @@ async function renderHealth(){const f=state.feed||{};const boardRows=Array.isArr
 function renderLearning(){const d=state.learning;if(!d||typeof d!=='object'){$('learning-model').textContent='Unavailable';$('learning-summary').textContent='Learning history is unavailable.';$('learning-losses').textContent='No training or recommendations are produced.';return}const model=d.model&&typeof d.model==='object'?d.model:{};$('learning-model').textContent=String(model.status||'COLLECTING_DATA').replaceAll('_',' ');$('learning-summary').textContent=esc(d.complete_records??0)+' verified recorded outcomes · '+esc(d.gross_loss_count??0)+' gross losses · '+esc(d.invalid_records_excluded??0)+' invalid records excluded'+(d.source==='daily_trade_history'?' · same saved history as P&L':'');const reasons=d.gross_loss_reasons&&typeof d.gross_loss_reasons==='object'?Object.entries(d.gross_loss_reasons):[];const recovery=d.gross_losses_by_nifty_recovery_state&&typeof d.gross_losses_by_nifty_recovery_state==='object'?Object.entries(d.gross_losses_by_nifty_recovery_state):[];const groups=reasons.length?reasons.map(([k,v])=>'<div>'+esc(k)+': '+esc(v)+'</div>').join(''):'<div>No complete loss records yet.</div>';const regimes=recovery.length?recovery.map(([k,v])=>'<div>NIFTY recovery '+esc(k)+': '+esc(v)+' loss(es)</div>').join(''):'<div>Market-recovery loss context unavailable.</div>';const netReady=model.status==='SHADOW_VALIDATED'||model.status==='NOT_BETTER_THAN_BASELINE';$('learning-losses').innerHTML='<strong>Losses by recorded exit reason</strong>'+groups+'<div style="margin-top:8px"><strong>Losses by NIFTY recovery state</strong>'+regimes+'</div><div style="margin-top:8px">Model: '+(netReady?'shadow evaluation only; ':'')+esc(model.status||'COLLECTING_DATA')+'. '+(model.status==='BLOCKED_CONTEXT_AND_COST_LABELS_REQUIRED'?'Training is blocked because entry context and cost-adjusted outcomes are not saved. ':'')+'Recommendations '+(d.recommendations_enabled===true?'enabled':'disabled')+'; broker orders disabled.</div>'}function updateSourceStatus(){
 const offline=state.offlinePreview;
 const ready=state.apiReady;
-$('session').textContent=offline?'OFFLINE PREVIEW — no market data':ready?(state.sessionOpen?'MARKET OPEN — verify freshness':'MARKET CLOSED — historical view'):'SCANNER API UNAVAILABLE — preview only';
-$('scanner-api-status').hidden=ready&&!offline;
-$('scanner-api-status').textContent=offline?'Connected to an isolated offline API. It serves the configured stock list only; prices, candles, signals and trades are disabled.':ready?'':'Scanner API is not connected to this Vercel Preview. Page navigation works, but scanner data is unavailable here.';
-$('coverage').textContent=offline?state.board.length+' configured symbols · 0 verified fresh · offline preview — no market data or signals':ready?state.board.length+' configured stocks · '+state.board.filter(x=>x.data_status==='LIVE_FRESH').length+' verified fresh · '+(state.sessionOpen?'Market open':'Market closed — stored data only'):'Scanner backend unavailable in this Preview; stock coverage and market data are not loaded.'
+const failures=state.apiFailures||[];
+const partial=ready&&failures.length>0;
+$('session').textContent=offline?'OFFLINE PREVIEW — no market data':!ready?'SCANNER API UNAVAILABLE — preview only':partial?'PARTIAL DATA — '+failures.join(', '):state.sessionOpen?'MARKET OPEN — verify freshness':'MARKET CLOSED — historical view';
+$('scanner-api-status').hidden=ready&&!offline&&!partial;
+$('scanner-api-status').textContent=offline?'Connected to an isolated offline API. It serves the configured stock list only; prices, candles, signals and trades are disabled.':!ready?'Scanner API is not connected to this Vercel Preview. Page navigation works, but scanner data is unavailable here.':partial?'Some data sources could not be reached: '+failures.join(', ')+'. Other panels may be incomplete; refresh to retry.':'';
+$('coverage').textContent=offline?state.board.length+' configured symbols · 0 verified fresh · offline preview — no market data or signals':!ready?'Scanner backend unavailable in this Preview; stock coverage and market data are not loaded.':state.board.length+' configured stocks · '+state.board.filter(x=>x.data_status==='LIVE_FRESH').length+' verified fresh · '+(state.sessionOpen?'Market open':'Market closed — stored data only')+(partial?' · unavailable: '+failures.join(', '):'')
 }
 async function load(){
 state.sessionOpen=openNow();
@@ -133,6 +135,8 @@ const corePaths=['/api/v2/scanner','/api/v2/nifty200-stock-board','/api/v2/quali
 const results=await Promise.allSettled(corePaths.map(get));
 const apiReady=results[0].status==='fulfilled';
 state.apiReady=apiReady;
+const coreNames=['Scanner','NSE 200 board','Candle ratings','Feed health','Volume surge'];
+state.apiFailures=results.flatMap((result,index)=>result.status==='rejected'?[coreNames[index]]:[]);
 state.lastLoadedAt=new Date();
 state.rows=results[0].status==='fulfilled'&&Array.isArray(results[0].value)?results[0].value:[];
 state.board=results[1].status==='fulfilled'&&Array.isArray(results[1].value?.stocks)?results[1].value.stocks:[];
