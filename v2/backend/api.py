@@ -269,7 +269,7 @@ def decision_learning_status():
             "gross_loss_count": 0,
             "gross_loss_reasons": {},
             "gross_losses_by_nifty_recovery_state": {},
-            "model": {"status": "COLLECTING_DATA"},
+            "model": {"status": "HISTORY_STORAGE_NOT_CONFIGURED"},
             "recommendations_enabled": False,
             "broker_orders_enabled": False,
             "notes": ["Persistent history is unavailable; no outcomes were inferred."],
