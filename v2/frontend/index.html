@@ -68,6 +68,13 @@ main{padding-inline:9px}
 .mobile-nav button{font-size:10px;letter-spacing:-.1px}
 .metric{font-size:24px}
 }
+
+/* Keep historical scorecard tiles inside narrow mobile viewports. */
+.mobile-stock-list{width:100%;min-width:0;max-width:100%}
+.stock-tile{width:100%;min-width:0;max-width:100%;overflow:hidden}
+.stock-tile .topline{width:100%;min-width:0;flex-wrap:wrap}
+.stock-tile .topline>*{min-width:0;max-width:100%;overflow-wrap:anywhere}
+.stock-tile .metric,.stock-tile .small{max-width:100%;overflow-wrap:anywhere;word-break:normal}
 </style></head><body>
 <header><div><div class="brand">NSE <b>Momentum Intelligence</b></div><div class="sub">Upstox-backed market research · India</div></div><div><span id="session" class="pill">Checking market…</span> <span id="clock" class="sub"></span></div></header>
 <nav aria-label="Main pages"><button class="active" data-page="pulse">01 · Dashboard</button><button data-page="board">02 · NSE 200 Scorecard</button><button data-page="analysis">03 · Stock Analysis</button><button data-page="premarket">04 · Pre-Market</button><button data-page="history">05 · Settings</button></nav>
