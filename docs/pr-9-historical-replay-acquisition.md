@@ -1,6 +1,6 @@
 # PR #9 — Historical replay acquisition and authorization
 
-Status: **not executed; waiting for authorized historical data**. This is a handoff procedure, not replay evidence or approval.
+Status: **historical fetch and offline trace executed; acceptance remains blocked**. This handoff now records the trace evidence and the remaining parity/sign-off requirements.
 
 ## Existing source and why no database is required
 
@@ -24,11 +24,13 @@ Status: **not executed; waiting for authorized historical data**. This is a hand
 - Baseline decision source, comparison report, mismatches and explanations
 - Owner acceptance decision and link to privately retained evidence
 
-## Current blocker
+## Completed trace evidence and current blocker
 
-No authorized dataset, usable runtime access or baseline outputs have been demonstrated in this repository review. Existing synthetic test fixtures are **not** a substitute. Do not run live broker requests from CI or mark historical replay complete. The user does not need to create a database or manually write a CSV; the authorized operator can use the existing read-only Upstox integration when access is available.
+The release checklist records a successful manual PR #9 historical workflow run on 2026-10-19. It fetched 750 one-minute candles for `NSE_EQ|INE974X01010` (`stock`) over 2026-10-15 through 2026-10-16, ran the offline trace, and completed successfully. The raw CSV and trace were kept in temporary private runner storage and deleted at job end; they were not committed to GitHub or retained in Render. The exact run #5 checksum and summary counts were not independently captured in the release ledger.
 
-## Prepared offline exporter (not executed)
+This confirms the read-only export and trace path ran on real Upstox candles. It does **not** establish decision parity or acceptance: no independently produced expected-decision baseline, discrepancy report, or scanner-owner sign-off is recorded. Existing Render history contains aggregate signal readings rather than raw OHLCV candles. Synthetic fixtures are not a substitute. Keep the replay acceptance gate blocked until the baseline and owner decision are recorded; do not describe the successful trace as a parity pass.
+
+## Read-only exporter
 
 `scripts/export_upstox_historical_readonly.py` uses the existing `HistoryV3Api.get_historical_candle_data1` read-only endpoint. By default it only validates CLI inputs and prints a dry-run notice; `--execute` is required to make a request. It imports no scanner, order, or database code, rejects malformed/off-session/duplicate rows and refuses to overwrite files. Use a private path outside the repository and an approved completed-date range. **The tool has not been run against Upstox, and the resulting data would still require provenance and owner approval before replay acceptance.**
 
@@ -40,9 +42,9 @@ python scripts/export_upstox_historical_readonly.py --instrument-key 'NSE_EQ|APP
 
 An authorized operator must substitute a real approved instrument key and separately authorize any `--execute` invocation. Never put tokens in command arguments or logs.
 
-## Offline trace runner (prepared, not executed on historical data)
+## Offline trace runner
 
-After an authorized private CSV export, run from the repository root in an isolated environment:
+To reproduce the existing trace with a newly authorized private CSV export, run from the repository root in an isolated environment:
 
 ```sh
 python scripts/replay_historical_candles_offline.py --input /private/approved-candles.csv --output /private/replay-trace.json --kind stock
