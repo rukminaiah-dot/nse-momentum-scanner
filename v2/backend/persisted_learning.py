@@ -67,6 +67,12 @@ def learning_report_from_records(records):
             loss_reasons[reason] += 1
 
     losses = sum(loss_reasons.values())
+    if valid:
+        model_status = "BLOCKED_CONTEXT_AND_COST_LABELS_REQUIRED"
+    elif invalid:
+        model_status = "INSUFFICIENT_VALID_HISTORY"
+    else:
+        model_status = "COLLECTING_DATA"
     return {
         "status": "PERSISTED_HISTORY_REVIEW",
         "source": "daily_trade_history",
@@ -77,7 +83,7 @@ def learning_report_from_records(records):
         "gross_loss_reasons": dict(sorted(loss_reasons.items())),
         "gross_losses_by_nifty_recovery_state": {"UNAVAILABLE": losses} if losses else {},
         "model": {
-            "status": "BLOCKED_CONTEXT_AND_COST_LABELS_REQUIRED",
+            "status": model_status,
             "recommendations_enabled": False,
         },
         "recommendations_enabled": False,
