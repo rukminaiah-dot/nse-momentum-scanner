@@ -5,7 +5,7 @@ import sqlite3
 from fastapi import FastAPI
 from .database import DB_PATH
 from .stock_universe import NIFTY_200
-from .decision_learning import learning_report
+from .persisted_learning import learning_report_from_records
 
 instrument_symbols = {key: symbol for symbol, key in NIFTY_200.items()}
 
@@ -14,16 +14,21 @@ app.include_router(smart_option_router)
 
 @app.get("/api/v2/trades")
 def get_trades():
-    con = sqlite3.connect(DB_PATH, timeout=10)
-    con.row_factory = sqlite3.Row
-    rows = con.execute(
-        "SELECT * FROM trades ORDER BY id DESC LIMIT 100"
-    ).fetchall()
-    con.close()
-    items = [dict(row) for row in rows]
-    for item in items:
-        item["symbol"] = instrument_symbols.get(item["symbol"], item["symbol"])
-    return items
+    """Return the same persistent recorded history used by Positions and P&L."""
+    rows = get_daily_trade_history()
+    return [
+        {
+            "id": row["id"],
+            "symbol": row["symbol"],
+            "status": row["status"],
+            "entry_price": row["buy_price"],
+            "signal_time": row["buy_time"],
+            "exit_price": row["sell_price"],
+            "exit_time": row["sell_time"],
+            "pnl_total": row["pnl_total"],
+        }
+        for row in rows[:100]
+    ]
 
 from fastapi.responses import FileResponse
 
@@ -247,8 +252,41 @@ def pnl_history():
 
 @app.get("/api/v2/decision-learning")
 def decision_learning_status():
-    """Read-only loss diagnostics and shadow-model readiness."""
-    return learning_report(DB_PATH)
+    """Read-only learning summary from the same durable ledger as P&L."""
+    import os
+    import psycopg
+    from psycopg.rows import dict_row
+    from fastapi import HTTPException
+
+    url = os.environ.get("DATABASE_URL")
+    if not url:
+        return {
+            "status": "HISTORY_STORAGE_NOT_CONFIGURED",
+            "source": "daily_trade_history",
+            "closed_records_seen": 0,
+            "complete_records": 0,
+            "invalid_records_excluded": 0,
+            "gross_loss_count": 0,
+            "gross_loss_reasons": {},
+            "gross_losses_by_nifty_recovery_state": {},
+            "model": {"status": "HISTORY_STORAGE_NOT_CONFIGURED"},
+            "recommendations_enabled": False,
+            "broker_orders_enabled": False,
+            "notes": ["Persistent history is unavailable; no outcomes were inferred."],
+        }
+    try:
+        with psycopg.connect(url, row_factory=dict_row, connect_timeout=5) as con:
+            rows = con.execute("""
+                SELECT buy_time, buy_price, sell_time, sell_price,
+                       quantity, pnl_total, exit_reason
+                FROM daily_trade_history
+                WHERE sell_time IS NOT NULL
+                ORDER BY sell_time, id
+            """).fetchall()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Persisted learning history unavailable") from exc
+
+    return learning_report_from_records(rows)
 
 @app.get("/history")
 def history_page():
@@ -682,4 +720,5 @@ def quality_ratings():
     if output["ratings"]:
         output["status"] = "CANDLE_RATINGS_AVAILABLE"
     return output
+
 
