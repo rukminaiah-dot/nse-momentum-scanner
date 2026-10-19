@@ -16,6 +16,7 @@ from .trade_engine import buy, update_state, sell
 from .database import DB_PATH, init_db, reset_scanner_results
 from .decision_learning import classify_market_recovery
 from .offline_preload_selection import select_completed_preload
+from .volume_metrics import verified_relative_volume
 
 candles = CandleManager()
 
@@ -381,10 +382,10 @@ def completed_candle_time_for_symbol(symbol):
     return None
 
 
-def save_scan_result(key, price, ema9_value, ema20_value, mom, market, trend_5m, signal, previous_close=None):
+def save_scan_result(key, price, ema9_value, ema20_value, mom, market, trend_5m, signal, previous_close=None, rvol=None, current_volume=None, baseline_volume=None):
     candle_time = completed_candle_time_for_symbol(key)
     con = sqlite3.connect(DB_PATH)
-    con.execute("""INSERT OR REPLACE INTO scanner_results (symbol,updated_at,price,ema9,ema20,momentum,market,trend_5m,signal,previous_close) VALUES (?,?,?,?,?,?,?,?,?,?)""", (key, candle_time, price, ema9_value, ema20_value, mom, market, trend_5m, signal, previous_close))
+    con.execute("""INSERT OR REPLACE INTO scanner_results (symbol,updated_at,price,ema9,ema20,momentum,market,trend_5m,signal,previous_close,rvol,current_volume,baseline_volume) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""", (key, candle_time, price, ema9_value, ema20_value, mom, market, trend_5m, signal, previous_close, rvol, current_volume, baseline_volume))
     if candle_time is not None:
         con.execute("""INSERT OR REPLACE INTO scanner_signal_history
             (symbol,candle_time,price,ema9,ema20,momentum,market,trend_5m,signal)
@@ -492,21 +493,22 @@ def analyse(key):
     ema20 = ema(closes, 20)
     mom = momentum(closes)
 
-    # Require genuine relative volume for NIFTY 200 stock BUY signals.
-    # Indices and SELL signals retain their existing rules.
+    # Compare the latest completed stock candle against the prior 19
+    # consecutive completed 1-minute candles. Never estimate missing volume.
     vwap_value = None
     rvol = None
     if key in NIFTY_200.values():
-        volumes = [float(c.volume) for c in history[-20:]]
-        baseline = volumes[:-1]
-        if len(baseline) == 19 and all(v >= 0 for v in volumes):
-            average_volume = sum(baseline) / len(baseline)
-            rvol = volumes[-1] / average_volume if average_volume > 0 else 0.0
-        rvol_available = rvol is not None
-        if rvol is None:
-            rvol = 0.0
+        volume_stats = verified_relative_volume(history)
+        rvol = volume_stats["relative_volume"] if volume_stats else None
+        current_volume = volume_stats["current_volume"] if volume_stats else None
+        baseline_volume = volume_stats["baseline_volume"] if volume_stats else None
+        rvol_available = volume_stats is not None
     else:
+        current_volume = None
+        baseline_volume = None
         rvol_available = False
+    if not rvol_available:
+        rvol = 0.0
 
     market = index_signal(price, ema9, ema20, vwap_value)
     if key == INDICES["NIFTY 50"]:
@@ -552,7 +554,11 @@ def analyse(key):
             print("LATE SELL REJECTED:", key, "| PRICE:", price, "| EMA9:", ema9, "| ATR:", atr_value)
 
     if key in NIFTY_200.values() or key in INDICES.values():
-        save_scan_result(instrument_symbols.get(key, key), price, ema9, ema20, mom, market, trend_5m, signal, previous_closes.get(key))
+        save_scan_result(
+            instrument_symbols.get(key, key), price, ema9, ema20, mom,
+            market, trend_5m, signal, previous_closes.get(key),
+            rvol if rvol_available else None, current_volume, baseline_volume,
+        )
     if key in NIFTY_200.values() and signal == "BUY" and atr_value is not None:
         from datetime import datetime
         from zoneinfo import ZoneInfo
@@ -776,3 +782,4 @@ if __name__ == "__main__":
         worker = _recovery_worker
         if worker is not None:
             worker.close(timeout=5)
+
