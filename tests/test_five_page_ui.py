@@ -166,6 +166,14 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("Long-term: Not verified", self.html)
         self.assertIn("function shortTrend", self.html) if "function shortTrend" in self.html else self.assertIn("const shortTrend=", self.html)
 
+    def test_live_health_distinguishes_tick_coverage_from_fresh_scanner_candles(self):
+        self.assertIn("Upstox tick coverage", self.html)
+        self.assertIn("Fresh scanner candles", self.html)
+        self.assertIn("data_status==='LIVE_FRESH'", self.html)
+        self.assertIn("excluded from current signals", self.html)
+        self.assertIn("continuous connection guarantee", self.html)
+        self.assertIn("Freshness limit: 3 minutes.", self.html)
+
     def test_rating_freshness_uses_candle_timestamp_and_timezone(self):
         self.assertIn("row?.candle_ist??row?.updated_at", self.html)
         self.assertIn("Date.parse(zoned)", self.html)
