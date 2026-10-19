@@ -94,6 +94,15 @@ def get_premarket_data():
             "market flows / regulation": ("fii", "fpi", "dii", "sebi", "nse", "bse", "market regulator"),
         }
         from email.utils import parsedate_to_datetime
+        channels = {
+            "rates / central banks": "interest rates, borrowing costs, and equity valuations",
+            "inflation / economy": "growth, inflation, and expected central-bank policy",
+            "oil / commodities": "import costs, inflation, and energy-sensitive sectors",
+            "company results / finance": "issuer earnings, balance-sheet risk, or sector outlook",
+            "geopolitics / trade": "risk appetite, trade routes, and supply chains",
+            "market flows / regulation": "liquidity, foreign/domestic flows, or market rules",
+            "company / market news": "company or sector context; verify the story",
+        }
         items = []
         for source, url in feeds:
             try:
@@ -115,7 +124,7 @@ def get_premarket_data():
                         continue
                     lower = title.lower()
                     topic = next((name for name, words in topics.items() if any(word in lower for word in words)), "company / market news")
-                    items.append({"title": title[:240], "url": link, "published_at": published_at.isoformat(), "source": source, "topic": topic})
+                    items.append({"title": title[:240], "url": link, "published_at": published_at.isoformat(), "source": source, "topic": topic, "impact_channel": channels.get(topic, "Company or sector context; verify the story")})
             except Exception as exc:
                 print("PREMARKET_NEWS_FEED_UNAVAILABLE:", source, type(exc).__name__, flush=True)
         unique = {item["url"]: item for item in items}
