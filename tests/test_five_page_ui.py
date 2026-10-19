@@ -65,6 +65,13 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn(".toolbar input{flex:1 1 100%;width:100%}", self.html)
         self.assertIn("h1,h2,p,.notice,.pill,.small,td,th{overflow-wrap:anywhere}", self.html)
 
+    def test_partial_api_failures_are_reported_even_when_scanner_endpoint_works(self):
+        self.assertIn("apiFailures:[]", self.html)
+        self.assertIn("state.apiFailures=results.flatMap", self.html)
+        self.assertIn("const partial=ready&&failures.length>0", self.html)
+        self.assertIn("PARTIAL DATA — ", self.html)
+        self.assertIn("Some data sources could not be reached:", self.html)
+
     def test_settings_page_exposes_real_customization_and_discloses_unavailable_alerts(self):
         for required in ('<h1>Settings &amp; Customization</h1>', 'id="settings-layout"',
                          'id="settings-favourites-link"', "Alert delivery is not connected",
