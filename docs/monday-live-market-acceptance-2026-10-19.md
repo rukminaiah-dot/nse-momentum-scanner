@@ -38,3 +38,10 @@
 - The connection report's last recorded event was `CONNECTED` at 09:52:03 IST. The endpoint itself cautions that a last event is not a continuous-connection guarantee; the fresh-tick counts are the current coverage evidence.
 - The UI health panel now shows tick coverage separately from fresh completed-candle coverage and names each window. Five-page UI contract test added for those labels and the stale-row exclusion explanation.
 - Verification boundary: Vercel's protected preview redirected this environment to login, so the deployed Vercel proxy/browser rendering could not be independently smoke-tested here. Official independent live index-price comparison and full broker/Upstox payload audit were not completed; the public search result available during this session was stale. No broker credentials or order routes were accessed, and no production code, database, deployment setting, or orders were changed.
+
+
+### 11:11 IST recheck
+
+- Repeated the read-only API checks in parallel. Feed health remained `REPORTING` with 200/200 recent ticks; the stock board reported 195/200 fresh completed candles. The change from 196 to 195 confirms the per-minute coverage number is live and time-dependent.
+- All eight quality ratings in this sample matched a scanner row with the same candle timestamp and signal. Stock ratings also matched a `LIVE_FRESH` board row. All were `RESEARCH_ONLY`, candle-heuristic scores, and order execution remained disabled.
+- This confirms response-shape and freshness alignment for the sampled rows only. Independent exchange quote validation and Vercel browser-route verification remain outstanding.
