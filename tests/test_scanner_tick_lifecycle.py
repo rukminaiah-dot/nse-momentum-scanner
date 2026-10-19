@@ -130,6 +130,25 @@ class ScannerTickLifecycleTests(unittest.TestCase):
         self.assertEqual(self.context["last_cumulative_volumes"]["STOCK"], 125)
         self.assertEqual(len([call for call in self.calls if call[0] == "candle"]), 2)
 
+    def test_invalidation_waits_for_completed_one_minute_close(self):
+        now_ms = int(time.time() * 1000)
+        trade = {
+            "id": 11, "target_1": 101, "target_2": 102,
+            "invalidation": 99, "status": "OPEN",
+        }
+        self.context["active_trades"]["STOCK"] = trade
+
+        self.tick(98.5, timestamp_ms=now_ms)
+        self.assertFalse(any(call[0] == "sell" for call in self.calls))
+        self.assertIn("STOCK", self.context["active_trades"])
+
+        self.closed = type("ClosedCandle", (), {"close": 98.5})()
+        self.tick(98.5, timestamp_ms=now_ms + 1000)
+        sells = [call for call in self.calls if call[0] == "sell"]
+        self.assertEqual(len(sells), 1)
+        self.assertEqual(sells[0][1][:3], (11, 98.5, "Invalidation hit"))
+        self.assertNotIn("STOCK", self.context["active_trades"])
+
     def test_live_rollover_runs_gap_quality_and_analysis_in_order(self):
         self.closed = object()
         self.tick(100.5)
