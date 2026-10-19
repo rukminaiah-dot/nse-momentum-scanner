@@ -436,14 +436,15 @@ class FivePageUiTests(unittest.TestCase):
         expected = {
             "/api/v2/scanner": "https://nse-momentum-scanner-api.onrender.com/api/v2/scanner",
             "/api/v2/top-momentum-setups": "https://nse-momentum-scanner-api.onrender.com/api/v2/top-momentum-setups",
+            "/api/v2/top-volume-surge": "https://nse-momentum-scanner-api.onrender.com/api/v2/top-volume-surge",
             "/api/v2/nifty200-stock-board": "https://nse-momentum-scanner-api.onrender.com/api/v2/nifty200-stock-board",
             "/api/v2/quality-ratings": "https://nse-momentum-scanner-api.onrender.com/api/v2/quality-ratings",
             "/api/v2/nifty200-feed-health": "https://nse-momentum-scanner-api.onrender.com/api/v2/nifty200-feed-health",
             "/api/v2/trades": "https://nse-momentum-scanner-api.onrender.com/api/v2/trades",
             "/api/v2/preview-status": "https://nse-momentum-scanner-api.onrender.com/api/v2/nifty200-feed-health",
-            "/api/v2/decision-learning": "https://nse-v2-offline-preview.onrender.com/api/v2/decision-learning",
-            "/api/v2/pnl-history": "https://nse-v2-offline-preview.onrender.com/api/v2/pnl-history",
-            "/api/v2/signal-activity": "https://nse-v2-offline-preview.onrender.com/api/v2/signal-activity",
+            "/api/v2/decision-learning": "https://nse-momentum-scanner-api.onrender.com/api/v2/decision-learning",
+            "/api/v2/pnl-history": "https://nse-momentum-scanner-api.onrender.com/api/v2/pnl-history",
+            "/api/v2/signal-activity": "https://nse-momentum-scanner-api.onrender.com/api/v2/signal-activity",
         }
         rewrites = config.get("rewrites", [])
         self.assertEqual(

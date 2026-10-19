@@ -464,6 +464,85 @@ def top_momentum_setups():
     return output
 
 
+@app.get("/api/v2/top-volume-surge")
+def top_volume_surge():
+    """Rank fresh stock RVOL using actual one-minute candle volumes only."""
+    from datetime import datetime, timedelta, time as clock_time
+    from math import isfinite
+    from zoneinfo import ZoneInfo
+
+    now = datetime.now(ZoneInfo("Asia/Kolkata"))
+    session_open = now.weekday() < 5 and clock_time(9, 15) <= now.time() < clock_time(15, 30)
+    threshold = 1.5
+    output = {
+        "status": "MARKET_CLOSED" if not session_open else "NO_VERIFIED_VOLUME_SURGES",
+        "as_of_ist": now.isoformat(),
+        "universe_size": len(NIFTY_200),
+        "threshold_rvol": threshold,
+        "comparison_basis": "Latest completed 1-minute candle volume / mean of prior 19 consecutive completed 1-minute candles",
+        "surges": [],
+        "fresh_stock_rows": 0,
+        "verified_volume_rows": 0,
+        "order_execution_enabled": False,
+    }
+    if not session_open:
+        return output
+
+    try:
+        with sqlite3.connect(DB_PATH, timeout=5) as db:
+            db.row_factory = sqlite3.Row
+            rows = [dict(row) for row in db.execute(
+                "SELECT symbol,updated_at,price,signal,trend_5m,rvol,current_volume,baseline_volume FROM scanner_results"
+            )]
+    except sqlite3.Error:
+        output["status"] = "SCANNER_DATABASE_UNAVAILABLE"
+        return output
+
+    eligible_symbols = set(NIFTY_200)
+    for row in rows:
+        if row["symbol"] not in eligible_symbols:
+            continue
+        try:
+            stamp = datetime.strptime(row["updated_at"], "%Y-%m-%d %H:%M:%S").replace(
+                tzinfo=ZoneInfo("Asia/Kolkata")
+            )
+            if stamp.date() != now.date() or not timedelta(0) <= now - stamp <= timedelta(minutes=3):
+                continue
+            output["fresh_stock_rows"] += 1
+            rvol, current_volume, baseline_volume = (
+                float(row[name]) for name in ("rvol", "current_volume", "baseline_volume")
+            )
+            if (not all(isfinite(value) for value in (rvol, current_volume, baseline_volume))
+                    or current_volume < 0 or baseline_volume <= 0):
+                continue
+            output["verified_volume_rows"] += 1
+            if rvol < threshold:
+                continue
+            price = float(row["price"])
+            if not isfinite(price) or price <= 0:
+                continue
+            output["surges"].append({
+                "symbol": row["symbol"],
+                "last_price": round(price, 2),
+                "signal": row["signal"],
+                "trend_5m": row["trend_5m"],
+                "relative_volume": round(rvol, 2),
+                "current_volume": round(current_volume, 2),
+                "baseline_volume": round(baseline_volume, 2),
+                "candle_ist": row["updated_at"],
+                "volume_basis": "1-minute; prior 19 consecutive completed candles",
+                "trade_status": "RESEARCH_ONLY",
+            })
+        except (TypeError, ValueError, OverflowError):
+            continue
+
+    output["surges"].sort(key=lambda item: (-item["relative_volume"], item["symbol"]))
+    output["surges"] = output["surges"][:10]
+    if output["surges"]:
+        output["status"] = "VERIFIED_VOLUME_SURGES_AVAILABLE"
+    return output
+
+
 @app.get("/api/v2/nifty200-stock-board")
 def nifty200_stock_board():
     """Display the configured NIFTY 200 universe even when market is closed."""
@@ -603,3 +682,4 @@ def quality_ratings():
     if output["ratings"]:
         output["status"] = "CANDLE_RATINGS_AVAILABLE"
     return output
+
