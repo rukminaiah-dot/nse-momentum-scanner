@@ -36,17 +36,17 @@ class FivePageUiTests(unittest.TestCase):
         self.assertEqual(re.findall(r'data-page="([^"]+)"', nav.group(1)),
                          ["pulse", "board", "analysis", "premarket", "history"])
 
-    def test_desktop_navigation_calls_page_five_assistant(self):
+    def test_desktop_navigation_calls_page_five_settings(self):
         nav = re.search(r'<nav aria-label="Main pages">(.*?)</nav>', self.html, re.S)
         self.assertIsNotNone(nav)
-        self.assertRegex(nav.group(1), r'data-page="history">05 · Assistant</button>')
+        self.assertRegex(nav.group(1), r'data-page="history">05 · Settings</button>')
 
-    def test_mobile_bottom_navigation_has_all_five_destinations(self):
+    def test_mobile_navigation_matches_the_five_primary_pages(self):
         mobile = re.search(r'<nav class="mobile-nav" aria-label="Mobile pages">(.*?)</nav>', self.html, re.S)
         self.assertIsNotNone(mobile)
         self.assertEqual(re.findall(r'data-mobile-page="([^"]+)"', mobile.group(1)),
-                         ["premarket", "pulse", "signals", "positions", "history"])
-        for label in ("Pre-Market", "Dashboard", "Signals", "Positions", "Assistant"):
+                         ["pulse", "board", "analysis", "premarket", "history"])
+        for label in ("Dashboard", "NSE 200", "Analysis", "Pre-Market", "Settings"):
             self.assertIn(label, mobile.group(1))
 
     def test_mobile_page_selector_is_at_the_top_and_stays_visible(self):
@@ -57,6 +57,29 @@ class FivePageUiTests(unittest.TestCase):
         self.assertLess(nav_start, main_start)
         self.assertIn(".mobile-nav{position:sticky;top:0", self.html)
         self.assertNotIn(".mobile-nav{position:fixed", self.html)
+
+    def test_phone_layout_constrains_page_width_and_wraps_content(self):
+        self.assertIn("html,body{max-width:100%;overflow-x:clip}", self.html)
+        self.assertIn("@media(max-width:900px),(pointer:coarse)", self.html)
+        self.assertIn("grid-template-columns:repeat(5,minmax(0,1fr))", self.html)
+        self.assertIn(".toolbar input{flex:1 1 100%;width:100%}", self.html)
+        self.assertIn("h1,h2,p,.notice,.pill,.small,td,th{overflow-wrap:anywhere}", self.html)
+
+    def test_settings_page_exposes_real_customization_and_discloses_unavailable_alerts(self):
+        for required in ('<h1>Settings &amp; Customization</h1>', 'id="settings-layout"',
+                         'id="settings-favourites-link"', "Alert delivery is not connected",
+                         "No alert toggles are shown", "id=\"assistant-log\""):
+            self.assertIn(required, self.html)
+
+    def test_scorecard_filters_are_limited_to_verified_buy_sell_and_historical_data(self):
+        for key in ("ALL", "BUY", "SELL", "HISTORICAL"):
+            self.assertIn(f'data-board-filter="{key}"', self.html)
+        self.assertIn("const counts={ALL:searched.length", self.html)
+        self.assertIn("button.setAttribute('aria-pressed',String(key===boardFilter))", self.html)
+
+    def test_stock_analysis_states_ohlc_chart_data_is_not_connected(self):
+        self.assertIn("<h2>Price chart &amp; candle history</h2>", self.html)
+        self.assertIn("Historical OHLC candles are not included in the current scanner response", self.html)
 
     def test_trade_and_learning_panels_use_persistent_pnl_history(self):
         api = (pathlib.Path(__file__).resolve().parents[1] / "v2/backend/api.py").read_text(encoding="utf-8")
@@ -157,9 +180,8 @@ class FivePageUiTests(unittest.TestCase):
                         "generativelanguage.googleapis.com", "assistantAskGemini"):
             self.assertNotIn(removed, self.html)
 
-    def test_mobile_positions_route_opens_recorded_position_history(self):
-        self.assertIn("function navigateMobile(id)", self.html)
-        self.assertIn("if(id==='positions'){showPage('pulse')", self.html)
+    def test_positions_deep_link_opens_recorded_position_history(self):
+        self.assertIn("function showPositions()", self.html)
         self.assertIn("$('active-positions')?.closest('.card')?.scrollIntoView", self.html)
         self.assertIn("location.hash.slice(1)==='positions'", self.html)
 
@@ -476,8 +498,8 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("['premarket','pulse','analysis','board','signals','history'].includes(location.hash.slice(1))", self.html)
 
     def test_mobile_navigation_shows_all_page_buttons(self):
-        self.assertIn("nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));overflow:visible}", self.html)
-        self.assertIn("nav button{white-space:normal;line-height:1.25;min-height:44px}", self.html)
+        self.assertIn(".mobile-nav{position:sticky;top:0;z-index:10;display:grid", self.html)
+        self.assertIn(".mobile-nav button{width:100%;min-width:0;min-height:46px", self.html)
 
     def test_api_requests_time_out_instead_of_staying_on_loading_state(self):
         self.assertIn("new AbortController()", self.html)
