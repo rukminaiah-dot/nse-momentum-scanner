@@ -146,3 +146,10 @@ Do not add further synthetic tests merely to increase test count. New tests or i
 
 - Render returned HTTP 200 for feed health, scanner, stock board, candle quality, and top setups; production Vercel returned HTTP 200 for feed health, scanner, and stock board. Scanner contained 203/203 unique rows through the 13:35 IST candle. Board freshness was 198/200, with every board symbol present in scanner output; Vercel and Render matched on core-route row counts.
 - Feed health reported `REPORTING`, 200/200 recent ticks, 7.2-second snapshot age, and orders disabled. Candle quality reported 198/200 with six consecutive completed candles and 200/200 with recent ticks/positive last-candle volume. Top setups returned `NO_QUALIFYING_SETUPS`, considering 198 fresh stocks and rejecting 2 stale rows. This confirms stale-row suppression remained active in this sample; it does not establish continuous uptime or signal accuracy.
+
+
+### 13:46 IST production health and telemetry check (2026-10-19)
+
+- The production Render feed-health endpoint returned a current response at 13:46:08 IST: market session `OPEN`, status `REPORTING`, snapshot age 7.7 seconds, and 200/200 symbols with recent ticks. The most recent recorded connection event was still 13:05:48 IST; the endpoint explicitly says this is not a continuous-connection guarantee. Order execution remained disabled.
+- Render service telemetry for 13:14–13:44 IST contained CPU and memory samples; memory ranged approximately 120.4–134.4 MiB and ended at 124.4 MiB. The Render app-error query returned no error/fatal records for that interval. HTTP request-count and latency series were empty, so this telemetry cannot establish request latency or a performance SLO.
+- This recheck covers feed health and service telemetry only. It does not replace the multi-route scanner/board/quality check recorded at 13:36 IST, historical decision parity, full scanner lifecycle parity, or owner-approved performance criteria. No production setting, deployment, data, credential, or order behavior was changed.
