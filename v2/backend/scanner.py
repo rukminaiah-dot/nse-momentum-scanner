@@ -685,18 +685,17 @@ def on_tick(key, data):
 
     closed = candles.update(key, price, ts, minute_volume)
 
-    # Confirm simulated invalidation only on a completed one-minute close.
-    # A brief intraminute tick below the stop must not close the signal record.
+    # Only a live rollover may trigger decisions. Recovery can grow completed
+    # history without closing the active candle.
     if closed is not None:
+        # Confirm simulated invalidation on the completed one-minute close.
+        # A brief intraminute tick below the stop must not close the record.
         trade = active_trades.get(key)
         if trade and closed.close <= trade["invalidation"]:
             sell(trade["id"], closed.close, "Invalidation hit",
                  context=_decision_context(key, closed.close, tick_time))
             active_trades.pop(key, None)
 
-    # Only a live rollover may trigger analysis. Recovery can grow completed
-    # history without closing the active candle.
-    if closed is not None:
         request_recovery_on_gap(key)
         write_candle_quality()
         analyse(key)
