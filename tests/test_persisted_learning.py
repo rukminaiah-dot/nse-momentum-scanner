@@ -78,12 +78,13 @@ class PersistedLearningTests(unittest.TestCase):
         self.assertEqual(report["complete_records"], 0)
         self.assertEqual(report["invalid_records_excluded"], 3)
         self.assertEqual(report["gross_loss_count"], 0)
+        self.assertEqual(report["model"]["status"], "INSUFFICIENT_VALID_HISTORY")
 
     def test_empty_ledger_stays_in_collection_mode_without_predictions(self):
         report = learning_report_from_records([])
 
         self.assertEqual(report["complete_records"], 0)
-        self.assertEqual(report["model"]["status"], "BLOCKED_CONTEXT_AND_COST_LABELS_REQUIRED")
+        self.assertEqual(report["model"]["status"], "COLLECTING_DATA")
         self.assertFalse(report["recommendations_enabled"])
 
 
