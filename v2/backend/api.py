@@ -206,7 +206,29 @@ def pnl_history():
                         AND buy_time <= NOW() + INTERVAL '1 minute'
                         AND sell_time <= NOW() + INTERVAL '1 minute'
                         THEN (sell_price - buy_price) * quantity
-                        ELSE 0 END) AS total_pnl
+                        ELSE 0 END) AS total_pnl,
+                    SUM(CASE WHEN
+                        buy_time IS NOT NULL AND buy_price IS NOT NULL
+                        AND sell_price IS NOT NULL AND quantity IS NOT NULL
+                        AND buy_price > 0 AND sell_price > 0 AND quantity > 0
+                        AND sell_time >= buy_time
+                        AND buy_time <= NOW() + INTERVAL '1 minute'
+                        AND sell_time <= NOW() + INTERVAL '1 minute'
+                        THEN
+                            LEAST(20, buy_price * quantity * 0.001)
+                            + LEAST(20, sell_price * quantity * 0.001)
+                            + sell_price * quantity * 0.00025
+                            + buy_price * quantity * 0.00003
+                            + (buy_price + sell_price) * quantity * 0.0000307
+                            + (buy_price + sell_price) * quantity * 0.000001
+                            + (buy_price + sell_price) * quantity * 0.000000001
+                            + 0.18 * (
+                                LEAST(20, buy_price * quantity * 0.001)
+                                + LEAST(20, sell_price * quantity * 0.001)
+                                + (buy_price + sell_price) * quantity * 0.0000307
+                                + (buy_price + sell_price) * quantity * 0.000000001
+                            )
+                        ELSE 0 END) AS estimated_costs
                 FROM daily_trade_history
                 WHERE sell_time >= %s AND sell_time < %s
                 GROUP BY pnl_date
@@ -222,19 +244,29 @@ def pnl_history():
             exits = int(row["exit_count"]) if row else 0
             invalid = int(row["invalid_count"]) if row else 0
             total = row["total_pnl"] if row else None
+            costs = row["estimated_costs"] if row else None
             if invalid or (exits and total is None):
                 total = None
+                costs = None
                 complete = False
-            elif total is not None:
+            elif total is not None and costs is not None:
                 total = float(total)
-                if not __import__("math").isfinite(total):
+                costs = float(costs)
+                if not __import__("math").isfinite(total) or not __import__("math").isfinite(costs):
                     total = None
+                    costs = None
                     complete = False
+            else:
+                total = None
+                costs = None
+            net = total - costs if total is not None and costs is not None else None
             days.append({
                 "date": day,
                 "exit_count": exits,
                 "invalid_count": invalid,
                 "total_pnl": total,
+                "estimated_costs": costs,
+                "estimated_net_pnl": net,
             })
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Persisted P&L history unavailable") from exc
@@ -247,6 +279,10 @@ def pnl_history():
         "days": days,
         "mode": "RECORDED_SIGNALS_NOT_BROKER_EXECUTIONS",
         "order_execution_enabled": False,
+        "cost_estimate": {
+            "schedule": "Upstox NSE equity intraday indicative rates",
+            "assumptions": "One entry and one exit order per recorded lifecycle; estimated from recorded prices and quantity; excludes slippage and per-charge rounding; actual charges depend on executed orders and account tariff.",
+        },
     }
 
 
