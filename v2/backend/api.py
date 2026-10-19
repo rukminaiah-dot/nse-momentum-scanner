@@ -690,31 +690,45 @@ def quality_ratings():
             if not all(isfinite(v) for v in (price, e9, e20, mom)) or min(price, e9, e20) <= 0:
                 continue
             direction = row["signal"]
-            if direction not in ("BUY", "SELL"):
-                continue
-            bullish = direction == "BUY"
-            if not ((e9 > e20 and mom > 0) if bullish else (e9 < e20 and mom < 0)):
-                continue
+            fresh = session_open and stamp.date() == now.date() and age <= timedelta(minutes=3)
             index = symbol in INDICES
             trend = row["trend_5m"]
-            if not index and trend != ("BULLISH" if bullish else "BEARISH"):
+            if direction not in ("BUY", "SELL"):
+                # After close, scanner rows may be deliberately stored as WAITING
+                # even though EMA and momentum values remain available. Preserve
+                # that distinction: derive a historical bias for display only.
+                if fresh:
+                    continue
+                if e9 > e20 and mom > 0:
+                    direction = "BUY"
+                elif e9 < e20 and mom < 0:
+                    direction = "SELL"
+                else:
+                    direction = "WAIT"
+            bullish = direction == "BUY"
+            bearish = direction == "SELL"
+            if (bullish and not (e9 > e20 and mom > 0)) or (bearish and not (e9 < e20 and mom < 0)):
                 continue
-            # Heuristic, not a calibrated win probability. Only completed-candle
-            # data available in scanner_results is scored.
+            if fresh and not index and trend != ("BULLISH" if bullish else "BEARISH"):
+                continue
+            # Heuristic, not a calibrated win probability. Historical scores
+            # describe stored indicator alignment, never a current setup.
             gap_pct = abs(e9 - e20) / price * 100
+            trend_aligned = direction in ("BUY", "SELL") and trend == ("BULLISH" if bullish else "BEARISH")
             score = min(100, round(40 + min(25, abs(mom) * 5)
                                    + min(20, gap_pct * 20)
-                                   + (15 if trend == ("BULLISH" if bullish else "BEARISH") else 0)))
+                                   + (15 if trend_aligned else 0)))
+            historical = not fresh
             rating = {
                 "symbol": symbol, "type": "INDEX" if index else "STOCK",
                 "signal": direction, "rating": score,
-                "rating_basis": "CANDLE_ONLY_HEURISTIC",
+                "rating_basis": "HISTORICAL_INDICATOR_HEURISTIC" if historical else "CANDLE_ONLY_HEURISTIC",
+                "directional_bias": "BULLISH" if bullish else "BEARISH" if bearish else "NEUTRAL",
                 "price": round(price, 2), "momentum": round(mom, 3),
                 "trend_5m": trend, "candle_ist": row["updated_at"],
                 "trade_status": "RESEARCH_ONLY", "volume_verified": False,
-                "reason": "RVOL_AND_LIQUIDITY_NOT_INCLUDED_IN_SCORE",
+                "reason": "STORED_EMA_AND_MOMENTUM_ONLY; NOT A LIVE SIGNAL",
             }
-            fresh = session_open and stamp.date() == now.date() and age <= timedelta(minutes=3)
             if fresh:
                 output["ratings"].append(rating)
             else:
