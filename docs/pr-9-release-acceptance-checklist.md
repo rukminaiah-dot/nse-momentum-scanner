@@ -118,3 +118,10 @@ Do not add further synthetic tests merely to increase test count. New tests or i
 - Feed health: `REPORTING`, snapshot age 3.6 seconds, 200/200 stock symbols with recent ticks; order execution disabled. Scanner returned 203 rows with the newest completed row at 13:13 IST and included all three configured index labels.
 - Stock board: 198/200 fresh rows. Candle quality: 198/200 with six consecutive completed candles, 200/200 recent ticks and positive last-candle volume, 2 missing-minute rows, 0 overnight gaps, 0 warmup rows. Top setups explicitly returned `NO_QUALIFYING_SETUPS` (198 fresh considered, 2 stale rejected).
 - This is a point-in-time live feed and route check. Feed status is not a guarantee of uninterrupted connectivity; stale rows remain excluded. Independent current SENSEX quote parity, historical expected-decision parity, owner sign-off, performance acceptance, and independent review remain open. No production configuration or deployment changed.
+
+
+### 13:19 IST live response-alignment check
+
+- Read the Render scanner, stock board, quality ratings, and feed-health endpoints concurrently. All returned HTTP 200. Scanner symbols were 203/203 unique; stock-board symbols were 200/200 unique and every stock appeared in scanner output. All six ratings matched their scanner row on symbol, signal, and candle timestamp. No stock row had a missing, nonnumeric or nonpositive last price.
+- Feed health reported 200/200 recent ticks, 10-second snapshot age, and order execution disabled. The board reported 199 fresh rows at this sample.
+- This verifies cross-endpoint consistency for one sample; it does not independently validate quote accuracy, full signal parity, or continuous connection uptime.
