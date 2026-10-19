@@ -24,6 +24,84 @@ def get_premarket_data():
     from datetime import datetime, timezone
     from fastapi import HTTPException
 
+    def yahoo_global_quotes():
+        """Return delayed Yahoo global index context; deliberately excludes GIFT Nifty."""
+        try:
+            import yfinance as yf
+            symbols = {
+                "S&P 500": "^GSPC", "DOW JONES": "^DJI", "NASDAQ": "^IXIC",
+                "FTSE 100": "^FTSE", "DAX": "^GDAXI", "NIKKEI 225": "^N225",
+                "HANG SENG": "^HSI",
+            }
+            data = yf.download(
+                tickers=list(symbols.values()), period="5d", interval="5m",
+                group_by="ticker", auto_adjust=False, progress=False,
+                threads=False, timeout=8,
+            )
+            instruments = []
+            columns = getattr(data, "columns", None)
+            if columns is None or data.empty:
+                return instruments
+            for name, ticker in symbols.items():
+                try:
+                    if getattr(columns, "nlevels", 1) > 1:
+                        if ticker in columns.get_level_values(0):
+                            frame = data[ticker]
+                        elif ticker in columns.get_level_values(1):
+                            frame = data.xs(ticker, axis=1, level=1)
+                        else:
+                            continue
+                    else:
+                        frame = data
+                    close = frame["Close"].dropna()
+                    if len(close) < 2:
+                        continue
+                    latest_index = close.index[-1]
+                    latest_date = latest_index.date()
+                    prior = close[[idx.date() < latest_date for idx in close.index]]
+                    if prior.empty:
+                        continue
+                    price = float(close.iloc[-1])
+                    previous_close = float(prior.iloc[-1])
+                    if price <= 0 or previous_close <= 0:
+                        continue
+                    stamp = latest_index.to_pydatetime()
+                    if stamp.tzinfo is None:
+                        stamp = stamp.replace(tzinfo=timezone.utc)
+                    change = price - previous_close
+                    instruments.append({
+                        "name": name, "status": "QUOTED", "price": price,
+                        "previous_close": previous_close, "change": change,
+                        "change_pct": change / previous_close * 100,
+                        "last_trade_at": stamp.astimezone(timezone.utc).isoformat(),
+                        "latency": "900 Seconds",
+                    })
+                except (KeyError, TypeError, ValueError, OverflowError, AttributeError):
+                    continue
+            return instruments
+        except Exception as exc:
+            print("PREMARKET_YAHOO_QUOTES_UNAVAILABLE:", type(exc).__name__, flush=True)
+            return []
+
+    def yahoo_fallback(now, cache, cache_at):
+        instruments = yahoo_global_quotes()
+        if instruments:
+            result = {
+                "status": "YAHOO_GLOBAL_QUOTES_FALLBACK",
+                "source": "Yahoo Finance delayed global indexes; GIFT Nifty unavailable",
+                "as_of": datetime.now(timezone.utc).isoformat(),
+                "instruments": instruments,
+                "order_execution_enabled": False,
+            }
+            get_premarket_data._cache = result
+            get_premarket_data._cache_at = now
+            return {**result, "cache_age_seconds": 0}
+        if cache:
+            return {**cache, "status": "UPSTOX_REFRESH_FAILED_USING_CACHED_QUOTE",
+                    "cache_age_seconds": round(max(0, now - cache_at), 1)}
+        return {"status": "GLOBAL_QUOTES_UNAVAILABLE", "source": "Upstox and Yahoo Finance",
+                "as_of": None, "instruments": [], "order_execution_enabled": False}
+
     now = time.monotonic()
     cache = getattr(get_premarket_data, "_cache", None)
     cache_at = getattr(get_premarket_data, "_cache_at", 0.0)
@@ -32,8 +110,7 @@ def get_premarket_data():
 
     token = os.environ.get("UPSTOX_ACCESS_TOKEN")
     if not token:
-        return {"status": "UPSTOX_TOKEN_UNAVAILABLE", "source": "Upstox Global Instruments",
-                "as_of": None, "instruments": [], "order_execution_enabled": False}
+        return yahoo_fallback(now, cache, cache_at)
 
     stage = "global_instruments"
     try:
@@ -123,19 +200,10 @@ def get_premarket_data():
     except urllib.error.HTTPError as exc:
         # Log only the upstream stage and HTTP status; never log the access token.
         print("PREMARKET_UPSTOX_HTTP_ERROR:", stage, exc.code, flush=True)
-        if cache:
-            return {**cache, "status": "UPSTOX_REFRESH_FAILED_USING_CACHED_QUOTE",
-                    "cache_age_seconds": round(max(0, now - cache_at), 1)}
-        return {"status": "UPSTOX_QUOTES_UNAVAILABLE", "source": "Upstox Full Market Quotes V3",
-                "as_of": None, "instruments": [], "order_execution_enabled": False}
+        return yahoo_fallback(now, cache, cache_at)
     except Exception as exc:
-        # Never replace missing or failed upstream data with estimates.
         print("PREMARKET_UPSTOX_QUOTES_UNAVAILABLE:", type(exc).__name__, flush=True)
-        if cache:
-            return {**cache, "status": "UPSTOX_REFRESH_FAILED_USING_CACHED_QUOTE",
-                    "cache_age_seconds": round(max(0, now - cache_at), 1)}
-        return {"status": "UPSTOX_QUOTES_UNAVAILABLE", "source": "Upstox Full Market Quotes V3",
-                "as_of": None, "instruments": [], "order_execution_enabled": False}
+        return yahoo_fallback(now, cache, cache_at)
 
 @app.get("/api/v2/trades")
 def get_trades():
