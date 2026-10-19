@@ -35,6 +35,7 @@ def get_premarket_data():
         return {"status": "UPSTOX_TOKEN_UNAVAILABLE", "source": "Upstox Global Instruments",
                 "as_of": None, "instruments": [], "order_execution_enabled": False}
 
+    stage = "global_instruments"
     try:
         catalog = getattr(get_premarket_data, "_catalog", None)
         catalog_at = getattr(get_premarket_data, "_catalog_at", 0.0)
@@ -76,6 +77,7 @@ def get_premarket_data():
         if "GIFT NIFTY" not in selected:
             raise ValueError("GIFT NIFTY is not present in the Upstox global instruments file")
 
+        stage = "global_quotes"
         keys = [item["key"] for item in selected.values()]
         query = urllib.parse.urlencode({"instrument_key": ",".join(keys)})
         request = urllib.request.Request(
@@ -118,6 +120,14 @@ def get_premarket_data():
         get_premarket_data._cache = result
         get_premarket_data._cache_at = now
         return {**result, "cache_age_seconds": 0}
+    except urllib.error.HTTPError as exc:
+        # Log only the upstream stage and HTTP status; never log the access token.
+        print("PREMARKET_UPSTOX_HTTP_ERROR:", stage, exc.code, flush=True)
+        if cache:
+            return {**cache, "status": "UPSTOX_REFRESH_FAILED_USING_CACHED_QUOTE",
+                    "cache_age_seconds": round(max(0, now - cache_at), 1)}
+        return {"status": "UPSTOX_QUOTES_UNAVAILABLE", "source": "Upstox Full Market Quotes V3",
+                "as_of": None, "instruments": [], "order_execution_enabled": False}
     except Exception as exc:
         # Never replace missing or failed upstream data with estimates.
         print("PREMARKET_UPSTOX_QUOTES_UNAVAILABLE:", type(exc).__name__, flush=True)
