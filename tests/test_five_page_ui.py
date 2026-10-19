@@ -435,6 +435,7 @@ class FivePageUiTests(unittest.TestCase):
         config = json.loads((root / "v2/frontend/vercel.json").read_text(encoding="utf-8"))
         expected = {
             "/api/v2/scanner": "https://nse-momentum-scanner-api.onrender.com/api/v2/scanner",
+            "/api/v2/top-momentum-setups": "https://nse-momentum-scanner-api.onrender.com/api/v2/top-momentum-setups",
             "/api/v2/nifty200-stock-board": "https://nse-momentum-scanner-api.onrender.com/api/v2/nifty200-stock-board",
             "/api/v2/quality-ratings": "https://nse-momentum-scanner-api.onrender.com/api/v2/quality-ratings",
             "/api/v2/nifty200-feed-health": "https://nse-momentum-scanner-api.onrender.com/api/v2/nifty200-feed-health",
