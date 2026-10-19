@@ -454,6 +454,16 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("!fresh(rating)||!fresh(row)||row.signal!==rating.signal", self.html)
         self.assertIn("localStorage.setItem(SCORE_CACHE_KEY,JSON.stringify(next))", self.html)
         self.assertIn("const counts={ALL:searched.length,BUY:searched.filter(x=>validRating(x)?.signal==='BUY')", self.html)
+        self.assertIn("state.historicalRatings=Array.isArray(results[2].value.historical_ratings)?results[2].value.historical_ratings:[]", self.html)
+        self.assertIn("rating.data_status!=='HISTORICAL_LAST_STORED_CANDLE'", self.html)
+
+    def test_quality_api_supplies_historical_scores_separately_from_live_ratings(self):
+        api = (pathlib.Path(__file__).resolve().parents[1] / "v2/backend/api.py").read_text(encoding="utf-8")
+        quality = api[api.index('@app.get("/api/v2/quality-ratings")'):]
+        self.assertIn('"historical_ratings": []', quality)
+        self.assertIn('"data_status": "HISTORICAL_LAST_STORED_CANDLE"', quality)
+        self.assertIn('fresh = session_open and stamp.date() == now.date() and age <= timedelta(minutes=3)', quality)
+        self.assertIn('timedelta(days=30)', quality)
 
     def test_top_buy_ranking_excludes_stale_ratings(self):
         self.assertIn("x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)", self.html)
