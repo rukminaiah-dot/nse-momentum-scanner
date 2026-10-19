@@ -1,6 +1,6 @@
 # PR #9 — Release acceptance and handoff
 
-Status checked: 2026-10-18. This is an evidence-based gate ledger, **not** a release approval.
+Status checked: 2026-10-19. This is an evidence-based gate ledger, **not** a release approval.
 PR: https://github.com/rukminaiah-dot/nse-momentum-scanner/pull/9
 Branch: `feature/isolated-recovery-worker-manager-integration` into `feature/atomic-candle-state-prototype`.
 
@@ -74,3 +74,12 @@ Do not add further synthetic tests merely to increase test count. New tests or i
 - Commit `4df9fa127f82078150b1ec07c3c4e80a400690b2` validates cumulative-volume values before converting or updating the per-symbol baseline. Nonnumeric, non-finite, negative, and overflowing values are ignored for that tick; valid price processing continues with zero minute volume.
 - The scanner tick lifecycle test covers malformed volume values and confirms they neither crash the callback nor poison the baseline. Worker Manager Integration [run 39112602992](https://github.com/rukminaiah-dot/nse-momentum-scanner/actions/runs/39112602992), Atomic Candle State [run 39112602959](https://github.com/rukminaiah-dot/nse-momentum-scanner/actions/runs/39112602959), and Five-Page UI Contract [run 39112602973](https://github.com/rukminaiah-dot/nse-momentum-scanner/actions/runs/39112602973) passed; Vercel Preview is Ready.
 - This closes the identified malformed-volume callback risk only. Full lifecycle parity, historical-decision acceptance, approved performance criteria, independent review and any live-data verification remain open or out of scope. The PR remains draft and unmerged.
+
+
+## 2026-10-19 completion pass
+
+- **Read-only live API and Vercel route integration:** at 11:21 IST, all four core GET routes returned HTTP 200 through both upstream Render and the Vercel project domain; 203 scanner rows were present, the stock board had 195/200 fresh candles, and the sampled rating sets matched scanner symbol, signal, and candle timestamp. Feed health reported 200/200 recent ticks; ratings remained research-only with volume unverified and order execution disabled. This is shape/alignment evidence, not a price-accuracy guarantee.
+- **Independent index spot check:** at 11:33 IST, official NSE values and app completed candles were close for NIFTY 50 and NIFTY BANK; both previous-close values matched exactly. The quote and candle timestamps were asynchronous, so exact OHLCV parity is still open. The BSE page returned HTTP 403 from this environment; SENSEX independent parity is not verified.
+- **Known restart-preload defect fixed on the draft branch:** scanner startup now retains all unique completed current-session candles rather than only the last 60, while still excluding the forming candle. Restart regression compares exact EMA9/EMA20, momentum, trend and signal results through a 375-candle synthetic session. At code commit `14d36dc`, Worker Manager Integration run 743, Atomic Candle State run 452, and Five-Page UI Contract run 448 passed.
+- **Current CI:** all three workflows passed again on the latest check commit `2157c0b` (Worker Manager run 747, Atomic run 454, UI run 452); Vercel check reported success. The protected Preview browser still redirects to Vercel login in this environment, so a rendered-page smoke check is open.
+- **Release hold remains:** no approved historical dataset / expected decision output or performance threshold was attached during this pass; full live scanner lifecycle parity, exact OHLCV verification for all three indices, independent review, performance acceptance, branch-policy decision, and explicit merge/deploy approval remain open. PR #9 remains draft and unmerged. No production deployment, broker credential, database mutation, retention activation, or order execution occurred.
