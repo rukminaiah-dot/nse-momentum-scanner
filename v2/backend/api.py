@@ -666,9 +666,9 @@ def quality_ratings():
     output = {"as_of_ist": now.isoformat(), "universe_size": len(universe),
               "status": "MARKET_CLOSED" if not session_open else "NO_VERIFIED_SETUPS",
               "mode": "RESEARCH_ONLY", "order_execution_enabled": False,
-              "ratings": [], "unrated_count": len(universe)}
-    if not session_open:
-        return output
+              "ratings": [], "historical_ratings": [],
+              "historical_ratings_max_age_days": 30,
+              "unrated_count": len(universe)}
     try:
         with sqlite3.connect(DB_PATH, timeout=5) as db:
             db.row_factory = sqlite3.Row
@@ -683,7 +683,8 @@ def quality_ratings():
             continue
         try:
             stamp = datetime.strptime(row["updated_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=ZoneInfo("Asia/Kolkata"))
-            if stamp.date() != now.date() or not timedelta(0) <= now - stamp <= timedelta(minutes=3):
+            age = now - stamp
+            if not timedelta(0) <= age <= timedelta(days=30):
                 continue
             price, e9, e20, mom = (float(row[k]) for k in ("price", "ema9", "ema20", "momentum"))
             if not all(isfinite(v) for v in (price, e9, e20, mom)) or min(price, e9, e20) <= 0:
@@ -704,7 +705,7 @@ def quality_ratings():
             score = min(100, round(40 + min(25, abs(mom) * 5)
                                    + min(20, gap_pct * 20)
                                    + (15 if trend == ("BULLISH" if bullish else "BEARISH") else 0)))
-            output["ratings"].append({
+            rating = {
                 "symbol": symbol, "type": "INDEX" if index else "STOCK",
                 "signal": direction, "rating": score,
                 "rating_basis": "CANDLE_ONLY_HEURISTIC",
@@ -712,10 +713,20 @@ def quality_ratings():
                 "trend_5m": trend, "candle_ist": row["updated_at"],
                 "trade_status": "RESEARCH_ONLY", "volume_verified": False,
                 "reason": "RVOL_AND_LIQUIDITY_NOT_INCLUDED_IN_SCORE",
-            })
+            }
+            fresh = session_open and stamp.date() == now.date() and age <= timedelta(minutes=3)
+            if fresh:
+                output["ratings"].append(rating)
+            else:
+                output["historical_ratings"].append({
+                    **rating,
+                    "data_status": "HISTORICAL_LAST_STORED_CANDLE",
+                })
         except (TypeError, ValueError, OverflowError):
             continue
     output["ratings"].sort(key=lambda x: (-x["rating"], x["symbol"]))
+    output["historical_ratings"].sort(key=lambda x: (-x["rating"], x["symbol"]))
+    output["historical_ratings_count"] = len(output["historical_ratings"])
     output["unrated_count"] = len(universe) - len(output["ratings"])
     if output["ratings"]:
         output["status"] = "CANDLE_RATINGS_AVAILABLE"
