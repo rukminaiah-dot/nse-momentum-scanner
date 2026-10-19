@@ -27,3 +27,14 @@
 - Explicit deployment approval after evidence is shared.
 
 **Current known limitations:** live RVOL, global indices/FII/DII, company news, analyst ratings, financials, true reversal-event tracking, and durable automatic BUY→SELL capture are not verified/implemented. Never mark them complete solely from UI placeholders.
+
+
+## 2026-10-19 live read-only verification (11:07 IST)
+
+- Direct GET checks to the production Render API returned HTTP 200 for feed health, scanner results, the stock board, and quality ratings. Feed health reported market open, status `REPORTING`, and 200/200 NIFTY 200 symbols with a tick in the prior 120 seconds; order execution was `false`.
+- The scanner returned 203 rows: the 200-stock universe plus NIFTY 50, BANK NIFTY, and SENSEX. All three index rows were timestamped 11:06 IST and within the frontend's three-minute freshness window at observation time. Index labels matched the expected three tracked instruments in the API response. This is label/shape verification, not independent quote-price verification.
+- The stock board returned 196/200 fresh completed-candle rows. Four were correctly marked `HISTORICAL`: BLUESTARCO (11:01), BOSCHLTD (10:51), MRF (10:35), and PAGEIND (10:50). This can coexist with 200/200 recent ticks because feed tick freshness (120 seconds) and persisted scanner-candle freshness (three minutes) are separate measurements. The UI's live ranking paths require fresh board rows and aligned fresh ratings, so these four do not enter current signal rankings.
+- The quality endpoint returned five ratings in `RESEARCH_ONLY` mode; all use the `CANDLE_ONLY_HEURISTIC` basis, have `volume_verified=false`, and report order execution disabled. This does not verify RVOL, liquidity, independent signal accuracy, or justify an order.
+- The connection report's last recorded event was `CONNECTED` at 09:52:03 IST. The endpoint itself cautions that a last event is not a continuous-connection guarantee; the fresh-tick counts are the current coverage evidence.
+- The UI health panel now shows tick coverage separately from fresh completed-candle coverage and names each window. Five-page UI contract test added for those labels and the stale-row exclusion explanation.
+- Verification boundary: Vercel's protected preview redirected this environment to login, so the deployed Vercel proxy/browser rendering could not be independently smoke-tested here. Official independent live index-price comparison and full broker/Upstox payload audit were not completed; the public search result available during this session was stale. No broker credentials or order routes were accessed, and no production code, database, deployment setting, or orders were changed.
