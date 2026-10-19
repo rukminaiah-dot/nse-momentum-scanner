@@ -45,3 +45,12 @@
 - Repeated the read-only API checks in parallel. Feed health remained `REPORTING` with 200/200 recent ticks; the stock board reported 195/200 fresh completed candles. The change from 196 to 195 confirms the per-minute coverage number is live and time-dependent.
 - All eight quality ratings in this sample matched a scanner row with the same candle timestamp and signal. Stock ratings also matched a `LIVE_FRESH` board row. All were `RESEARCH_ONLY`, candle-heuristic scores, and order execution remained disabled.
 - This confirms response-shape and freshness alignment for the sampled rows only. Independent exchange quote validation and Vercel browser-route verification remain outstanding.
+
+
+### 11:21 IST live scanner and Vercel route integration recheck
+
+- Read-only GET requests to the upstream Render API and the Vercel project domain both returned HTTP 200 for `/api/v2/scanner`, `/api/v2/nifty200-stock-board`, `/api/v2/quality-ratings`, and `/api/v2/nifty200-feed-health`. Response top-level shapes matched the expected contracts (scanner list; other endpoints objects), confirming the Vercel same-origin rewrites reach the API.
+- The upstream sample returned 203 scanner rows (200 stocks and three tracked indices), 195/200 fresh board candles, and 6 candle ratings. The Vercel request sample returned the same row count and 195/200 fresh board candles, with 7 ratings. Rating counts can change between requests as the live scanner publishes new completed-minute results.
+- Within each host's captured response set, every returned rating had a matching scanner symbol, signal, and candle time (`updated_at` on scanner rows matches `candle_ist` on ratings). Returned ratings were `RESEARCH_ONLY`, `CANDLE_ONLY_HEURISTIC`, and `volume_verified=false`. Feed health reported `REPORTING`, 200/200 recent ticks, and order execution disabled.
+- The feature-branch UI source loads scanner, stock-board, quality-rating and feed-health routes together, applies the three-minute timestamp freshness check, and excludes stale or unaligned scores from BUY/SELL rankings. Its API proxy route responses are now independently confirmed; the protected feature Preview's rendered page is still not browser-smoke-tested in this environment.
+- Verification boundary: HTTP response/shape and cross-response consistency checks do not compare prices against an independent exchange feed or establish signal accuracy. The check did not use broker credentials, mutate production, enable orders, or deploy the feature branch.
