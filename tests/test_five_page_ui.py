@@ -201,6 +201,11 @@ class FivePageUiTests(unittest.TestCase):
                          "fav.length<20", "localStorage.setItem('nse-favourites-v1'"):
             self.assertIn(required, self.html)
 
+    def test_dashboard_storage_handlers_exist_for_board_controls(self):
+        for required in ("function getFavourites()", "function toggleFavourite(symbol)",
+                         "function rememberLastRatings()", "localStorage.setItem(SCORE_CACHE_KEY"):
+            self.assertIn(required, self.html)
+
     def test_dashboard_layout_persists(self):
         for required in ("initDashboardLayout();", "edit-layout", "reset-layout",
                          "nse-dashboard-section-order-v1"):
@@ -481,7 +486,7 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("localStorage.setItem(SCORE_CACHE_KEY,JSON.stringify(next))", self.html)
         self.assertIn("const counts={ALL:searched.length,BUY:searched.filter(x=>validRating(x)?.signal==='BUY')", self.html)
         self.assertIn("state.historicalRatings=Array.isArray(results[2].value.historical_ratings)?results[2].value.historical_ratings:[]", self.html)
-        self.assertIn("rating.data_status!=='HISTORICAL_LAST_STORED_CANDLE'", self.html)
+        self.assertIn("rating.data_status==='HISTORICAL_LAST_STORED_CANDLE'", self.html)
 
     def test_quality_api_supplies_historical_scores_separately_from_live_ratings(self):
         api = (pathlib.Path(__file__).resolve().parents[1] / "v2/backend/api.py").read_text(encoding="utf-8")
@@ -503,7 +508,7 @@ class FivePageUiTests(unittest.TestCase):
     def test_stock_signals_require_live_verified_candle_rating(self):
         self.assertIn("const live=Boolean(state.sessionOpen&&fresh(r)&&rating&&verifiedCandleScore(rating)&&r.signal===rating.signal", self.html)
         self.assertIn("x.type==='STOCK'&&x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)", self.html)
-        self.assertIn("WAIT — not independently verified fresh", self.html)
+        self.assertIn("No verified live BUY signals currently available", self.html)
 
     def test_no_broker_execution_claim(self):
         self.assertIn("Order execution", self.html)
