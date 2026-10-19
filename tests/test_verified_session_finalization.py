@@ -1,0 +1,102 @@
+"""Offline-only verified-calendar finalization tests; no live feed or timers."""
+import unittest
+from datetime import date, datetime, time
+from zoneinfo import ZoneInfo
+
+from v2.backend.candle_manager import CandleManager
+
+IST = ZoneInfo("Asia/Kolkata")
+DAY = date(2026, 10, 15)
+SCHEDULE = {DAY: (time(9, 15), time(15, 30))}
+
+
+def ms(hour, minute):
+    return int(datetime(2026, 10, 15, hour, minute, tzinfo=IST).timestamp() * 1000)
+
+
+class VerifiedSessionFinalizationTests(unittest.TestCase):
+    def setUp(self):
+        self.manager = CandleManager(log_closed_candles=False)
+        self.key = "TEST"
+        self.manager.update(self.key, 100, ms(15, 29), 5)
+
+    def finalize(self, hour, minute, schedule=SCHEDULE, verified=True, grace=5):
+        return self.manager.finalize_verified_session_end(
+            self.key, ms(hour, minute), schedule, DAY, DAY,
+            "NSE circular reviewed", verified, grace)
+
+    def test_finalizes_without_any_post_close_market_tick(self):
+        closed = self.finalize(15, 30)
+        self.assertIsNotNone(closed)
+        self.assertEqual((closed.close, closed.volume), (100, 5))
+        self.assertEqual(closed.timestamp, datetime(2026, 10, 15, 15, 29))
+        self.assertNotIn(self.key, self.manager.current)
+        self.assertEqual(len(self.manager.completed[self.key]), 1)
+        self.assertIsNone(self.finalize(15, 31))
+        self.assertEqual(len(self.manager.completed[self.key]), 1)
+
+    def test_refuses_unverified_or_missing_calendar(self):
+        self.assertIsNone(self.finalize(15, 30, verified=False))
+        self.assertIsNone(self.finalize(15, 30, schedule={}))
+        self.assertIn(self.key, self.manager.current)
+        self.assertNotIn(self.key, self.manager.completed)
+
+    def test_refuses_before_close_or_after_grace(self):
+        self.assertIsNone(self.finalize(15, 29))
+        self.assertIsNone(self.finalize(15, 36))
+        self.assertIn(self.key, self.manager.current)
+
+    def test_weekend_special_session_uses_explicit_calendar(self):
+        saturday = date(2026, 10, 17)
+        schedule = {saturday: (time(18, 0), time(19, 0))}
+        self.manager.current[self.key]["minute"] = datetime(2026, 10, 17, 18, 59)
+        closing_tick = int(datetime(2026, 10, 17, 19, 0,
+                                    tzinfo=IST).timestamp() * 1000)
+        closed = self.manager.finalize_verified_session_end(
+            self.key, closing_tick, schedule, saturday, saturday,
+            "Illustrative special-session notice", True)
+        self.assertIsNotNone(closed)
+        self.assertEqual(closed.timestamp, datetime(2026, 10, 17, 18, 59))
+        self.assertNotIn(self.key, self.manager.current)
+
+    def test_early_close_uses_calendar_final_minute(self):
+        schedule = {DAY: (time(9, 15), time(13, 0))}
+        self.manager.current[self.key]["minute"] = datetime(2026, 10, 15, 12, 59)
+        self.assertIsNone(self.finalize(12, 59, schedule=schedule))
+        closed = self.finalize(13, 0, schedule=schedule)
+        self.assertIsNotNone(closed)
+        self.assertEqual(closed.timestamp, datetime(2026, 10, 15, 12, 59))
+        self.assertIsNone(self.finalize(13, 1, schedule=schedule))
+        self.assertEqual(len(self.manager.completed[self.key]), 1)
+
+    def test_prior_day_candle_cannot_finalize_on_current_close(self):
+        previous = datetime(2026, 10, 14, 15, 29)
+        self.manager.current[self.key]["minute"] = previous
+        self.assertIsNone(self.finalize(15, 30))
+        self.assertEqual(self.manager.current[self.key]["minute"], previous)
+        self.assertNotIn(self.key, self.manager.completed)
+
+    def test_refuses_wrong_active_minute(self):
+        self.manager.current[self.key]["minute"] = datetime(2026, 10, 15, 15, 28)
+        self.assertIsNone(self.finalize(15, 30))
+        self.assertIn(self.key, self.manager.current)
+
+
+    def test_finalized_last_minute_cannot_reopen_with_delayed_tick(self):
+        self.assertIsNotNone(self.finalize(15, 30))
+        self.assertTrue(self.manager.is_verified_finalized_or_older(
+            self.key, ms(15, 29) + 45000))
+        self.assertIsNone(self.manager.update(
+            self.key, 300, ms(15, 29) + 45000, 40))
+        self.assertNotIn(self.key, self.manager.current)
+        self.assertEqual(len(self.manager.completed[self.key]), 1)
+        self.assertEqual(self.manager.completed[self.key][0].close, 100)
+        next_day = int(datetime(2026, 10, 16, 9, 15,
+                                tzinfo=IST).timestamp() * 1000)
+        self.assertIsNone(self.manager.update(self.key, 101, next_day, 2))
+        self.assertEqual(self.manager.current[self.key]["candle"].close, 101)
+        self.assertFalse(self.manager.is_verified_finalized_or_older(
+            self.key, ms(15, 29)))
+
+if __name__ == "__main__":
+    unittest.main()
