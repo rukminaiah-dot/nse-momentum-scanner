@@ -6,12 +6,16 @@
       "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/scanner"
     },
     {
-      "source": "/api/v2/nifty200-stock-board",
-      "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/nifty200-stock-board"
+      "source": "/api/v2/top-momentum-setups",
+      "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/top-momentum-setups"
     },
     {
       "source": "/api/v2/quality-ratings",
       "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/quality-ratings"
+    },
+    {
+      "source": "/api/v2/nifty200-stock-board",
+      "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/nifty200-stock-board"
     },
     {
       "source": "/api/v2/nifty200-feed-health",

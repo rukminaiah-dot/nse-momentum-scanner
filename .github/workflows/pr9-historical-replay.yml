@@ -36,11 +36,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     env:
+      PYTHONPATH: ${{ github.workspace }}
       NSE_RECOVERY_MODE: disabled
       NSE_ENABLE_VERIFIED_GAP_RECOVERY: "0"
       UPSTOX_ACCESS_TOKEN: ${{ secrets.UPSTOX_ACCESS_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+        with:
+          ref: feature/isolated-recovery-worker-manager-integration
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -52,7 +57,7 @@ jobs:
             exit 1
           fi
       - name: Install read-only history SDK
-        run: python -m pip install --disable-pip-version-check upstox-python-sdk
+        run: python -m pip install --disable-pip-version-check upstox-python-sdk requests
       - name: Fetch and trace in temporary private runner storage
         shell: bash
         env:
