@@ -2,6 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
+      "source": "/api/v2/premarket-data",
+      "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/premarket-data"
+    },
+    {
       "source": "/api/v2/scanner",
       "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/scanner"
     },
