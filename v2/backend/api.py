@@ -5,6 +5,7 @@ import sqlite3
 from fastapi import FastAPI
 from .database import DB_PATH
 from .stock_universe import NIFTY_200
+from .decision_learning import learning_report
 
 instrument_symbols = {key: symbol for symbol, key in NIFTY_200.items()}
 
@@ -39,6 +40,29 @@ def get_scanner_results():
     ).fetchall()
     con.close()
     return [dict(row) for row in rows]
+
+
+@app.get("/api/v2/scanner-status")
+def get_scanner_status():
+    """Read-only stored-result visibility; does not claim live feed freshness."""
+    from fastapi import HTTPException
+    try:
+        with sqlite3.connect(DB_PATH, timeout=10) as con:
+            count, latest = con.execute(
+                "SELECT COUNT(*), MAX(updated_at) FROM scanner_results"
+            ).fetchone()
+    except sqlite3.Error as exc:
+        raise HTTPException(
+            status_code=503, detail="Scanner result storage unavailable"
+        ) from exc
+    return {
+        "status": "STORED_RESULTS_AVAILABLE" if count else "NO_STORED_RESULTS",
+        "result_count": count,
+        "latest_result_updated_at": latest,
+        "live_feed_verified": False,
+        "signal_freshness_verified": False,
+        "order_execution_enabled": False,
+    }
 
 
 @app.get("/api/v2/history")
@@ -81,6 +105,150 @@ def get_daily_trade_history():
             status_code=503,
             detail="Trade history temporarily unavailable"
         ) from exc
+
+
+@app.get("/api/v2/signal-activity")
+def signal_activity():
+    """Read-only signal lifecycle from persisted trade history, never infer execution."""
+    import os
+    from fastapi import HTTPException
+    url = os.environ.get("DATABASE_URL")
+    if not url:
+        return {"status": "HISTORY_STORAGE_NOT_CONFIGURED", "active": [], "completed": [],
+                "source": "daily_trade_history", "order_execution_enabled": False}
+    try:
+        import psycopg
+        from psycopg.rows import dict_row
+        with psycopg.connect(url, row_factory=dict_row, connect_timeout=5) as con:
+            records = con.execute("""
+                SELECT id, symbol, buy_time, buy_price, sell_time, sell_price,
+                       quantity, pnl_per_share, pnl_total, pnl_pct, status,
+                       buy_reason, exit_reason, trade_date
+                FROM daily_trade_history
+                ORDER BY GREATEST(COALESCE(sell_time, buy_time), buy_time) DESC NULLS LAST, id DESC LIMIT 501
+            """).fetchall()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Persisted signal history unavailable") from exc
+    history_truncated = len(records) > 500
+    records = records[:500]
+    active, completed = [], []
+    incomplete_records = 0
+    for record in records:
+        row = dict(record)
+        row["symbol"] = instrument_symbols.get(row["symbol"], row["symbol"])
+        # A recorded entry without exit is an active *record*, not proof of an executed order.
+        if row["buy_price"] is None:
+            incomplete_records += 1
+            continue
+        if row["sell_time"] is not None and row["sell_price"] is not None:
+            row["display_status"] = "SELL / EXIT"
+            completed.append(row)
+        elif row["sell_time"] is None and row["sell_price"] is None:
+            row["display_status"] = "BUY ACTIVE"
+            active.append(row)
+        else:
+            incomplete_records += 1
+    return {"status": "RECORDED_HISTORY", "history_limit": 500, "history_truncated": history_truncated, "incomplete_records": incomplete_records, "active": active, "completed": completed,
+            "source": "daily_trade_history", "mode": "RECORDED_SIGNALS_NOT_BROKER_EXECUTIONS",
+            "order_execution_enabled": False}
+
+
+@app.get("/api/v2/pnl-history")
+def pnl_history():
+    """Return a complete, read-only seven-day IST aggregate of recorded exits."""
+    import os
+    from datetime import datetime, time, timedelta
+    from zoneinfo import ZoneInfo
+    from fastapi import HTTPException
+
+    source = "daily_trade_history"
+    url = os.environ.get("DATABASE_URL")
+    if not url:
+        return {
+            "status": "HISTORY_STORAGE_NOT_CONFIGURED",
+            "source": source,
+            "days_requested": 7,
+            "complete": False,
+            "days": [],
+            "order_execution_enabled": False,
+        }
+
+    ist = ZoneInfo("Asia/Kolkata")
+    today = datetime.now(ist).date()
+    first_day = today - timedelta(days=6)
+    start_at = datetime.combine(first_day, time.min, tzinfo=ist)
+    end_at = datetime.combine(today + timedelta(days=1), time.min, tzinfo=ist)
+    try:
+        import psycopg
+        from psycopg.rows import dict_row
+        with psycopg.connect(url, row_factory=dict_row, connect_timeout=5) as con:
+            rows = con.execute("""
+                SELECT
+                    (sell_time AT TIME ZONE 'Asia/Kolkata')::date AS pnl_date,
+                    COUNT(*) AS exit_count,
+                    COUNT(*) FILTER (WHERE
+                        buy_time IS NULL OR buy_price IS NULL OR sell_price IS NULL
+                        OR quantity IS NULL OR buy_price <= 0 OR sell_price <= 0
+                        OR quantity <= 0 OR sell_time < buy_time
+                        OR buy_time > NOW() + INTERVAL '1 minute'
+                        OR sell_time > NOW() + INTERVAL '1 minute'
+                    ) AS invalid_count,
+                    SUM(CASE WHEN
+                        buy_time IS NOT NULL AND buy_price IS NOT NULL
+                        AND sell_price IS NOT NULL AND quantity IS NOT NULL
+                        AND buy_price > 0 AND sell_price > 0 AND quantity > 0
+                        AND sell_time >= buy_time
+                        AND buy_time <= NOW() + INTERVAL '1 minute'
+                        AND sell_time <= NOW() + INTERVAL '1 minute'
+                        THEN (sell_price - buy_price) * quantity
+                        ELSE 0 END) AS total_pnl
+                FROM daily_trade_history
+                WHERE sell_time >= %s AND sell_time < %s
+                GROUP BY pnl_date
+                ORDER BY pnl_date
+            """, (start_at, end_at)).fetchall()
+
+        by_day = {row["pnl_date"].isoformat(): row for row in rows}
+        days = []
+        complete = True
+        for offset in range(7):
+            day = (first_day + timedelta(days=offset)).isoformat()
+            row = by_day.get(day)
+            exits = int(row["exit_count"]) if row else 0
+            invalid = int(row["invalid_count"]) if row else 0
+            total = row["total_pnl"] if row else None
+            if invalid or (exits and total is None):
+                total = None
+                complete = False
+            elif total is not None:
+                total = float(total)
+                if not __import__("math").isfinite(total):
+                    total = None
+                    complete = False
+            days.append({
+                "date": day,
+                "exit_count": exits,
+                "invalid_count": invalid,
+                "total_pnl": total,
+            })
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Persisted P&L history unavailable") from exc
+
+    return {
+        "status": "AGGREGATED_HISTORY",
+        "source": source,
+        "days_requested": 7,
+        "complete": complete,
+        "days": days,
+        "mode": "RECORDED_SIGNALS_NOT_BROKER_EXECUTIONS",
+        "order_execution_enabled": False,
+    }
+
+
+@app.get("/api/v2/decision-learning")
+def decision_learning_status():
+    """Read-only loss diagnostics and shadow-model readiness."""
+    return learning_report(DB_PATH)
 
 @app.get("/history")
 def history_page():
@@ -174,8 +342,11 @@ def nifty200_feed_health():
     except (OSError, ValueError, TypeError):
         base["connection_last_event"] = "UNKNOWN"
         base["connection_state_note"] = "No connection event recorded"
-    if base["market_session"] == "CLOSED" and base["status"] == "STALE_REPORT":
-        base["status"] = "MARKET_CLOSED_TICK_REPORT_STALE"
+    if base["market_session"] == "CLOSED":
+        if base["status"] == "STALE_REPORT":
+            base["status"] = "MARKET_CLOSED_TICK_REPORT_STALE"
+        elif base["status"] == "NO_FEED_REPORT":
+            base["status"] = "MARKET_CLOSED_NO_FEED_REPORT"
     return base
 
 

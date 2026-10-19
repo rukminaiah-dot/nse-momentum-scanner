@@ -102,8 +102,10 @@ class AtomicCandleStateTests(unittest.TestCase):
         count = manager.insert_missing_completed(
             'X', {old.timestamp: old, recent.timestamp: recent}, limit=1)
         history, _ = manager.snapshot('X')
+        # The limit caps recovered minutes, not preexisting live history.
         self.assertEqual([c.timestamp for c in history],
-                         [datetime(2026, 10, 16, 9, 18)])
+                         [datetime(2026, 10, 16, 9, 15),
+                          datetime(2026, 10, 16, 9, 18)])
         self.assertEqual(count, 1)
 
 
@@ -465,6 +467,23 @@ class AtomicCandleStateTests(unittest.TestCase):
             "X", {gap.timestamp: gap}, datetime(2026, 10, 20, 9, 15)), 0)
         self.assertEqual(manager.merge_verified_recovery(
             "X", {gap.timestamp: gap}, None), 0)
+
+
+    def test_recovery_preserves_preexisting_history_above_limit(self):
+        manager = CandleManager()
+        for minute in range(15, 21):
+            manager.update("X", 100 + minute, millis(9, minute))
+        # Six completed candles: limit=2 must not remove any of them.
+        manager.update("X", 121, millis(9, 21))
+        before, _ = manager.snapshot("X")
+        self.assertEqual(len(before), 6)
+        gap = recovered(9, 14, 99)
+        self.assertEqual(manager.insert_missing_completed(
+            "X", {gap.timestamp: gap}, limit=2), 1)
+        after, _ = manager.snapshot("X")
+        self.assertEqual(len(after), 7)
+        self.assertEqual([c.timestamp for c in after if c.timestamp != gap.timestamp],
+                         [c.timestamp for c in before])
 
 
 if __name__ == '__main__':

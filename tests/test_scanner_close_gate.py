@@ -176,6 +176,7 @@ class ScannerCloseGateTests(unittest.TestCase):
             "candles": fake, "key": "X", "price": 100,
             "ts": 1, "minute_volume": 0,
             "write_candle_quality": lambda: None,
+            "request_recovery_on_gap": lambda key: False,
             "analyse": lambda key: analyses.append(key),
         }
         exec(compile(snippet, str(SCANNER), "exec"), scope)

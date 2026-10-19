@@ -5,10 +5,22 @@ from zoneinfo import ZoneInfo
 from .candles import Candle
 
 class CandleManager:
-    def __init__(self):
+    def __init__(self, max_completed_per_symbol=None):
+        """Optional retention cap; None preserves the existing unlimited behavior."""
+        if max_completed_per_symbol is not None and (
+            isinstance(max_completed_per_symbol, bool)
+            or not isinstance(max_completed_per_symbol, int)
+            or max_completed_per_symbol < 1
+        ):
+            raise ValueError("max_completed_per_symbol must be a positive integer or None")
+        self.max_completed_per_symbol = max_completed_per_symbol
         self._state_lock = RLock()
         self.current = {}
         self.completed = {}
+
+    def _retain_latest(self, candles):
+        cap = self.max_completed_per_symbol
+        return candles if cap is None else candles[-cap:]
 
     def minute_key(self, ts):
         return datetime.fromtimestamp(float(ts) / 1000, ZoneInfo("Asia/Kolkata")).replace(second=0, microsecond=0, tzinfo=None)
@@ -29,7 +41,7 @@ class CandleManager:
         with self._state_lock:
             if key in self.current:
                 raise RuntimeError("cannot preload after live candle started")
-            self.completed[key] = [copy(candle) for candle in candles]
+            self.completed[key] = self._retain_latest([copy(candle) for candle in candles])
 
     def insert_missing_completed(self, key, recovered, limit=60):
         """Repair history only; never emit a candle-closed event or signal.
@@ -58,12 +70,17 @@ class CandleManager:
                     continue
                 # Do not retain a mutable Candle owned by the recovery caller.
                 by_minute[minute] = copy(candle)
-            retained = sorted(by_minute)[-limit:]
+            # Recovery must not evict live/preloaded history used for indicators.
+            # Keep every existing minute; cap only the recovered candidates.
+            recovered_minutes = sorted(minute for minute in by_minute
+                                       if minute not in original_minutes)[-limit:]
+            retained = sorted(original_minutes.union(recovered_minutes))
             if not any(minute in recovered and minute not in original_minutes
                        for minute in retained):
                 return 0
-            self.completed[key] = [by_minute[t] for t in retained]
-            return sum(1 for minute in retained
+            self.completed[key] = self._retain_latest([by_minute[t] for t in retained])
+            final_minutes = {c.timestamp for c in self.completed[key]}
+            return sum(1 for minute in final_minutes
                        if minute in recovered and minute not in original_minutes)
 
     def merge_verified_recovery(self, key, recovered, snapshot_active_minute):
@@ -97,7 +114,10 @@ class CandleManager:
             if item:
                 closed = item["candle"]
                 closed.timestamp = item["minute"]
-                self.completed.setdefault(key, []).append(closed)
+                history = self.completed.setdefault(key, [])
+                history.append(closed)
+                if self.max_completed_per_symbol is not None:
+                    del history[:-self.max_completed_per_symbol]
                 print("CANDLE_CLOSED", key, closed.__dict__)
             self.current[key] = {"minute": minute, "candle": Candle(price, volume)}
             return closed if item else None
