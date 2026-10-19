@@ -134,3 +134,9 @@ Do not add further synthetic tests merely to increase test count. New tests or i
 - Candle quality reported 200/200 stocks with six consecutive completed candles today, recent ticks and positive last-candle volume. Top setups returned `NO_QUALIFYING_SETUPS` (200 fresh rows considered, 0 stale rejected), so no candidate list was fabricated.
 - Vercel and Render route response shapes and counts matched for the sampled core routes. This is point-in-time wiring/freshness evidence, not an uninterrupted-connectivity guarantee, independent SENSEX quote check, or historical decision-parity result. Orders remained disabled; no production config, deployment, or database was changed.
 - At the then-current PR head `a06b464e8d8e6bff0ba6480300cb2654936bbb11`, Worker Manager Integration, Atomic Candle State, and Five-Page UI Contract CI all passed; Vercel check passed. PR #9 remained draft/unmerged with no submitted reviews.
+
+
+### 13:29 IST production signal-delay sample
+
+- Read 100 recent `SIGNAL_TIMING` application-log records from the production Render scanner. Recorded delay percentiles were p50 **3.9s**, p95 **20.9s**, maximum **79.6s**; 1/100 exceeded 60s. The feed/board checks in the same pass reported all 200 stocks fresh under the dashboard's 180-second freshness rule. A separate log record showed the expected `MISSING_MINUTE` continuity block for one symbol; the scanner did not treat the gap as a valid continuous signal.
+- This is a small, point-in-time log sample, not a representative service-wide latency SLO or lifecycle acceptance. No owner-approved performance threshold exists yet; production configuration and order behavior were unchanged.
