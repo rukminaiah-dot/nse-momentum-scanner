@@ -464,6 +464,11 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn('"data_status": "HISTORICAL_LAST_STORED_CANDLE"', quality)
         self.assertIn('fresh = session_open and stamp.date() == now.date() and age <= timedelta(minutes=3)', quality)
         self.assertIn('timedelta(days=30)', quality)
+        self.assertIn('"rating_basis": "HISTORICAL_INDICATOR_HEURISTIC" if historical', quality)
+        self.assertIn('if e9 > e20 and mom > 0:', quality)
+        self.assertIn('"directional_bias": "BULLISH" if bullish else "BEARISH" if bearish else "NEUTRAL"', quality)
+        self.assertIn('const historical=x=>state.historicalRatings.find', self.html)
+        self.assertIn('directional_bias||\'neutral\').toLowerCase()', self.html)
 
     def test_top_buy_ranking_excludes_stale_ratings(self):
         self.assertIn("x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)", self.html)
