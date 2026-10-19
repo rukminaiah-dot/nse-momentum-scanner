@@ -43,7 +43,7 @@ def get_premarket_data():
                 "https://assets.upstox.com/market-quote/instruments/exchange/global.json.gz",
                 headers={"User-Agent": "NSE-Momentum-Scanner/1.0", "Accept": "application/gzip"},
             )
-            with urllib.request.urlopen(request, timeout=8) as response:
+            with urllib.request.urlopen(request, timeout=5) as response:
                 raw = gzip.decompress(response.read())
             catalog = json.loads(raw.decode("utf-8"))
             if not isinstance(catalog, list):
@@ -82,7 +82,7 @@ def get_premarket_data():
             "https://api.upstox.com/v3/market-quote/quotes?" + query,
             headers={"Authorization": "Bearer " + token, "Accept": "application/json"},
         )
-        with urllib.request.urlopen(request, timeout=8) as response:
+        with urllib.request.urlopen(request, timeout=5) as response:
             payload = json.loads(response.read().decode("utf-8"))
         if not isinstance(payload, dict) or payload.get("status") != "success" or not isinstance(payload.get("data"), dict):
             raise ValueError("Upstox quote response was not successful")
