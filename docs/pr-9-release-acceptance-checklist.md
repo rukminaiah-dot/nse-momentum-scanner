@@ -140,3 +140,9 @@ Do not add further synthetic tests merely to increase test count. New tests or i
 
 - Read 100 recent `SIGNAL_TIMING` application-log records from the production Render scanner. Recorded delay percentiles were p50 **3.9s**, p95 **20.9s**, maximum **79.6s**; 1/100 exceeded 60s. The feed/board checks in the same pass reported all 200 stocks fresh under the dashboard's 180-second freshness rule. A separate log record showed the expected `MISSING_MINUTE` continuity block for one symbol; the scanner did not treat the gap as a valid continuous signal.
 - This is a small, point-in-time log sample, not a representative service-wide latency SLO or lifecycle acceptance. No owner-approved performance threshold exists yet; production configuration and order behavior were unchanged.
+
+
+### 13:36 IST stale-row suppression recheck
+
+- Render returned HTTP 200 for feed health, scanner, stock board, candle quality, and top setups; production Vercel returned HTTP 200 for feed health, scanner, and stock board. Scanner contained 203/203 unique rows through the 13:35 IST candle. Board freshness was 198/200, with every board symbol present in scanner output; Vercel and Render matched on core-route row counts.
+- Feed health reported `REPORTING`, 200/200 recent ticks, 7.2-second snapshot age, and orders disabled. Candle quality reported 198/200 with six consecutive completed candles and 200/200 with recent ticks/positive last-candle volume. Top setups returned `NO_QUALIFYING_SETUPS`, considering 198 fresh stocks and rejecting 2 stale rows. This confirms stale-row suppression remained active in this sample; it does not establish continuous uptime or signal accuracy.
