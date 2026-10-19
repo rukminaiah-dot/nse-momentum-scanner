@@ -95,3 +95,10 @@ Do not add further synthetic tests merely to increase test count. New tests or i
 
 - The 11:44 stock-board symbol set was also compared directly with the PR branch's `NIFTY_200` universe: 200/200 symbols matched exactly, with no missing, unexpected, or duplicate symbols. The 203-row scanner response contained 203 unique symbols.
 - Additional UI history routes were checked at origin: offline Preview `/health`, `/api/v2/decision-learning`, `/api/v2/pnl-history`, and `/api/v2/signal-activity` all returned HTTP 200 after cold start. They correctly reported no market data / no configured history. The live GET-only `/api/v2/trades` route returned HTTP 200. The current production Vercel deployment returned 404 for the newer offline-history paths because those rewrites belong to the draft Preview branch; the latest Vercel Preview is marked Ready but protected from this unauthenticated browser session.
+
+
+### 11:51 IST candle-quality and candidate-rank check
+
+- `/api/v2/candle-feed-quality` returned HTTP 200: 200/200 recent ticks, 200/200 positive last-candle volumes, and 196/200 stocks with six consecutive completed candles today; 4 were flagged for a missing minute, none for overnight gaps or warmup. Order execution was disabled.
+- `/api/v2/top-momentum-setups` returned HTTP 200 with `NO_QUALIFYING_SETUPS`: 196 fresh stock rows considered and 4 stale rows rejected. This is an explicit empty result, not a failed request or fabricated ranking.
+- These quality/ranking endpoints reinforce the UI's stale-data suppression. They do not validate comparative RVOL, external liquidity, or exact signal accuracy.
