@@ -65,12 +65,29 @@ def get_premarket_data():
             previous_close = price - change
             if min(price, previous_close) <= 0:
                 return None
+            def site_signal(period):
+                match = re.search(r"\b" + re.escape(period) + r"\s+(Strong Buy|Strong Sell|Buy|Sell|Neutral)\b", text, re.I)
+                return match.group(1).upper() if match else None
+
+            def site_moving_averages(period_pattern):
+                match = re.search(period_pattern + r"\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)", text, re.I)
+                if not match:
+                    return None
+                return {"ma20": float(match.group(1).replace(",", "")),
+                        "ma50": float(match.group(2).replace(",", "")),
+                        "ma100": float(match.group(3).replace(",", ""))}
+
+            technical = {
+                "signals": {"5m": site_signal("5 Min"), "1h": site_signal("1 Hour"), "1d": site_signal("1 Day")},
+                "moving_averages": {"5m": site_moving_averages(r"5 Minutes"), "1h": site_moving_averages(r"1 Hour")},
+            }
             return {
                 "name": "SGX NIFTY (third-party site)", "status": "QUOTED",
                 "price": price, "previous_close": previous_close, "change": change,
                 "change_pct": float(quote.group(3)),
                 "last_trade_at": trade_time.astimezone(timezone.utc).isoformat(),
                 "site_as_of": as_of.astimezone(timezone.utc).isoformat(),
+                "technical": technical,
                 "latency": "600 Seconds", "source": "sgxnifty.org",
                 "source_url": "https://sgxnifty.org/", "source_type": "THIRD_PARTY_INDICATIVE",
             }
