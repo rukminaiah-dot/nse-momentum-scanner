@@ -332,7 +332,7 @@ def preload_history(key):
             loaded = select_completed_preload(
                 loaded, current, session_date=today, current_minute=current_minute
             )
-                print("INTRADAY PRELOAD:", key, len(loaded), "completed candles", flush=True)
+            print("INTRADAY PRELOAD:", key, len(loaded), "completed candles", flush=True)
         except Exception as exc:
             print("INTRADAY PRELOAD FAILED:", key, type(exc).__name__, flush=True)
 
