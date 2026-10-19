@@ -318,7 +318,8 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("x.exit_count===0?'no recorded exits':x.exit_count+' recorded exits", self.html)
         self.assertIn('role="group"', self.html)
         self.assertIn("numbers in parentheses are exit counts", self.html)
-        self.assertIn("x.exit_count+' recorded exits, signal P&L '", self.html)
+        self.assertIn("x.exit_count+' recorded exits, gross '", self.html)
+        self.assertIn("x.estimated_net_pnl", self.html)
 
     def test_pnl_chart_distinguishes_no_exit_days_from_zero_profit(self):
         self.assertIn("Last seven IST calendar days", self.html)
@@ -417,7 +418,20 @@ class FivePageUiTests(unittest.TestCase):
     def test_pnl_requires_recorded_entry_exit_and_quantity(self):
         self.assertIn("x.buy_price!=null&&x.sell_price!=null&&x.quantity!=null", self.html)
         self.assertIn("qty>0?(sell-buy)*qty:null", self.html)
-        self.assertIn("pnlFor(x)!=null?num(pnlFor(x)):'Not verified'", self.html)
+        self.assertIn("const chargesFor=x=>", self.html)
+        self.assertIn("table(['Stock','Entry','SELL exit','Gross P&L','Est. charges','Est. net']", self.html)
+        self.assertIn("gross!=null&&cost!=null?num(gross-cost):'Not verified'", self.html)
+
+    def test_pnl_history_returns_cost_adjusted_estimates_with_assumptions(self):
+        api = (pathlib.Path(__file__).resolve().parents[1] / "v2/backend/api.py").read_text(encoding="utf-8")
+        self.assertIn("AS estimated_costs", api)
+        self.assertIn('"estimated_net_pnl": net', api)
+        self.assertIn('"cost_estimate": {', api)
+        self.assertIn("LEAST(20, buy_price * quantity * 0.001)", api)
+        self.assertIn("0.00025", api)
+        self.assertIn("0.0000307", api)
+        self.assertIn("estimated_costs===null&&x.estimated_net_pnl===null", self.html)
+        self.assertIn("estimated net after indicative charges", self.html)
 
     def test_index_scanner_and_rating_must_agree(self):
         self.assertIn("const sig=aligned?score.signal:'WAIT'", self.html)
