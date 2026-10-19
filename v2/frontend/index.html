@@ -9,7 +9,7 @@
 @media (pointer:coarse) and (max-width:1100px){
 header{position:static;padding:14px 12px}
 nav[aria-label="Main pages"]{display:none}
-.mobile-nav{position:sticky;top:0;z-index:10;left:auto;right:auto;bottom:auto;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:2px;padding:7px 6px;background:rgba(13,23,39,.98);border-bottom:1px solid var(--line);box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.mobile-nav{position:sticky;top:0;z-index:10;left:auto;right:auto;bottom:auto;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:2px;padding:7px 6px;background:rgba(13,23,39,.98);border-bottom:1px solid var(--line);box-shadow:0 8px 24px rgba(0,0,0,.25);overflow:visible}
 .mobile-nav button{border:0;border-radius:10px;background:transparent;color:var(--muted);font-size:10px;line-height:1.2;padding:8px 2px;min-height:52px;white-space:normal}
 .mobile-nav button[aria-current="page"]{background:#15384b;color:#fff;box-shadow:inset 0 0 0 1px #2f7c91}
 .mobile-nav button:focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
