@@ -487,10 +487,23 @@ def on_tick(key, data):
     candles.update(key, price, ts, minute_volume)
     after = len(candles.completed.get(key, []))
 
-    # Analyse only when a minute candle has actually closed.
+    # Read-only diagnostics: opt-in and sampled to bound production log volume.
+    # Measures quality/analysis work only; excludes candles.update() and queueing.
     if after > before:
+        if os.getenv("FEED_TIMING_DIAGNOSTICS") == "1":
+            from time import perf_counter as diagnostic_perf_counter
+            diagnostic_started = diagnostic_perf_counter()
+            tick_age_ms = max(0, int(time.time() * 1000) - ts)
         write_candle_quality()
         analyse(key)
+        if os.getenv("FEED_TIMING_DIAGNOSTICS") == "1":
+            processing_ms = round((diagnostic_perf_counter() - diagnostic_started) * 1000, 1)
+            print(
+                "FEED_TIMING:", key,
+                "| TICK_AGE_MS:", tick_age_ms,
+                "| QUALITY_ANALYSIS_MS:", processing_ms,
+                flush=True,
+            )
 
 
 if __name__ == "__main__":
