@@ -125,3 +125,12 @@ Do not add further synthetic tests merely to increase test count. New tests or i
 - Read the Render scanner, stock board, quality ratings, and feed-health endpoints concurrently. All returned HTTP 200. Scanner symbols were 203/203 unique; stock-board symbols were 200/200 unique and every stock appeared in scanner output. All six ratings matched their scanner row on symbol, signal, and candle timestamp. No stock row had a missing, nonnumeric or nonpositive last price.
 - Feed health reported 200/200 recent ticks, 10-second snapshot age, and order execution disabled. The board reported 199 fresh rows at this sample.
 - This verifies cross-endpoint consistency for one sample; it does not independently validate quote accuracy, full signal parity, or continuous connection uptime.
+
+
+### 13:26–13:28 IST live scanner and Vercel route check (2026-10-19)
+
+- Read-only Render checks of `/api/v2/nifty200-feed-health`, `/api/v2/scanner`, `/api/v2/nifty200-stock-board`, `/api/v2/candle-feed-quality`, and `/api/v2/top-momentum-setups` all returned HTTP 200. The production Vercel domain also returned HTTP 200 for feed health, scanner, and stock board.
+- Feed health reported market session `OPEN`, status `REPORTING`, 200/200 recent ticks, snapshot age 2.5 seconds in the 13:26:07 IST sample, and `order_execution_enabled=false`. Scanner output contained 203 unique rows (200 stocks + 3 indices), latest candle timestamp 13:26 IST. Stock board contained 200 unique symbols and reported 200/200 fresh; every board symbol was present in scanner output.
+- Candle quality reported 200/200 stocks with six consecutive completed candles today, recent ticks and positive last-candle volume. Top setups returned `NO_QUALIFYING_SETUPS` (200 fresh rows considered, 0 stale rejected), so no candidate list was fabricated.
+- Vercel and Render route response shapes and counts matched for the sampled core routes. This is point-in-time wiring/freshness evidence, not an uninterrupted-connectivity guarantee, independent SENSEX quote check, or historical decision-parity result. Orders remained disabled; no production config, deployment, or database was changed.
+- At the then-current PR head `a06b464e8d8e6bff0ba6480300cb2654936bbb11`, Worker Manager Integration, Atomic Candle State, and Five-Page UI Contract CI all passed; Vercel check passed. PR #9 remained draft/unmerged with no submitted reviews.
