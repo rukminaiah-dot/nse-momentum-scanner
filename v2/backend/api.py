@@ -14,15 +14,116 @@ app.include_router(smart_option_router)
 
 @app.get("/api/v2/premarket-data")
 def get_premarket_data():
-    """Read Upstox global-index quotes for pre-market context, never trading signals."""
+    """Read timestamped pre-market context; never emit execution signals."""
     import gzip
     import json
     import os
     import time
     import urllib.parse
     import urllib.request
+    import re
     from datetime import datetime, timezone
     from fastapi import HTTPException
+
+    def sgx_nifty_site_quote():
+        """Parse the public third-party SGX Nifty page as indicative context only."""
+        from html.parser import HTMLParser
+        from zoneinfo import ZoneInfo
+
+        class TextOnlyParser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.parts = []
+
+            def handle_data(self, data):
+                if data and data.strip():
+                    self.parts.append(data.strip())
+
+        try:
+            request = urllib.request.Request(
+                "https://sgxnifty.org/",
+                headers={"User-Agent": "Mozilla/5.0 NSE-Momentum-Scanner/1.0", "Accept": "text/html"},
+            )
+            with urllib.request.urlopen(request, timeout=6) as response:
+                html = response.read(2_000_000).decode("utf-8", errors="replace")
+            parser = TextOnlyParser()
+            parser.feed(html)
+            text = re.sub(r"\s+", " ", " ".join(parser.parts))
+            as_on = re.search(r"As on [A-Za-z]+, (\d{1,2} [A-Za-z]{3} \d{4}) (\d{1,2}:\d{2})", text, re.I)
+            trade = re.search(r"Last Trade on (\d{1,2} [A-Za-z]{3}) (\d{1,2}:\d{2})", text, re.I)
+            quote = re.search(
+                r"Last Trade\s*(?:\|\s*)?Change\s*(?:\|\s*)?Change in %\s*"
+                r"([\d,]+(?:\.\d+)?)\s*(?:\|\s*)?([+-]?[\d,]+(?:\.\d+)?)\s*(?:\|\s*)?([+-]?[\d.]+)%",
+                text, re.I,
+            )
+            if not as_on or not trade or not quote:
+                return None
+            as_of = datetime.strptime(as_on.group(1) + " " + as_on.group(2), "%d %b %Y %H:%M").replace(tzinfo=ZoneInfo("Asia/Kolkata"))
+            trade_time = datetime.strptime(trade.group(1) + " " + trade.group(2), "%d %b %H:%M").replace(year=as_of.year, tzinfo=ZoneInfo("Asia/Kolkata"))
+            price = float(quote.group(1).replace(",", ""))
+            change = float(quote.group(2).replace(",", ""))
+            previous_close = price - change
+            if min(price, previous_close) <= 0:
+                return None
+            return {
+                "name": "SGX NIFTY (third-party site)", "status": "QUOTED",
+                "price": price, "previous_close": previous_close, "change": change,
+                "change_pct": float(quote.group(3)),
+                "last_trade_at": trade_time.astimezone(timezone.utc).isoformat(),
+                "site_as_of": as_of.astimezone(timezone.utc).isoformat(),
+                "latency": "600 Seconds", "source": "sgxnifty.org",
+                "source_url": "https://sgxnifty.org/", "source_type": "THIRD_PARTY_INDICATIVE",
+            }
+        except Exception as exc:
+            print("PREMARKET_SGX_SITE_UNAVAILABLE:", type(exc).__name__, flush=True)
+            return None
+
+    def financial_news():
+        """Fetch recent RSS headline metadata; never infer sentiment from a headline."""
+        import xml.etree.ElementTree as ET
+        feeds = [
+            ("Mint Markets", "https://www.livemint.com/rss/markets"),
+            ("Mint News", "https://www.livemint.com/rss/news"),
+        ]
+        topics = {
+            "rates / central banks": ("fed", "interest rate", "rbi", "central bank", "bond yield", "treasury"),
+            "inflation / economy": ("inflation", "cpi", "gdp", "jobs data", "employment", "economic growth"),
+            "oil / commodities": ("crude", "oil price", "opec", "gold", "commodity"),
+            "company results / finance": ("earnings", "results", "profit", "revenue", "bank", "merger", "funding", "default"),
+            "geopolitics / trade": ("tariff", "trade war", "sanction", "war", "conflict", "geopolitical"),
+            "market flows / regulation": ("fii", "fpi", "dii", "sebi", "nse", "bse", "market regulator"),
+        }
+        from email.utils import parsedate_to_datetime
+        items = []
+        for source, url in feeds:
+            try:
+                request = urllib.request.Request(url, headers={"User-Agent": "NSE-Momentum-Scanner/1.0", "Accept": "application/rss+xml, application/xml, text/xml"})
+                with urllib.request.urlopen(request, timeout=5) as response:
+                    root = ET.fromstring(response.read(1_000_000))
+                for item in root.findall(".//item"):
+                    title = (item.findtext("title") or "").strip()
+                    link = (item.findtext("link") or "").strip()
+                    published = (item.findtext("pubDate") or "").strip()
+                    if not title or not link or not published:
+                        continue
+                    try:
+                        published_at = parsedate_to_datetime(published).astimezone(timezone.utc)
+                    except (TypeError, ValueError, OverflowError):
+                        continue
+                    age = (datetime.now(timezone.utc) - published_at).total_seconds()
+                    if age < -3600 or age > 48 * 3600:
+                        continue
+                    lower = title.lower()
+                    topic = next((name for name, words in topics.items() if any(word in lower for word in words)), "company / market news")
+                    items.append({"title": title[:240], "url": link, "published_at": published_at.isoformat(), "source": source, "topic": topic})
+            except Exception as exc:
+                print("PREMARKET_NEWS_FEED_UNAVAILABLE:", source, type(exc).__name__, flush=True)
+        unique = {item["url"]: item for item in items}
+        return sorted(unique.values(), key=lambda item: item["published_at"], reverse=True)[:12]
+
+    def external_context():
+        return {"sgx_nifty_quote": sgx_nifty_site_quote(), "news": financial_news(),
+                "news_source": "Livemint RSS headlines", "news_as_of": datetime.now(timezone.utc).isoformat()}
 
     def yahoo_global_quotes():
         """Return delayed Yahoo global index context; deliberately excludes GIFT Nifty."""
@@ -92,6 +193,7 @@ def get_premarket_data():
                 "as_of": datetime.now(timezone.utc).isoformat(),
                 "instruments": instruments,
                 "order_execution_enabled": False,
+                **external_context(),
             }
             get_premarket_data._cache = result
             get_premarket_data._cache_at = now
@@ -100,7 +202,7 @@ def get_premarket_data():
             return {**cache, "status": "UPSTOX_REFRESH_FAILED_USING_CACHED_QUOTE",
                     "cache_age_seconds": round(max(0, now - cache_at), 1)}
         return {"status": "GLOBAL_QUOTES_UNAVAILABLE", "source": "Upstox and Yahoo Finance",
-                "as_of": None, "instruments": [], "order_execution_enabled": False}
+                "as_of": None, "instruments": [], "order_execution_enabled": False, **external_context()}
 
     now = time.monotonic()
     cache = getattr(get_premarket_data, "_cache", None)
@@ -193,7 +295,7 @@ def get_premarket_data():
 
         result = {"status": "UPSTOX_QUOTES_AVAILABLE", "source": "Upstox Full Market Quotes V3",
                   "as_of": datetime.now(timezone.utc).isoformat(), "instruments": instruments,
-                  "order_execution_enabled": False}
+                  "order_execution_enabled": False, **external_context()}
         get_premarket_data._cache = result
         get_premarket_data._cache_at = now
         return {**result, "cache_age_seconds": 0}
