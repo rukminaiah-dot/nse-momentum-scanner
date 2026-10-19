@@ -201,6 +201,11 @@ class FivePageUiTests(unittest.TestCase):
                          "fav.length<20", "localStorage.setItem('nse-favourites-v1'"):
             self.assertIn(required, self.html)
 
+    def test_dashboard_storage_handlers_exist_for_board_controls(self):
+        for required in ("function getFavourites()", "function toggleFavourite(symbol)",
+                         "function rememberLastRatings()", "localStorage.setItem(SCORE_CACHE_KEY"):
+            self.assertIn(required, self.html)
+
     def test_dashboard_layout_persists(self):
         for required in ("initDashboardLayout();", "edit-layout", "reset-layout",
                          "nse-dashboard-section-order-v1"):
@@ -452,12 +457,15 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("x.type==='INDEX'&&x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)", self.html)
         self.assertIn("WAIT / UNVERIFIED", self.html)
 
-    def test_premarket_uses_stored_index_context_when_market_is_closed(self):
-        self.assertIn("const storedValid=x=>", self.html)
-        self.assertIn("state.sessionOpen||fresh(x.row)", self.html)
-        self.assertIn("LAST STORED SESSION · ", self.html)
-        self.assertIn("historical close context only, not an opening forecast", self.html)
-        self.assertIn("EMA/momentum aligned up", self.html)
+    def test_premarket_uses_upstox_global_context_when_market_is_closed(self):
+        api = (pathlib.Path(__file__).resolve().parents[1] / "v2/backend/api.py").read_text(encoding="utf-8")
+        self.assertIn('@app.get("/api/v2/premarket-data")', api)
+        self.assertIn("global.json.gz", api)
+        self.assertIn("Full Market Quotes V3", api)
+        self.assertIn("GIFT NIFTY", self.html)
+        self.assertIn("PRE-MARKET CUES UNAVAILABLE", self.html)
+        self.assertIn("INDICATIVE PRE-MARKET · BULLISH", self.html)
+        self.assertIn("No confidence percentage is invented", self.html)
 
     def test_scorecard_hides_stale_candle_scores(self):
         self.assertIn("const validRating=x=>", self.html)
@@ -478,7 +486,7 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("localStorage.setItem(SCORE_CACHE_KEY,JSON.stringify(next))", self.html)
         self.assertIn("const counts={ALL:searched.length,BUY:searched.filter(x=>validRating(x)?.signal==='BUY')", self.html)
         self.assertIn("state.historicalRatings=Array.isArray(results[2].value.historical_ratings)?results[2].value.historical_ratings:[]", self.html)
-        self.assertIn("rating.data_status!=='HISTORICAL_LAST_STORED_CANDLE'", self.html)
+        self.assertIn("rating.data_status==='HISTORICAL_LAST_STORED_CANDLE'", self.html)
 
     def test_quality_api_supplies_historical_scores_separately_from_live_ratings(self):
         api = (pathlib.Path(__file__).resolve().parents[1] / "v2/backend/api.py").read_text(encoding="utf-8")
@@ -500,7 +508,7 @@ class FivePageUiTests(unittest.TestCase):
     def test_stock_signals_require_live_verified_candle_rating(self):
         self.assertIn("const live=Boolean(state.sessionOpen&&fresh(r)&&rating&&verifiedCandleScore(rating)&&r.signal===rating.signal", self.html)
         self.assertIn("x.type==='STOCK'&&x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)", self.html)
-        self.assertIn("WAIT — not independently verified fresh", self.html)
+        self.assertIn("No verified live BUY signals currently available", self.html)
 
     def test_no_broker_execution_claim(self):
         self.assertIn("Order execution", self.html)
@@ -541,6 +549,7 @@ class FivePageUiTests(unittest.TestCase):
             "/api/v2/nifty200-feed-health": "https://nse-momentum-scanner-api.onrender.com/api/v2/nifty200-feed-health",
             "/api/v2/trades": "https://nse-momentum-scanner-api.onrender.com/api/v2/trades",
             "/api/v2/preview-status": "https://nse-momentum-scanner-api.onrender.com/api/v2/nifty200-feed-health",
+            "/api/v2/premarket-data": "https://nse-momentum-scanner-api.onrender.com/api/v2/premarket-data",
             "/api/v2/decision-learning": "https://nse-momentum-scanner-api.onrender.com/api/v2/decision-learning",
             "/api/v2/pnl-history": "https://nse-momentum-scanner-api.onrender.com/api/v2/pnl-history",
             "/api/v2/signal-activity": "https://nse-momentum-scanner-api.onrender.com/api/v2/signal-activity",
