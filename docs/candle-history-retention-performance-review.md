@@ -139,3 +139,12 @@ The 1950-minute fixture spans calendar dates, but recovery candidates are confin
 | 200 | 1950 | 8 | Empty merge | 266 | 0.8003 | 0.8985 | 35.1848 |
 
 **Performance risk / release gate:** the eight-thread, 1950-bar workload produced 103.48 ms update p95 and 126.89 ms update p99. The global manager lock and full-history snapshot copies may cause material tail latency under load. Do **not** treat a green CI run as performance acceptance. Require representative feed-rate and worker concurrency measurements, agreed latency thresholds and owner sign-off before merge or cap activation. The empty-merge operation does not model insertion of recovered bars, and this benchmark does not cover broker fetch, data verification or production scheduling. Keep the default retention cap disabled; short caps have already shown indicator drift in offline tests.
+
+
+## 2026-10-19 full-session restart preload correction
+
+The scanner previously truncated its completed same-session startup preload to the latest 60 bars, even though the candle manager itself had no active history cap. That shortened EMA initialization on scanner restarts and was already shown to produce signal drift in the restart-preload regression.
+
+The feature branch now sends preload selection through the shared pure selector and retains every unique, completed candle for the current session. It still excludes the forming/future minute and falls back to the separately fetched warmup history only when no completed current-session candles are available. The manager retention cap remains disabled.
+
+Regression coverage now checks 300-bar chronological startup preload and exact signal, EMA9/EMA20, momentum, and five-minute trend equality after restart through a 375-candle synthetic session. At commit `14d36dc`, Worker Manager Integration run 743, Atomic Candle State run 452, and Five-Page UI Contract run 448 passed. This closes the known 60-bar startup truncation defect on the draft branch; it does not establish licensed historical replay parity, real Upstox restart lifecycle, or production acceptance. No production deployment or retention setting changed.
