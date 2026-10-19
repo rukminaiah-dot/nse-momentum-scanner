@@ -86,12 +86,12 @@ def get_premarket_data():
             ("Mint News", "https://www.livemint.com/rss/news"),
         ]
         topics = {
-            "rates / central banks": ("fed", "interest rate", "rbi", "central bank", "bond yield", "treasury"),
-            "inflation / economy": ("inflation", "cpi", "gdp", "jobs data", "employment", "economic growth"),
-            "oil / commodities": ("crude", "oil price", "opec", "gold", "commodity"),
-            "company results / finance": ("earnings", "results", "profit", "revenue", "bank", "merger", "funding", "default"),
-            "geopolitics / trade": ("tariff", "trade war", "sanction", "war", "conflict", "geopolitical"),
-            "market flows / regulation": ("fii", "fpi", "dii", "sebi", "nse", "bse", "market regulator"),
+            "rates / central banks": ("fed", "federal reserve", "interest rate", "rbi", "central bank", "bond yield", "treasury", "repo rate"),
+            "inflation / economy": ("inflation", "cpi", "gdp", "jobs data", "employment", "economic growth", "economy"),
+            "oil / commodities": ("crude", "oil", "opec", "gold", "silver", "commodity"),
+            "company results / finance": ("earnings", "results", "profit", "profits", "loss", "losses", "revenue", "bank", "merger", "funding", "default", "ipo", "stock", "share", "investment", "airline", "airport"),
+            "geopolitics / trade": ("tariff", "trade", "fta", "sanction", "war", "conflict", "geopolitical"),
+            "market flows / regulation": ("fii", "fpi", "dii", "sebi", "nse", "bse", "market regulator", "regulation", "policy"),
         }
         from email.utils import parsedate_to_datetime
         channels = {
@@ -103,6 +103,9 @@ def get_premarket_data():
             "market flows / regulation": "liquidity, foreign/domestic flows, or market rules",
             "company / market news": "company or sector context; verify the story",
         }
+        relevant_terms = tuple({word for words in topics.values() for word in words} | {
+            "company", "companies", "sector", "industry", "export", "import", "rupee", "dollar", "tax", "fiscal", "budget", "credit", "loan", "acquisition", "deal", "growth"
+        })
         items = []
         for source, url in feeds:
             try:
@@ -123,7 +126,9 @@ def get_premarket_data():
                     if age < -3600 or age > 48 * 3600:
                         continue
                     lower = title.lower()
-                    topic = next((name for name, words in topics.items() if any(word in lower for word in words)), "company / market news")
+                    if source != "Mint Markets" and not any(re.search(r"\b" + re.escape(word) + r"\b", lower) for word in relevant_terms):
+                        continue
+                    topic = next((name for name, words in topics.items() if any(re.search(r"\b" + re.escape(word) + r"\b", lower) for word in words)), "company / market news")
                     items.append({"title": title[:240], "url": link, "published_at": published_at.isoformat(), "source": source, "topic": topic, "impact_channel": channels.get(topic, "Company or sector context; verify the story")})
             except Exception as exc:
                 print("PREMARKET_NEWS_FEED_UNAVAILABLE:", source, type(exc).__name__, flush=True)
