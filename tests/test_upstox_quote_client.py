@@ -57,6 +57,22 @@ class UpstoxQuoteClientTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not successful"):
             fetch_full_quotes(["GLOBAL_INDEX|GIFT NIFTY"], ["token"], request_json=request)
 
+    def test_failure_keeps_only_endpoint_status_diagnostics(self):
+        def request(path, _token, _keys):
+            error = PermissionError("private provider response text")
+            error.code = 403
+            raise error
+
+        with self.assertRaises(PermissionError) as raised:
+            fetch_full_quotes(["GLOBAL_INDEX|GIFT NIFTY"], ["secret-token"], request_json=request)
+
+        self.assertEqual(raised.exception.upstox_attempts, [
+            {"api": "v3", "status_code": 403, "error": None},
+            {"api": "v2", "status_code": 403, "error": None},
+        ])
+        self.assertNotIn("secret-token", repr(raised.exception.upstox_attempts))
+        self.assertNotIn("private provider response text", repr(raised.exception.upstox_attempts))
+
 
 if __name__ == "__main__":
     unittest.main()
