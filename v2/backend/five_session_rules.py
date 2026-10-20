@@ -102,6 +102,13 @@ def rule_definition() -> dict[str, Any]:
         "status": "RESEARCH_RULES_ONLY",
         "probability_status": "NOT_BACKTESTED",
         "probabilities": None,
+        "reversal_definition": (
+            "Classify a move as a confirmed reversal only after NIFTY travels at least 500 "
+            "points from the verified anchor close in the direction opposite the prior trend. "
+            "Before that barrier is reached, evidence can produce only a reversal WATCH, not a "
+            "confirmed reversal. The five-trading-session period is the forecast event horizon, "
+            "not the 500-point movement requirement."
+        ),
         "direction_rule": (
             "Set the recent regime from the five-session return and close versus the 20-session "
             "trend measure; conflicting measures are MIXED. An upside reversal watch needs a "

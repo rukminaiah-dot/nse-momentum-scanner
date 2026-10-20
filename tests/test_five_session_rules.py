@@ -58,6 +58,8 @@ class FiveSessionRuleTests(unittest.TestCase):
         rules = rule_definition()
         self.assertEqual(rules["probability_status"], "NOT_BACKTESTED")
         self.assertIsNone(rules["probabilities"])
+        self.assertIn("at least 500 points", rules["reversal_definition"])
+        self.assertIn("forecast event horizon", rules["reversal_definition"])
         self.assertIn("published after the forecast cutoff", " ".join(rules["data_guards"]))
         self.assertIn("NIFTY 50 has no directly traded cash-index volume", " ".join(rules["data_guards"]))
 
