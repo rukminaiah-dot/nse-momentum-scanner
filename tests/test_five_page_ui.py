@@ -498,6 +498,15 @@ class FivePageUiTests(unittest.TestCase):
                     "v2/backend/reversal_context.py").read_text(encoding="utf-8")
         self.assertIn('"five_session": {"event": event_spec(), **rule_definition()}', reversal)
 
+    def test_premarket_discloses_medium_term_sustained_reversal_horizon(self):
+        self.assertIn('id="pm-long-horizon-card"', self.html)
+        self.assertIn("60 sessions", self.html)
+        self.assertIn("10 of the final 15 session closes", self.html)
+        self.assertIn("multi-year outlook would need a separate longer horizon", self.html)
+        reversal = (pathlib.Path(__file__).resolve().parents[1] /
+                    "v2/backend/reversal_context.py").read_text(encoding="utf-8")
+        self.assertIn('"long_horizon_reversal": long_horizon_rule_definition()', reversal)
+
     def test_premarket_upstream_error_exposes_only_sanitized_machine_code(self):
         api = (pathlib.Path(__file__).resolve().parents[1] /
                "v2/backend/api.py").read_text(encoding="utf-8")
