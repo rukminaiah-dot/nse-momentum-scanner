@@ -94,13 +94,22 @@ def _upstox_quote(token: str) -> dict[str, Any]:
                               [("instrument_key", "NSE_INDEX|India VIX")], token)
         data = payload.get("data") if isinstance(payload, dict) else None
         quote = data.get("NSE_INDEX:India VIX") if isinstance(data, dict) else None
+        if not isinstance(quote, dict) and isinstance(data, dict):
+            quote = next((item for key, item in data.items()
+                          if isinstance(item, dict)
+                          and str(key).split(":", 1)[-1].casefold() == "india vix"), None)
         if not isinstance(quote, dict):
             raise ValueError("India VIX quote missing")
         price = _number(quote.get("last_price"))
         prev = _number(quote.get("prev_close_price"))
-        stamp = quote.get("timestamp")
-        if not price or not prev or not stamp:
+        raw_stamp = quote.get("last_trade_time") or quote.get("timestamp")
+        if not price or not prev or not raw_stamp:
             raise ValueError("India VIX quote incomplete")
+        try:
+            numeric_stamp = float(raw_stamp)
+            stamp = datetime.fromtimestamp(numeric_stamp / 1000, timezone.utc).isoformat() if numeric_stamp > 10_000_000_000 else datetime.fromtimestamp(numeric_stamp, timezone.utc).isoformat()
+        except (TypeError, ValueError, OverflowError, OSError):
+            stamp = str(raw_stamp)
         change_pct = (price / prev - 1) * 100
         return {"status": "AVAILABLE", "value": price, "previous_close": prev,
                 "change_pct": round(change_pct, 3), "as_of": stamp, "fetched_at": now,

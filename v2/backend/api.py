@@ -238,12 +238,18 @@ def get_premarket_data():
                 "as_of": None, "instruments": [], "order_execution_enabled": False, **external_context()}
 
     now = time.monotonic()
+    from zoneinfo import ZoneInfo
+    market_now = datetime.now(ZoneInfo("Asia/Kolkata"))
+    session_open = (market_now.weekday() < 5
+                    and market_now.replace(hour=9, minute=15, second=0, microsecond=0) <= market_now
+                    < market_now.replace(hour=15, minute=30, second=0, microsecond=0))
     cache = getattr(get_premarket_data, "_cache", None)
     cache_at = getattr(get_premarket_data, "_cache_at", 0.0)
-    if cache and now - cache_at < 60:
+    cache_ttl = 10 if session_open else 60
+    if cache and now - cache_at < cache_ttl:
         return {**cache, "cache_age_seconds": round(now - cache_at, 1)}
 
-    token = os.environ.get("UPSTOX_ACCESS_TOKEN")
+    token = (os.environ.get("UPSTOX_ANALYTICS_TOKEN") or os.environ.get("UPSTOX_ACCESS_TOKEN", "")).strip()
     if not token:
         return yahoo_fallback(now, cache, cache_at)
 
@@ -265,7 +271,7 @@ def get_premarket_data():
             get_premarket_data._catalog_at = now
 
         wanted = {
-            "GIFT NIFTY": ("GIFT NIFTY",),
+            "GIFT NIFTY": ("GIFT NIFTY", "SGX NIFTY", "GIFTNIFTY", "SGXNIFTY"),
             "S&P 500": ("S&P 500", "S&P"),
             "DOW JONES": ("DOW JONES",),
             "NASDAQ": ("NASDAQ", "US TECH 100"),
@@ -287,11 +293,26 @@ def get_premarket_data():
                 if display_name not in selected and aliases.intersection(candidates):
                     selected[display_name] = {"key": key, "latency": instrument.get("latency")}
         if "GIFT NIFTY" not in selected:
-            raise ValueError("GIFT NIFTY is not present in the Upstox global instruments file")
+            raise ValueError("GIFT NIFTY / SGX NIFTY is not present in the Upstox global instruments file")
 
-        stage = "global_quotes"
-        keys = [item["key"] for item in selected.values()]
-        query = urllib.parse.urlencode({"instrument_key": ",".join(keys)})
+        # NSE sector indices and India VIX are part of Upstox's NSE_INDEX quote segment.
+        # Keep each feed row explicit so missing instruments are visible in the UI.
+        sector_keys = {
+            "NIFTY BANK": "NSE_INDEX|Nifty Bank",
+            "NIFTY IT": "NSE_INDEX|Nifty IT",
+            "NIFTY AUTO": "NSE_INDEX|Nifty Auto",
+            "NIFTY FMCG": "NSE_INDEX|Nifty FMCG",
+            "NIFTY PHARMA": "NSE_INDEX|Nifty Pharma",
+            "NIFTY METAL": "NSE_INDEX|Nifty Metal",
+            "NIFTY REALTY": "NSE_INDEX|Nifty Realty",
+            "NIFTY PSU BANK": "NSE_INDEX|Nifty PSU Bank",
+            "NIFTY FINANCIAL SERVICES": "NSE_INDEX|Nifty Financial Services",
+            "NIFTY ENERGY": "NSE_INDEX|Nifty Energy",
+        }
+        all_keys = [item["key"] for item in selected.values()]
+        all_keys += list(sector_keys.values()) + ["NSE_INDEX|India VIX"]
+        stage = "global_sector_vix_quotes"
+        query = urllib.parse.urlencode({"instrument_key": ",".join(all_keys)})
         request = urllib.request.Request(
             "https://api.upstox.com/v3/market-quote/quotes?" + query,
             headers={"Authorization": "Bearer " + token, "Accept": "application/json"},
@@ -302,33 +323,54 @@ def get_premarket_data():
             raise ValueError("Upstox quote response was not successful")
 
         quotes = payload["data"]
-        instruments = []
-        for name, meta in selected.items():
-            quote_key = meta["key"].replace("|", ":")
-            quote = quotes.get(quote_key)
+
+        def quote_for(key):
+            quote = quotes.get(key.replace("|", ":"))
+            if isinstance(quote, dict):
+                return quote
+            suffix = key.split("|", 1)[-1].casefold()
+            return next((value for response_key, value in quotes.items()
+                         if isinstance(value, dict)
+                         and str(response_key).split(":", 1)[-1].casefold() == suffix), None)
+
+        def quote_record(name, key, latency=None):
+            quote = quote_for(key)
             if not isinstance(quote, dict):
-                instruments.append({"name": name, "status": "NO_QUOTE", "latency": meta["latency"]})
-                continue
+                return {"name": name, "status": "NO_QUOTE", "source": "Upstox Full Market Quotes V3",
+                        **({"latency": latency} if latency else {})}
             try:
                 price = float(quote["last_price"])
                 previous_close = float(quote["prev_close_price"])
-                trade_ms = int(float(quote["last_trade_time"]))
+                trade_ms = int(float(quote.get("last_trade_time") or quote.get("timestamp") or 0))
                 if price <= 0 or previous_close <= 0 or trade_ms <= 0:
                     raise ValueError("Invalid quote values")
                 quote_time = datetime.fromtimestamp(trade_ms / 1000, timezone.utc).isoformat()
                 change = price - previous_close
-                instruments.append({
+                return {
                     "name": name, "status": "QUOTED", "price": price,
                     "previous_close": previous_close, "change": change,
                     "change_pct": change / previous_close * 100,
-                    "last_trade_at": quote_time, "latency": meta["latency"],
-                })
+                    "last_trade_at": quote_time, "source": "Upstox Full Market Quotes V3",
+                    **({"latency": latency} if latency else {}),
+                }
             except (KeyError, TypeError, ValueError, OverflowError, OSError):
-                instruments.append({"name": name, "status": "INVALID_QUOTE", "latency": meta["latency"]})
+                return {"name": name, "status": "INVALID_QUOTE",
+                        "source": "Upstox Full Market Quotes V3",
+                        **({"latency": latency} if latency else {})}
+
+        instruments = [
+            quote_record(name, meta["key"], meta.get("latency"))
+            for name, meta in selected.items()
+        ]
+        sector_indices = [
+            quote_record(name, key)
+            for name, key in sector_keys.items()
+        ]
+        india_vix = quote_record("INDIA VIX", "NSE_INDEX|India VIX")
 
         result = {"status": "UPSTOX_QUOTES_AVAILABLE", "source": "Upstox Full Market Quotes V3",
-                  "as_of": datetime.now(timezone.utc).isoformat(), "instruments": instruments,
-                  "order_execution_enabled": False, **external_context()}
+                  "as_of": datetime.now(timezone.utc).isoformat(), "instruments": instruments, "sector_indices": sector_indices,
+                  "india_vix": india_vix, "order_execution_enabled": False, **external_context()}
         get_premarket_data._cache = result
         get_premarket_data._cache_at = now
         return {**result, "cache_age_seconds": 0}
