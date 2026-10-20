@@ -488,6 +488,24 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn('flow.get("freshness") == "CURRENT"', reversal)
         self.assertIn('FLOW_FRESHNESS_DAYS = 4', reversal)
 
+    def test_premarket_shows_daily_nifty_pe_with_date_and_last_stored_fallback(self):
+        self.assertIn('id="pm-pe-card"', self.html)
+        self.assertIn('id="pm-pe-value"', self.html)
+        self.assertIn('id="pm-pe-status"', self.html)
+        self.assertIn('id="pm-pe-detail"', self.html)
+        self.assertIn("const peHasValue=Number.isFinite(Number(pe.value))&&Number(pe.value)>0", self.html)
+        self.assertIn("LAST STORED · HISTORICAL", self.html)
+        self.assertIn("session '+(pe.session_date||pe.as_of||'date unavailable')", self.html)
+        reversal = (pathlib.Path(__file__).resolve().parents[1] /
+                    "v2/backend/reversal_context.py").read_text(encoding="utf-8")
+        self.assertIn('PE_DAILY_REFRESH_AFTER = clock_time(16, 0)', reversal)
+        self.assertIn('save_daily_nifty_pe(new_record)', reversal)
+        self.assertIn('FAILED_USING_LAST_STORED', reversal)
+        archive = (pathlib.Path(__file__).resolve().parents[1] /
+                   "v2/backend/nifty_pe_archive.py").read_text(encoding="utf-8")
+        self.assertIn("CREATE TABLE IF NOT EXISTS daily_nifty_valuations", archive)
+        self.assertIn("POSTGRESQL_AND_LOCAL", archive)
+
     def test_premarket_discloses_five_session_event_rules_without_probability(self):
         self.assertIn('id="pm-five-session-card"', self.html)
         self.assertIn("latest verified completed-session close within the next five trading sessions", self.html)
