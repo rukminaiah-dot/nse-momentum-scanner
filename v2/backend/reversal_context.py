@@ -448,14 +448,47 @@ def _observed_volume(now: datetime, session_open: bool) -> dict[str, Any]:
     result = {"status": "MARKET_CLOSED_HISTORICAL" if not session_open else "NO_FRESH_VOLUME_ROWS",
               "threshold_rvol": RVOL_THRESHOLD, "fresh_rows": 0, "verified_volume_rows": 0,
               "bullish_surge_rows": 0, "bearish_surge_rows": 0, "last_candle_ist": None,
+              "last_session": None,
               "source": "scanner_results; completed 1-minute candle volume / prior 19-candle mean"}
-    if not session_open:
-        return result
     try:
         with sqlite3.connect(DB_PATH, timeout=5) as db:
             db.row_factory = sqlite3.Row
             rows = db.execute("SELECT symbol,updated_at,rvol,current_volume,baseline_volume,signal,trend_5m FROM scanner_results").fetchall()
         eligible = set(NIFTY_200)
+        if not session_open:
+            # Keep a clearly dated last-session volume summary for after-hours
+            # analysis. This never changes the current-session status or rules.
+            cutoff = now.date() - timedelta(days=7)
+            candidates = []
+            for row in rows:
+                if row["symbol"] not in eligible:
+                    continue
+                try:
+                    stamp = datetime.strptime(row["updated_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=IST)
+                except (TypeError, ValueError):
+                    continue
+                rvol = _number(row["rvol"])
+                current, baseline = _number(row["current_volume"]), _number(row["baseline_volume"])
+                if (stamp.date() > now.date() or stamp.date() < cutoff or rvol is None
+                        or current is None or baseline is None or current < 0 or baseline <= 0):
+                    continue
+                candidates.append((stamp, row))
+            if candidates:
+                session_date = max(stamp.date() for stamp, _ in candidates)
+                session_rows = [(stamp, row) for stamp, row in candidates if stamp.date() == session_date]
+                bullish = sum(1 for _, row in session_rows if _number(row["rvol"]) >= RVOL_THRESHOLD
+                              and row["signal"] == "BUY" and row["trend_5m"] == "BULLISH")
+                bearish = sum(1 for _, row in session_rows if _number(row["rvol"]) >= RVOL_THRESHOLD
+                              and row["signal"] == "SELL" and row["trend_5m"] == "BEARISH")
+                last_stamp = max(stamp for stamp, _ in session_rows)
+                result["last_session"] = {
+                    "session_date": session_date.isoformat(),
+                    "verified_volume_rows": len(session_rows),
+                    "bullish_surge_rows": bullish,
+                    "bearish_surge_rows": bearish,
+                    "last_candle_ist": last_stamp.isoformat(),
+                }
+            return result
         for row in rows:
             if row["symbol"] not in eligible:
                 continue
@@ -540,7 +573,9 @@ def reversal_context() -> dict[str, Any]:
         ) if value and value.strip()
     ))
     pe = _nse_index_pe()
-    pe_history, pe_history_storage = read_nifty_pe_history(6)
+    # A 60-session archive enables a descriptive rolling valuation comparison
+    # without making another market-data request. Early history remains unscored.
+    pe_history, pe_history_storage = read_nifty_pe_history(60)
     pe = {**pe, "history": pe_history, "history_storage": pe_history_storage}
     vix = _upstox_quote(quote_tokens) if quote_tokens else {"status": "TOKEN_NOT_CONFIGURED", "value": None, "as_of": None, "source": "Upstox"}
     flows = _institutional_flows()
