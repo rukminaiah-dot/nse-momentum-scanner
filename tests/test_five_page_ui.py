@@ -656,6 +656,9 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("setTimeout(()=>controller.abort(),12000)", self.html)
         self.assertIn("finally{clearTimeout(timer)}", self.html)
 
+    def test_reversal_context_refresh_updates_the_dedicated_flow_card(self):
+        self.assertIn("function renderPreReversal(){\nrenderPreFlows();", self.html)
+
     def test_news_classifier_asset_has_a_matching_api_route(self):
         api_source = (HTML.parents[1] / "backend" / "api.py").read_text(encoding="utf-8")
         self.assertIn('<script src="./news_trend_relation.js"></script>', self.html)
