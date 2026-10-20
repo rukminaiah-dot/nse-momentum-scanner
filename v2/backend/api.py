@@ -289,9 +289,24 @@ def get_premarket_data():
         get_premarket_data._cache_at = now
         return {**result, "cache_age_seconds": 0}
     except urllib.error.HTTPError as exc:
-        # Log only the upstream stage and HTTP status; never log the access token.
-        print("PREMARKET_UPSTOX_HTTP_ERROR:", stage, exc.code, flush=True)
-        return upstox_fallback(now, cache, cache_at, {"stage": stage, "status_code": exc.code})
+        # Read only the provider's machine error code; never log its body, message,
+        # request headers, or either configured access token.
+        error_code = None
+        try:
+            error_body = json.loads(exc.read(8192).decode("utf-8"))
+            errors = error_body.get("errors") if isinstance(error_body, dict) else None
+            first_error = errors[0] if isinstance(errors, list) and errors else {}
+            candidate_code = first_error.get("errorCode") or first_error.get("error_code") if isinstance(first_error, dict) else None
+            if isinstance(candidate_code, str) and re.fullmatch(r"UDAPI\d{3,6}", candidate_code):
+                error_code = candidate_code
+        except (AttributeError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+            pass
+        print("PREMARKET_UPSTOX_HTTP_ERROR:", stage, exc.code,
+              error_code or "provider_code_unavailable", flush=True)
+        error = {"stage": stage, "status_code": exc.code}
+        if error_code:
+            error["error_code"] = error_code
+        return upstox_fallback(now, cache, cache_at, error)
     except Exception as exc:
         print("PREMARKET_UPSTOX_QUOTES_UNAVAILABLE:", type(exc).__name__, flush=True)
         return upstox_fallback(now, cache, cache_at, {"stage": stage, "error": type(exc).__name__})
