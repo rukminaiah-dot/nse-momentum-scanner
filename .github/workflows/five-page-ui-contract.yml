@@ -13,7 +13,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
       - name: Check five-page UI contract
         run: python -m unittest discover -s tests -p 'test_five_page_ui.py' -v
+      - name: Check news and short-term trend classifications
+        run: node tests/news_trend_relation.test.cjs
       - name: Check isolated offline Preview API contract
         run: python -m unittest discover -s tests -p 'test_offline_preview_api.py' -v
