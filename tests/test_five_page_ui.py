@@ -467,6 +467,25 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("INDICATIVE PRE-MARKET · BULLISH", self.html)
         self.assertIn("No confidence percentage is invented", self.html)
 
+    def test_premarket_shows_flow_report_date_and_marks_old_cash_data_stale(self):
+        self.assertIn('id="pm-flow-status"', self.html)
+        self.assertIn('id="pm-flow-data"', self.html)
+        self.assertIn("function renderPreFlows()", self.html)
+        self.assertIn("STALE · HISTORICAL", self.html)
+        self.assertIn("Not counted in the current-session reversal rule.", self.html)
+        reversal = (pathlib.Path(__file__).resolve().parents[1] /
+                    "v2/backend/reversal_context.py").read_text(encoding="utf-8")
+        self.assertIn('flow.get("freshness") == "CURRENT"', reversal)
+        self.assertIn('FLOW_FRESHNESS_DAYS = 4', reversal)
+
+    def test_premarket_upstream_error_exposes_only_sanitized_machine_code(self):
+        api = (pathlib.Path(__file__).resolve().parents[1] /
+               "v2/backend/api.py").read_text(encoding="utf-8")
+        self.assertIn('re.fullmatch(r"UDAPI\\d{3,6}", candidate_code)', api)
+        self.assertIn('error["error_code"] = error_code', api)
+        self.assertIn('error_code or "provider_code_unavailable"', api)
+        self.assertNotIn('"message": first_error.get', api)
+
     def test_scorecard_hides_stale_candle_scores(self):
         self.assertIn("const validRating=x=>", self.html)
         self.assertIn("y.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(y)", self.html)
