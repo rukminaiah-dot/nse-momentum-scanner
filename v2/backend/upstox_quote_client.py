@@ -57,6 +57,24 @@ def fetch_full_quotes(
     raise last_error or ValueError("Upstox quote request failed")
 
 
+def fetch_quote_groups(
+    groups: dict[str, list[str]],
+    tokens: Iterable[str],
+    *,
+    request_json: Callable[[str, str, list[str]], dict[str, Any]] | None = None,
+) -> tuple[dict[str, tuple[dict[str, Any], str]], dict[str, Exception]]:
+    """Fetch quote categories independently so one failure cannot hide others."""
+    results: dict[str, tuple[dict[str, Any], str]] = {}
+    errors: dict[str, Exception] = {}
+    token_candidates = list(tokens)
+    for group, keys in groups.items():
+        try:
+            results[group] = fetch_full_quotes(keys, token_candidates, request_json=request_json)
+        except Exception as exc:
+            errors[group] = exc
+    return results, errors
+
+
 def _request_json(path: str, token: str, keys: list[str]) -> dict[str, Any]:
     query = urllib.parse.urlencode({"instrument_key": ",".join(keys)})
     request = urllib.request.Request(
