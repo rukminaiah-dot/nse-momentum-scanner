@@ -178,7 +178,7 @@ def get_premarket_data():
             "NIFTY METAL": "NSE_INDEX|Nifty Metal",
             "NIFTY REALTY": "NSE_INDEX|Nifty Realty",
             "NIFTY PSU BANK": "NSE_INDEX|Nifty PSU Bank",
-            "NIFTY FINANCIAL SERVICES": "NSE_INDEX|Nifty Financial Services",
+            "NIFTY FINANCIAL SERVICES": "NSE_INDEX|Nifty Fin Service",
             "NIFTY ENERGY": "NSE_INDEX|Nifty Energy",
         }
         def safe_feed_error(exc, feed_stage):

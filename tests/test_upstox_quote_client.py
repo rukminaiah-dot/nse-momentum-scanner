@@ -109,6 +109,12 @@ class UpstoxQuoteClientTests(unittest.TestCase):
         request = opener.call_args.args[0]
         self.assertEqual(request.get_header("User-agent"), "Mozilla/5.0 NSE-Momentum-Scanner/1.0")
 
+    def test_financial_services_uses_upstox_index_instrument_name(self):
+        from pathlib import Path
+
+        api = (Path(__file__).resolve().parents[1] / "v2/backend/api.py").read_text(encoding="utf-8")
+        self.assertIn('"NIFTY FINANCIAL SERVICES": "NSE_INDEX|Nifty Fin Service"', api)
+
 
 if __name__ == "__main__":
     unittest.main()
