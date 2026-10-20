@@ -87,29 +87,36 @@ def _upstox_get(path: str, params: list[tuple[str, str]], token: str) -> Any:
                      {"Authorization": "Bearer " + token, "Accept": "application/json"})
 
 
-def _upstox_quote(token: str) -> dict[str, Any]:
+def _upstox_quote(tokens: str | list[str]) -> dict[str, Any]:
     now = datetime.now(timezone.utc).isoformat()
+    response_keys = []
     try:
+        candidates = list(dict.fromkeys(
+            item.strip() for item in (tokens if isinstance(tokens, list) else [tokens])
+            if item and item.strip()
+        ))
         quote = None
-        response_keys = []
         last_error = None
-        # Try V3 first, then the V2 quote endpoint as a compatibility fallback.
-        for quote_path in ("/v3/market-quote/quotes", "/v2/market-quote/quotes"):
-            try:
-                payload = _upstox_get(quote_path,
-                                      [("instrument_key", "NSE_INDEX|India VIX")], token)
-                data = payload.get("data") if isinstance(payload, dict) else None
-                response_keys = list(data.keys())[:12] if isinstance(data, dict) else []
-                quote = data.get("NSE_INDEX:India VIX") if isinstance(data, dict) else None
-                if not isinstance(quote, dict) and isinstance(data, dict):
-                    quote = next((item for key, item in data.items()
-                                  if isinstance(item, dict)
-                                  and str(key).split(":", 1)[-1].casefold() == "india vix"), None)
-                if isinstance(quote, dict):
-                    break
-                last_error = ValueError("India VIX quote missing")
-            except Exception as exc:
-                last_error = exc
+        # Try each configured quote token, V3 first and V2 for compatibility.
+        for candidate in candidates:
+            for quote_path in ("/v3/market-quote/quotes", "/v2/market-quote/quotes"):
+                try:
+                    payload = _upstox_get(quote_path,
+                                          [("instrument_key", "NSE_INDEX|India VIX")], candidate)
+                    data = payload.get("data") if isinstance(payload, dict) else None
+                    response_keys = list(data.keys())[:12] if isinstance(data, dict) else []
+                    quote = data.get("NSE_INDEX:India VIX") if isinstance(data, dict) else None
+                    if not isinstance(quote, dict) and isinstance(data, dict):
+                        quote = next((item for key, item in data.items()
+                                      if isinstance(item, dict)
+                                      and str(key).split(":", 1)[-1].casefold() == "india vix"), None)
+                    if isinstance(quote, dict):
+                        break
+                    last_error = ValueError("India VIX quote missing")
+                except Exception as exc:
+                    last_error = exc
+            if isinstance(quote, dict):
+                break
         if not isinstance(quote, dict):
             raise last_error or ValueError("India VIX quote missing")
         price = _number(quote.get("last_price"))
@@ -117,9 +124,19 @@ def _upstox_quote(token: str) -> dict[str, Any]:
         raw_stamp = quote.get("last_trade_time") or quote.get("timestamp")
         if not price or not prev or not raw_stamp:
             raise ValueError("India VIX quote incomplete")
+        try:
+            numeric_stamp = float(raw_stamp)
+            if numeric_stamp > 10_000_000_000:
+                stamp = datetime.fromtimestamp(numeric_stamp / 1000, timezone.utc)
+            else:
+                stamp = datetime.fromtimestamp(numeric_stamp, timezone.utc)
+        except (TypeError, ValueError, OverflowError, OSError):
+            stamp = datetime.fromisoformat(str(raw_stamp).replace("Z", "+00:00"))
+            if stamp.tzinfo is None:
+                stamp = stamp.replace(tzinfo=timezone.utc)
         change_pct = (price / prev - 1) * 100
         return {"status": "AVAILABLE", "value": price, "previous_close": prev,
-                "change_pct": round(change_pct, 3), "as_of": stamp, "fetched_at": now,
+                "change_pct": round(change_pct, 3), "as_of": stamp.isoformat(), "fetched_at": now,
                 "source": "Upstox Full Market Quotes V3"}
     except Exception as exc:
         return {"status": "UNAVAILABLE", "value": None, "as_of": None, "fetched_at": now,
@@ -270,11 +287,17 @@ def reversal_context() -> dict[str, Any]:
         return _cache
     now = datetime.now(IST)
     session_open = now.weekday() < 5 and datetime.strptime("09:15", "%H:%M").time() <= now.time() < datetime.strptime("15:30", "%H:%M").time()
-    token = (os.environ.get("UPSTOX_ANALYTICS_TOKEN")
-             or os.environ.get("UPSTOX_ACCESS_TOKEN", "")).strip()
+    quote_tokens = list(dict.fromkeys(
+        value.strip() for value in (
+            os.environ.get("UPSTOX_ACCESS_TOKEN", ""),
+            os.environ.get("UPSTOX_ANALYTICS_TOKEN", ""),
+        ) if value and value.strip()
+    ))
+    analytics_token = (os.environ.get("UPSTOX_ANALYTICS_TOKEN")
+                       or os.environ.get("UPSTOX_ACCESS_TOKEN", "")).strip()
     pe = _nse_index_pe()
-    vix = _upstox_quote(token) if token else {"status": "TOKEN_NOT_CONFIGURED", "value": None, "as_of": None, "source": "Upstox"}
-    flows = _institutional_flows(token) if token else {"status": "TOKEN_NOT_CONFIGURED", "fii": {"status": "TOKEN_NOT_CONFIGURED"}, "dii": {"status": "TOKEN_NOT_CONFIGURED"}, "latest_absorption_ratio": None, "as_of_date": None}
+    vix = _upstox_quote(quote_tokens) if quote_tokens else {"status": "TOKEN_NOT_CONFIGURED", "value": None, "as_of": None, "source": "Upstox"}
+    flows = _institutional_flows(analytics_token) if analytics_token else {"status": "TOKEN_NOT_CONFIGURED", "fii": {"status": "TOKEN_NOT_CONFIGURED"}, "dii": {"status": "TOKEN_NOT_CONFIGURED"}, "latest_absorption_ratio": None, "as_of_date": None}
     volume = _observed_volume(now, session_open)
     index_row = None
     try:

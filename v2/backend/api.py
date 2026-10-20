@@ -217,14 +217,17 @@ def get_premarket_data():
             print("PREMARKET_YAHOO_QUOTES_UNAVAILABLE:", type(exc).__name__, flush=True)
             return []
 
-    def yahoo_fallback(now, cache, cache_at):
+    def yahoo_fallback(now, cache, cache_at, upstox_error=None):
         instruments = yahoo_global_quotes()
         if instruments:
             result = {
                 "status": "YAHOO_GLOBAL_QUOTES_FALLBACK",
                 "source": "Yahoo Finance delayed global indexes; GIFT Nifty unavailable",
                 "as_of": datetime.now(timezone.utc).isoformat(),
-                "instruments": instruments,
+                "instruments": instruments, "sector_indices": [],
+                "india_vix": {"name": "INDIA VIX", "status": "UNAVAILABLE",
+                              "source": "Upstox Full Market Quotes"},
+                "upstox_error": upstox_error,
                 "order_execution_enabled": False,
                 **external_context(),
             }
@@ -233,9 +236,14 @@ def get_premarket_data():
             return {**result, "cache_age_seconds": 0}
         if cache:
             return {**cache, "status": "UPSTOX_REFRESH_FAILED_USING_CACHED_QUOTE",
+                    "upstox_error": upstox_error,
                     "cache_age_seconds": round(max(0, now - cache_at), 1)}
         return {"status": "GLOBAL_QUOTES_UNAVAILABLE", "source": "Upstox and Yahoo Finance",
-                "as_of": None, "instruments": [], "order_execution_enabled": False, **external_context()}
+                "as_of": None, "instruments": [], "sector_indices": [],
+                "india_vix": {"name": "INDIA VIX", "status": "UNAVAILABLE",
+                              "source": "Upstox Full Market Quotes"},
+                "upstox_error": upstox_error,
+                "order_execution_enabled": False, **external_context()}
 
     now = time.monotonic()
     from zoneinfo import ZoneInfo
@@ -249,9 +257,15 @@ def get_premarket_data():
     if cache and now - cache_at < cache_ttl:
         return {**cache, "cache_age_seconds": round(now - cache_at, 1)}
 
-    token = (os.environ.get("UPSTOX_ANALYTICS_TOKEN") or os.environ.get("UPSTOX_ACCESS_TOKEN", "")).strip()
-    if not token:
-        return yahoo_fallback(now, cache, cache_at)
+    token_candidates = list(dict.fromkeys(
+        value.strip() for value in (
+            os.environ.get("UPSTOX_ACCESS_TOKEN", ""),
+            os.environ.get("UPSTOX_ANALYTICS_TOKEN", ""),
+        ) if value and value.strip()
+    ))
+    if not token_candidates:
+        return yahoo_fallback(now, cache, cache_at, {"error": "TOKEN_NOT_CONFIGURED"})
+    token = token_candidates[0]
 
     stage = "global_instruments"
     try:
@@ -309,11 +323,11 @@ def get_premarket_data():
             "NIFTY FINANCIAL SERVICES": "NSE_INDEX|Nifty Financial Services",
             "NIFTY ENERGY": "NSE_INDEX|Nifty Energy",
         }
-        def fetch_quote_batch(keys):
+        def fetch_quote_batch(keys, request_token=None):
             query = urllib.parse.urlencode({"instrument_key": ",".join(keys)})
             request = urllib.request.Request(
                 "https://api.upstox.com/v3/market-quote/quotes?" + query,
-                headers={"Authorization": "Bearer " + token, "Accept": "application/json"},
+                headers={"Authorization": "Bearer " + (request_token or token), "Accept": "application/json"},
             )
             with urllib.request.urlopen(request, timeout=5) as response:
                 response_payload = json.loads(response.read().decode("utf-8"))
@@ -323,15 +337,24 @@ def get_premarket_data():
                 raise ValueError("Upstox quote response was not successful")
             return response_payload["data"]
 
+        def fetch_with_token_fallback(keys):
+            last_error = None
+            for candidate in token_candidates:
+                try:
+                    return fetch_quote_batch(keys, candidate)
+                except Exception as exc:
+                    last_error = exc
+            raise last_error or ValueError("Upstox quote request failed")
+
         # Query upstream groups separately. A permission or catalogue error in one
         # group must not hide valid global quotes or India VIX from the page.
         stage = "global_quotes"
-        global_quotes = fetch_quote_batch([item["key"] for item in selected.values()])
+        global_quotes = fetch_with_token_fallback([item["key"] for item in selected.values()])
         quote_maps = [global_quotes]
         feed_errors = {}
         stage = "sector_quotes"
         try:
-            sector_quotes = fetch_quote_batch(list(sector_keys.values()))
+            sector_quotes = fetch_with_token_fallback(list(sector_keys.values()))
             quote_maps.append(sector_quotes)
         except Exception as exc:
             sector_quotes = {}
@@ -340,7 +363,7 @@ def get_premarket_data():
             print("PREMARKET_UPSTOX_SECTOR_QUOTES_UNAVAILABLE:", feed_errors["sector_indices"], flush=True)
         stage = "india_vix_quote"
         try:
-            vix_quotes = fetch_quote_batch(["NSE_INDEX|India VIX"])
+            vix_quotes = fetch_with_token_fallback(["NSE_INDEX|India VIX"])
             quote_maps.append(vix_quotes)
         except Exception as exc:
             vix_quotes = {}
@@ -411,10 +434,10 @@ def get_premarket_data():
     except urllib.error.HTTPError as exc:
         # Log only the upstream stage and HTTP status; never log the access token.
         print("PREMARKET_UPSTOX_HTTP_ERROR:", stage, exc.code, flush=True)
-        return yahoo_fallback(now, cache, cache_at)
+        return yahoo_fallback(now, cache, cache_at, {"stage": stage, "status_code": exc.code})
     except Exception as exc:
         print("PREMARKET_UPSTOX_QUOTES_UNAVAILABLE:", type(exc).__name__, flush=True)
-        return yahoo_fallback(now, cache, cache_at)
+        return yahoo_fallback(now, cache, cache_at, {"stage": stage, "error": type(exc).__name__})
 
 @app.get("/api/v2/trades")
 def get_trades():
