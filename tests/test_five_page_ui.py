@@ -488,6 +488,15 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn('flow.get("freshness") == "CURRENT"', reversal)
         self.assertIn('FLOW_FRESHNESS_DAYS = 4', reversal)
 
+    def test_premarket_discloses_five_session_event_rules_without_probability(self):
+        self.assertIn('id="pm-five-session-card"', self.html)
+        self.assertIn("latest verified completed-session close within the next five trading sessions", self.html)
+        self.assertIn("UP ONLY, DOWN ONLY, BOTH thresholds touched, or NEITHER", self.html)
+        self.assertIn("not currently a trained ML forecast", self.html)
+        reversal = (pathlib.Path(__file__).resolve().parents[1] /
+                    "v2/backend/reversal_context.py").read_text(encoding="utf-8")
+        self.assertIn('"five_session": {"event": event_spec(), **rule_definition()}', reversal)
+
     def test_premarket_upstream_error_exposes_only_sanitized_machine_code(self):
         api = (pathlib.Path(__file__).resolve().parents[1] /
                "v2/backend/api.py").read_text(encoding="utf-8")
