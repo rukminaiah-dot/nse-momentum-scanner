@@ -223,12 +223,14 @@ def _rule_state(context: dict[str, Any]) -> dict[str, Any]:
     vix_stress_falling = vix["value"] >= 25 and vix.get("change_pct", 0) < 0
     vix_rising = vix.get("change_pct", 0) >= 5
     absorption = flow.get("latest_absorption_ratio")
-    bottom_support = bool(vix_stress_falling or (absorption is not None and absorption >= 1)
-                          or volume.get("bullish_surge_rows", 0) > 0)
-    top_support = bool(vix_rising or (flow["fii"].get("latest") or {}).get("net_cr", 0) < 0
-                       or volume.get("bearish_surge_rows", 0) > 0)
-    bottom = direction == "BULLISH" and bottom_support
-    top = direction == "BEARISH" and top_support
+    bottom_support_count = sum((vix_stress_falling,
+                                absorption is not None and absorption >= 1,
+                                volume.get("bullish_surge_rows", 0) > 0))
+    top_support_count = sum((vix_rising,
+                             (flow["fii"].get("latest") or {}).get("net_cr", 0) < 0,
+                             volume.get("bearish_surge_rows", 0) > 0))
+    bottom = direction == "BULLISH" and bottom_support_count >= 2
+    top = direction == "BEARISH" and top_support_count >= 2
     if bottom:
         summary = "Potential bottom reversal watch: fresh bullish structure plus at least one supporting input. Confirmation remains incomplete."
     elif top:
