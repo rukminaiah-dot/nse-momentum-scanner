@@ -79,7 +79,9 @@ def _request_json(path: str, token: str, keys: list[str]) -> dict[str, Any]:
     query = urllib.parse.urlencode({"instrument_key": ",".join(keys)})
     request = urllib.request.Request(
         "https://api.upstox.com" + path + "?" + query,
-        headers={"Authorization": "Bearer " + token, "Accept": "application/json"},
+        headers={"Authorization": "Bearer " + token,
+                 "Accept": "application/json",
+                 "User-Agent": "Mozilla/5.0 NSE-Momentum-Scanner/1.0"},
     )
     with urllib.request.urlopen(request, timeout=5) as response:
         return json.loads(response.read().decode("utf-8"))

@@ -1,6 +1,7 @@
 import unittest
+from unittest.mock import patch
 
-from v2.backend.upstox_quote_client import fetch_full_quotes, fetch_quote_groups
+from v2.backend.upstox_quote_client import _request_json, fetch_full_quotes, fetch_quote_groups
 
 
 class UpstoxQuoteClientTests(unittest.TestCase):
@@ -90,6 +91,23 @@ class UpstoxQuoteClientTests(unittest.TestCase):
         self.assertNotIn("global_indices", groups)
         self.assertEqual(set(groups), {"sector_indices", "india_vix"})
         self.assertEqual(set(errors), {"global_indices"})
+
+    def test_upstox_request_uses_the_known_working_user_agent(self):
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return b'{"status":"success","data":{}}'
+
+        with patch("v2.backend.upstox_quote_client.urllib.request.urlopen", return_value=Response()) as opener:
+            _request_json("/v3/market-quote/quotes", "token", ["NSE_INDEX|India VIX"])
+
+        request = opener.call_args.args[0]
+        self.assertEqual(request.get_header("User-agent"), "Mozilla/5.0 NSE-Momentum-Scanner/1.0")
 
 
 if __name__ == "__main__":
