@@ -478,6 +478,8 @@ class FivePageUiTests(unittest.TestCase):
     def test_premarket_shows_flow_report_date_and_marks_old_cash_data_stale(self):
         self.assertIn('id="pm-flow-status"', self.html)
         self.assertIn('id="pm-flow-data"', self.html)
+        self.assertIn("Upstox daily NSE cash", self.html)
+        self.assertIn("flow.fetched_at", self.html)
         self.assertIn("function renderPreFlows()", self.html)
         self.assertIn("STALE · HISTORICAL", self.html)
         self.assertIn("Not counted in the current-session reversal rule.", self.html)
