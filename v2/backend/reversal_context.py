@@ -10,12 +10,15 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import sqlite3
+import threading
 import time
 import urllib.parse
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time as clock_time, timedelta, timezone
 from http.cookiejar import CookieJar
+from html.parser import HTMLParser
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -30,6 +33,9 @@ RVOL_THRESHOLD = 1.5
 FLOW_FRESHNESS_DAYS = 4
 _cache: dict[str, Any] | None = None
 _cache_at = 0.0
+_flow_cache: dict[str, Any] | None = None
+_flow_cache_date = None
+_flow_cache_lock = threading.Lock()
 
 
 def _number(value: Any) -> float | None:
@@ -189,61 +195,141 @@ def _upstox_quote(tokens: str | list[str]) -> dict[str, Any]:
                 "field_presence": field_presence}
 
 
-def _flow_record(token: str, path: str, flow_type: str, from_date: str) -> dict[str, Any]:
-    now = datetime.now(timezone.utc).isoformat()
-    try:
-        payload = _upstox_get(path, [("data_type", "NSE_EQ|CASH"), ("interval", "1D"), ("from", from_date)], token)
-        data = payload.get("data") if isinstance(payload, dict) else None
-        rows = data.get("NSE_EQ|CASH") if isinstance(data, dict) else None
-        if not isinstance(rows, list) or not rows:
-            raise ValueError("cash flow rows missing")
-        parsed = []
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            try:
-                stamp = datetime.fromtimestamp(float(row["time_stamp"]) / 1000, timezone.utc)
-            except (KeyError, TypeError, ValueError, OverflowError, OSError):
-                continue
-            buy, sell = _number(row.get("buy_amount")), _number(row.get("sell_amount"))
-            if buy is None or sell is None or buy < 0 or sell < 0:
-                continue
-            parsed.append({"date": stamp.astimezone(IST).date().isoformat(),
-                           "buy_cr": buy / 10_000_000, "sell_cr": sell / 10_000_000,
-                           "net_cr": (buy - sell) / 10_000_000})
-        parsed.sort(key=lambda item: item["date"], reverse=True)
-        if not parsed:
-            raise ValueError("no valid flow rows")
-        return {"status": "AVAILABLE", "source": "Upstox Market Information API",
-                "as_of_date": parsed[0]["date"], "latest": parsed[0], "recent": parsed[:5],
-                "fetched_at": now, "type": flow_type}
-    except Exception as exc:
-        return {"status": "UNAVAILABLE", "source": "Upstox Market Information API",
-                "as_of_date": None, "latest": None, "recent": [], "fetched_at": now,
-                "type": flow_type, "reason": type(exc).__name__}
+class _CashFlowTableParser(HTMLParser):
+    """Extract the table rows rendered on Upstox's public FII/DII page."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.tables: list[list[list[str]]] = []
+        self._table: list[list[str]] | None = None
+        self._row: list[str] | None = None
+        self._cell: list[str] | None = None
+
+    def handle_starttag(self, tag, attrs):
+        tag = tag.lower()
+        if tag == "table":
+            self._table = []
+        elif tag == "tr" and self._table is not None:
+            self._row = []
+        elif tag in ("th", "td") and self._row is not None:
+            self._cell = []
+
+    def handle_data(self, data):
+        if self._cell is not None:
+            self._cell.append(data)
+
+    def handle_endtag(self, tag):
+        tag = tag.lower()
+        if tag in ("th", "td") and self._cell is not None and self._row is not None:
+            self._row.append(" ".join("".join(self._cell).split()))
+            self._cell = None
+        elif tag == "tr" and self._row is not None and self._table is not None:
+            if self._row:
+                self._table.append(self._row)
+            self._row = None
+        elif tag == "table" and self._table is not None:
+            self.tables.append(self._table)
+            self._table = None
 
 
-def _institutional_flows(token: str) -> dict[str, Any]:
-    from_date = (datetime.now(IST).date() - timedelta(days=12)).isoformat()
-    fii = _flow_record(token, "/v2/market/fii", "FII/FPI NSE cash", from_date)
-    dii = _flow_record(token, "/v2/market/dii", "DII NSE cash", from_date)
-    same_date = bool(fii["latest"] and dii["latest"] and fii["as_of_date"] == dii["as_of_date"])
-    ratio = None
-    if same_date:
-        f_net = fii["latest"]["net_cr"]
-        d_net = dii["latest"]["net_cr"]
-        if f_net < 0 and d_net > 0:
-            ratio = d_net / abs(f_net)
-    freshness = _flow_freshness(fii["as_of_date"] if same_date else None)
-    return {"status": "AVAILABLE" if same_date else "UNAVAILABLE_OR_DATE_MISMATCH",
-            "as_of_date": fii["as_of_date"] if same_date else None,
-            "freshness": freshness,
-            "fii": fii, "dii": dii,
-            "latest_absorption_ratio": round(ratio, 3) if ratio is not None else None,
-            "latest_absorption_ratio_basis": "DII positive net cash flow / absolute FII negative net cash flow; same NSE cash date",
-            "recent_5d": {"fii_net_cr": round(sum(x["net_cr"] for x in fii["recent"]), 2) if fii["recent"] else None,
-                          "dii_net_cr": round(sum(x["net_cr"] for x in dii["recent"]), 2) if dii["recent"] else None},
-            "publication_note": "Cash-market institutional activity is end-of-day data, not an intraday feed."}
+def _parse_upstox_cash_table(html: str, fetched_at: str | None = None) -> dict[str, Any]:
+    """Parse reported daily net cash flows; fail closed if Upstox changes schema."""
+    if not isinstance(html, str) or not html:
+        raise ValueError("Upstox FII/DII page was empty")
+    parser = _CashFlowTableParser()
+    parser.feed(html)
+    expected = ("date", "fii net purchase/sales (cr.)", "dii net purchase/sales (cr.)")
+    table = next((rows for rows in parser.tables if rows and
+                  all(any(" ".join(cell.casefold().split()) == label for row in rows[:2] for cell in row)
+                      for label in expected)), None)
+    if table is None:
+        raise ValueError("Upstox cash table columns unavailable")
+
+    headers = [" ".join(cell.casefold().split()) for cell in table[0]]
+    date_index = headers.index("date")
+    fii_index = headers.index("fii net purchase/sales (cr.)")
+    dii_index = headers.index("dii net purchase/sales (cr.)")
+    parsed = []
+    for row in table[1:]:
+        if max(date_index, fii_index, dii_index) >= len(row):
+            continue
+        try:
+            report_date = datetime.strptime(row[date_index].strip(), "%d-%m-%Y").date()
+            values = []
+            for index in (fii_index, dii_index):
+                raw = re.sub(r"\s+", "", row[index].replace("₹", "").replace(",", "").strip())
+                number = _number(raw)
+                if number is None:
+                    raise ValueError("Invalid cash flow value")
+                values.append(number)
+            parsed.append((report_date, values[0], values[1]))
+        except (TypeError, ValueError, OverflowError):
+            continue
+    parsed.sort(key=lambda item: item[0], reverse=True)
+    if not parsed:
+        raise ValueError("Upstox cash table has no valid rows")
+
+    latest_date = parsed[0][0].isoformat()
+    fii_net, dii_net = parsed[0][1], parsed[0][2]
+    fii_recent = [{"date": d.isoformat(), "net_cr": fii} for d, fii, _ in parsed[:5]]
+    dii_recent = [{"date": d.isoformat(), "net_cr": dii} for d, _, dii in parsed[:5]]
+    return {
+        "status": "AVAILABLE", "source": "Upstox FII/DII data page · NSE cash · daily",
+        "as_of_date": latest_date,
+        "fii": {"status": "AVAILABLE", "source": "Upstox FII/DII data page · NSE cash",
+                "as_of_date": latest_date, "latest": {"date": latest_date, "net_cr": fii_net},
+                "recent": fii_recent, "type": "FII/FPI NSE cash"},
+        "dii": {"status": "AVAILABLE", "source": "Upstox FII/DII data page · NSE cash",
+                "as_of_date": latest_date, "latest": {"date": latest_date, "net_cr": dii_net},
+                "recent": dii_recent, "type": "DII NSE cash"},
+        "latest_absorption_ratio": round(dii_net / abs(fii_net), 3) if fii_net < 0 < dii_net else None,
+        "latest_absorption_ratio_basis": "DII positive net cash flow / absolute FII negative net cash flow; same NSE cash date",
+        "recent_5d": {"fii_net_cr": round(sum(item[1] for item in parsed[:5]), 2),
+                      "dii_net_cr": round(sum(item[2] for item in parsed[:5]), 2)},
+        "fetched_at": fetched_at or datetime.now(timezone.utc).isoformat(),
+        "publication_note": "Cash-market institutional activity is end-of-day data, not an intraday feed.",
+    }
+
+
+def _fetch_upstox_cash_flows() -> dict[str, Any]:
+    request = urllib.request.Request(
+        "https://upstox.com/fii-dii-data/",
+        headers={"User-Agent": "Mozilla/5.0 NSE-Momentum-Scanner/1.0",
+                 "Accept": "text/html,application/xhtml+xml"},
+    )
+    with urllib.request.urlopen(request, timeout=10) as response:
+        html = response.read(2_000_000).decode("utf-8", "replace")
+    return _parse_upstox_cash_table(html)
+
+
+def _institutional_flows(now: datetime | None = None) -> dict[str, Any]:
+    """Fetch the public Upstox cash report once per IST day after its publication window."""
+    global _flow_cache, _flow_cache_date
+    now = (now or datetime.now(IST)).astimezone(IST)
+    today = now.date()
+    if _flow_cache is not None and _flow_cache_date == today:
+        return _flow_cache
+    if now.time() < clock_time(8, 45):
+        return {"status": "AWAITING_DAILY_PUBLICATION", "source": "Upstox FII/DII data page · NSE cash · daily",
+                "as_of_date": None, "freshness": "UNKNOWN", "fii": {"status": "UNAVAILABLE"},
+                "dii": {"status": "UNAVAILABLE"}, "latest_absorption_ratio": None,
+                "publication_note": "Daily cash report is fetched once after the expected Upstox publication window."}
+    with _flow_cache_lock:
+        if _flow_cache is not None and _flow_cache_date == today:
+            return _flow_cache
+        try:
+            result = _fetch_upstox_cash_flows()
+            result["freshness"] = _flow_freshness(result.get("as_of_date"), today=today)
+            result["status"] = ("AVAILABLE" if result["fii"]["latest"]["date"] == result["dii"]["latest"]["date"]
+                                else "UNAVAILABLE_OR_DATE_MISMATCH")
+        except Exception as exc:
+            result = {"status": "UNAVAILABLE", "source": "Upstox FII/DII data page · NSE cash · daily",
+                      "as_of_date": None, "freshness": "UNKNOWN", "fii": {"status": "UNAVAILABLE"},
+                      "dii": {"status": "UNAVAILABLE"}, "latest_absorption_ratio": None,
+                      "fetched_at": datetime.now(timezone.utc).isoformat(), "reason": type(exc).__name__,
+                      "publication_note": "Cash-market institutional activity is end-of-day data, not an intraday feed."}
+        _flow_cache, _flow_cache_date = result, today
+        return result
 
 
 def _flow_freshness(as_of_date: str | None, today=None) -> str:
@@ -353,11 +439,9 @@ def reversal_context() -> dict[str, Any]:
             os.environ.get("UPSTOX_ANALYTICS_TOKEN", ""),
         ) if value and value.strip()
     ))
-    analytics_token = (os.environ.get("UPSTOX_ANALYTICS_TOKEN")
-                       or os.environ.get("UPSTOX_ACCESS_TOKEN", "")).strip()
     pe = _nse_index_pe()
     vix = _upstox_quote(quote_tokens) if quote_tokens else {"status": "TOKEN_NOT_CONFIGURED", "value": None, "as_of": None, "source": "Upstox"}
-    flows = _institutional_flows(analytics_token) if analytics_token else {"status": "TOKEN_NOT_CONFIGURED", "fii": {"status": "TOKEN_NOT_CONFIGURED"}, "dii": {"status": "TOKEN_NOT_CONFIGURED"}, "latest_absorption_ratio": None, "as_of_date": None}
+    flows = _institutional_flows()
     volume = _observed_volume(now, session_open)
     index_row = None
     try:
