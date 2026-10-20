@@ -309,29 +309,63 @@ def get_premarket_data():
             "NIFTY FINANCIAL SERVICES": "NSE_INDEX|Nifty Financial Services",
             "NIFTY ENERGY": "NSE_INDEX|Nifty Energy",
         }
-        all_keys = [item["key"] for item in selected.values()]
-        all_keys += list(sector_keys.values()) + ["NSE_INDEX|India VIX"]
-        stage = "global_sector_vix_quotes"
-        query = urllib.parse.urlencode({"instrument_key": ",".join(all_keys)})
-        request = urllib.request.Request(
-            "https://api.upstox.com/v3/market-quote/quotes?" + query,
-            headers={"Authorization": "Bearer " + token, "Accept": "application/json"},
-        )
-        with urllib.request.urlopen(request, timeout=5) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-        if not isinstance(payload, dict) or payload.get("status") != "success" or not isinstance(payload.get("data"), dict):
-            raise ValueError("Upstox quote response was not successful")
+        def fetch_quote_batch(keys):
+            query = urllib.parse.urlencode({"instrument_key": ",".join(keys)})
+            request = urllib.request.Request(
+                "https://api.upstox.com/v3/market-quote/quotes?" + query,
+                headers={"Authorization": "Bearer " + token, "Accept": "application/json"},
+            )
+            with urllib.request.urlopen(request, timeout=5) as response:
+                response_payload = json.loads(response.read().decode("utf-8"))
+            if (not isinstance(response_payload, dict)
+                    or response_payload.get("status") != "success"
+                    or not isinstance(response_payload.get("data"), dict)):
+                raise ValueError("Upstox quote response was not successful")
+            return response_payload["data"]
 
-        quotes = payload["data"]
+        # Query upstream groups separately. A permission or catalogue error in one
+        # group must not hide valid global quotes or India VIX from the page.
+        stage = "global_quotes"
+        global_quotes = fetch_quote_batch([item["key"] for item in selected.values()])
+        quote_maps = [global_quotes]
+        feed_errors = {}
+        stage = "sector_quotes"
+        try:
+            sector_quotes = fetch_quote_batch(list(sector_keys.values()))
+            quote_maps.append(sector_quotes)
+        except Exception as exc:
+            sector_quotes = {}
+            code = getattr(exc, "code", None)
+            feed_errors["sector_indices"] = "HTTP_" + str(code) if code else type(exc).__name__
+            print("PREMARKET_UPSTOX_SECTOR_QUOTES_UNAVAILABLE:", feed_errors["sector_indices"], flush=True)
+        stage = "india_vix_quote"
+        try:
+            vix_quotes = fetch_quote_batch(["NSE_INDEX|India VIX"])
+            quote_maps.append(vix_quotes)
+        except Exception as exc:
+            vix_quotes = {}
+            code = getattr(exc, "code", None)
+            feed_errors["india_vix"] = "HTTP_" + str(code) if code else type(exc).__name__
+            print("PREMARKET_UPSTOX_VIX_QUOTE_UNAVAILABLE:", feed_errors["india_vix"], flush=True)
 
         def quote_for(key):
-            quote = quotes.get(key.replace("|", ":"))
-            if isinstance(quote, dict):
-                return quote
+            wanted_key = key.replace("|", ":").casefold()
             suffix = key.split("|", 1)[-1].casefold()
-            return next((value for response_key, value in quotes.items()
-                         if isinstance(value, dict)
-                         and str(response_key).split(":", 1)[-1].casefold() == suffix), None)
+            for quotes in quote_maps:
+                quote = quotes.get(wanted_key)
+                if isinstance(quote, dict):
+                    return quote
+                quote = next((value for response_key, value in quotes.items()
+                              if isinstance(value, dict)
+                              and str(response_key).casefold() == wanted_key), None)
+                if isinstance(quote, dict):
+                    return quote
+                quote = next((value for response_key, value in quotes.items()
+                              if isinstance(value, dict)
+                              and str(response_key).split(":", 1)[-1].casefold() == suffix), None)
+                if isinstance(quote, dict):
+                    return quote
+            return None
 
         def quote_record(name, key, latency=None):
             quote = quote_for(key)
@@ -370,7 +404,7 @@ def get_premarket_data():
 
         result = {"status": "UPSTOX_QUOTES_AVAILABLE", "source": "Upstox Full Market Quotes V3",
                   "as_of": datetime.now(timezone.utc).isoformat(), "instruments": instruments, "sector_indices": sector_indices,
-                  "india_vix": india_vix, "order_execution_enabled": False, **external_context()}
+                  "india_vix": india_vix, "feed_errors": feed_errors, "order_execution_enabled": False, **external_context()}
         get_premarket_data._cache = result
         get_premarket_data._cache_at = now
         return {**result, "cache_age_seconds": 0}
