@@ -27,76 +27,6 @@ def get_premarket_data():
     from datetime import datetime, timezone
     from fastapi import HTTPException
 
-    def sgx_nifty_site_quote():
-        """Parse the public third-party SGX Nifty page as indicative context only."""
-        from html.parser import HTMLParser
-        from zoneinfo import ZoneInfo
-
-        class TextOnlyParser(HTMLParser):
-            def __init__(self):
-                super().__init__()
-                self.parts = []
-
-            def handle_data(self, data):
-                if data and data.strip():
-                    self.parts.append(data.strip())
-
-        try:
-            request = urllib.request.Request(
-                "https://sgxnifty.org/",
-                headers={"User-Agent": "Mozilla/5.0 NSE-Momentum-Scanner/1.0", "Accept": "text/html"},
-            )
-            with urllib.request.urlopen(request, timeout=6) as response:
-                html = response.read(2_000_000).decode("utf-8", errors="replace")
-            parser = TextOnlyParser()
-            parser.feed(html)
-            text = re.sub(r"\s+", " ", " ".join(parser.parts))
-            as_on = re.search(r"As on [A-Za-z]+, (\d{1,2} [A-Za-z]{3} \d{4}) (\d{1,2}:\d{2})", text, re.I)
-            trade = re.search(r"Last Trade on (\d{1,2} [A-Za-z]{3}) (\d{1,2}:\d{2})", text, re.I)
-            quote = re.search(
-                r"Last Trade\s*(?:\|\s*)?Change\s*(?:\|\s*)?Change in %\s*"
-                r"([\d,]+(?:\.\d+)?)\s*(?:\|\s*)?([+-]?[\d,]+(?:\.\d+)?)\s*(?:\|\s*)?([+-]?[\d.]+)%",
-                text, re.I,
-            )
-            if not as_on or not trade or not quote:
-                return None
-            as_of = datetime.strptime(as_on.group(1) + " " + as_on.group(2), "%d %b %Y %H:%M").replace(tzinfo=ZoneInfo("Asia/Kolkata"))
-            trade_time = datetime.strptime(trade.group(1) + " " + trade.group(2), "%d %b %H:%M").replace(year=as_of.year, tzinfo=ZoneInfo("Asia/Kolkata"))
-            price = float(quote.group(1).replace(",", ""))
-            change = float(quote.group(2).replace(",", ""))
-            previous_close = price - change
-            if min(price, previous_close) <= 0:
-                return None
-            def site_signal(period):
-                match = re.search(r"\b" + re.escape(period) + r"\s+(Strong Buy|Strong Sell|Buy|Sell|Neutral)\b", text, re.I)
-                return match.group(1).upper() if match else None
-
-            def site_moving_averages(period_pattern):
-                match = re.search(period_pattern + r"\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)", text, re.I)
-                if not match:
-                    return None
-                return {"ma20": float(match.group(1).replace(",", "")),
-                        "ma50": float(match.group(2).replace(",", "")),
-                        "ma100": float(match.group(3).replace(",", ""))}
-
-            technical = {
-                "signals": {"5m": site_signal("5 Min"), "1h": site_signal("1 Hour"), "1d": site_signal("1 Day")},
-                "moving_averages": {"5m": site_moving_averages(r"5 Minutes"), "1h": site_moving_averages(r"1 Hour")},
-            }
-            return {
-                "name": "SGX NIFTY (third-party site)", "status": "QUOTED",
-                "price": price, "previous_close": previous_close, "change": change,
-                "change_pct": float(quote.group(3)),
-                "last_trade_at": trade_time.astimezone(timezone.utc).isoformat(),
-                "site_as_of": as_of.astimezone(timezone.utc).isoformat(),
-                "technical": technical,
-                "latency": "600 Seconds", "source": "sgxnifty.org",
-                "source_url": "https://sgxnifty.org/", "source_type": "THIRD_PARTY_INDICATIVE",
-            }
-        except Exception as exc:
-            print("PREMARKET_SGX_SITE_UNAVAILABLE:", type(exc).__name__, flush=True)
-            return None
-
     def financial_news():
         """Fetch recent RSS headline metadata; never infer sentiment from a headline."""
         import xml.etree.ElementTree as ET
@@ -155,90 +85,17 @@ def get_premarket_data():
         return sorted(unique.values(), key=lambda item: item["published_at"], reverse=True)[:12]
 
     def external_context():
-        return {"sgx_nifty_quote": sgx_nifty_site_quote(), "news": financial_news(),
+        return {"news": financial_news(),
                 "news_source": "Livemint RSS headlines", "news_as_of": datetime.now(timezone.utc).isoformat()}
 
-    def yahoo_global_quotes():
-        """Return delayed Yahoo global index context; deliberately excludes GIFT Nifty."""
-        try:
-            import yfinance as yf
-            symbols = {
-                "S&P 500": "^GSPC", "DOW JONES": "^DJI", "NASDAQ": "^IXIC",
-                "FTSE 100": "^FTSE", "DAX": "^GDAXI", "NIKKEI 225": "^N225",
-                "HANG SENG": "^HSI",
-            }
-            data = yf.download(
-                tickers=list(symbols.values()), period="5d", interval="5m",
-                group_by="ticker", auto_adjust=False, progress=False,
-                threads=False, timeout=8,
-            )
-            instruments = []
-            columns = getattr(data, "columns", None)
-            if columns is None or data.empty:
-                return instruments
-            for name, ticker in symbols.items():
-                try:
-                    if getattr(columns, "nlevels", 1) > 1:
-                        if ticker in columns.get_level_values(0):
-                            frame = data[ticker]
-                        elif ticker in columns.get_level_values(1):
-                            frame = data.xs(ticker, axis=1, level=1)
-                        else:
-                            continue
-                    else:
-                        frame = data
-                    close = frame["Close"].dropna()
-                    if len(close) < 2:
-                        continue
-                    latest_index = close.index[-1]
-                    latest_date = latest_index.date()
-                    prior = close[[idx.date() < latest_date for idx in close.index]]
-                    if prior.empty:
-                        continue
-                    price = float(close.iloc[-1])
-                    previous_close = float(prior.iloc[-1])
-                    if price <= 0 or previous_close <= 0:
-                        continue
-                    stamp = latest_index.to_pydatetime()
-                    if stamp.tzinfo is None:
-                        stamp = stamp.replace(tzinfo=timezone.utc)
-                    change = price - previous_close
-                    instruments.append({
-                        "name": name, "status": "QUOTED", "price": price,
-                        "previous_close": previous_close, "change": change,
-                        "change_pct": change / previous_close * 100,
-                        "last_trade_at": stamp.astimezone(timezone.utc).isoformat(),
-                        "latency": "900 Seconds",
-                    })
-                except (KeyError, TypeError, ValueError, OverflowError, AttributeError):
-                    continue
-            return instruments
-        except Exception as exc:
-            print("PREMARKET_YAHOO_QUOTES_UNAVAILABLE:", type(exc).__name__, flush=True)
-            return []
-
-    def yahoo_fallback(now, cache, cache_at, upstox_error=None):
-        instruments = yahoo_global_quotes()
-        if instruments:
-            result = {
-                "status": "YAHOO_GLOBAL_QUOTES_FALLBACK",
-                "source": "Yahoo Finance delayed global indexes; GIFT Nifty unavailable",
-                "as_of": datetime.now(timezone.utc).isoformat(),
-                "instruments": instruments, "sector_indices": [],
-                "india_vix": {"name": "INDIA VIX", "status": "UNAVAILABLE",
-                              "source": "Upstox Full Market Quotes"},
-                "upstox_error": upstox_error,
-                "order_execution_enabled": False,
-                **external_context(),
-            }
-            get_premarket_data._cache = result
-            get_premarket_data._cache_at = now
-            return {**result, "cache_age_seconds": 0}
-        if cache:
+    def upstox_fallback(now, cache, cache_at, upstox_error=None):
+        # Do not mix Yahoo or third-party quote values into this Upstox-only feed.
+        if cache and cache.get("status") == "UPSTOX_QUOTES_AVAILABLE":
             return {**cache, "status": "UPSTOX_REFRESH_FAILED_USING_CACHED_QUOTE",
                     "upstox_error": upstox_error,
                     "cache_age_seconds": round(max(0, now - cache_at), 1)}
-        return {"status": "GLOBAL_QUOTES_UNAVAILABLE", "source": "Upstox and Yahoo Finance",
+        return {"status": "UPSTOX_QUOTES_UNAVAILABLE",
+                "source": "Upstox Full Market Quotes",
                 "as_of": None, "instruments": [], "sector_indices": [],
                 "india_vix": {"name": "INDIA VIX", "status": "UNAVAILABLE",
                               "source": "Upstox Full Market Quotes"},
@@ -264,7 +121,7 @@ def get_premarket_data():
         ) if value and value.strip()
     ))
     if not token_candidates:
-        return yahoo_fallback(now, cache, cache_at, {"error": "TOKEN_NOT_CONFIGURED"})
+        return upstox_fallback(now, cache, cache_at, {"error": "TOKEN_NOT_CONFIGURED"})
     token = token_candidates[0]
 
     stage = "global_instruments"
@@ -434,10 +291,10 @@ def get_premarket_data():
     except urllib.error.HTTPError as exc:
         # Log only the upstream stage and HTTP status; never log the access token.
         print("PREMARKET_UPSTOX_HTTP_ERROR:", stage, exc.code, flush=True)
-        return yahoo_fallback(now, cache, cache_at, {"stage": stage, "status_code": exc.code})
+        return upstox_fallback(now, cache, cache_at, {"stage": stage, "status_code": exc.code})
     except Exception as exc:
         print("PREMARKET_UPSTOX_QUOTES_UNAVAILABLE:", type(exc).__name__, flush=True)
-        return yahoo_fallback(now, cache, cache_at, {"stage": stage, "error": type(exc).__name__})
+        return upstox_fallback(now, cache, cache_at, {"stage": stage, "error": type(exc).__name__})
 
 @app.get("/api/v2/trades")
 def get_trades():
