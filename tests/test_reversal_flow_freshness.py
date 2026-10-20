@@ -51,6 +51,14 @@ class ReversalFlowFreshnessTests(unittest.TestCase):
             "STALE",
         )
 
+    def test_short_term_direction_requires_aligned_ema_and_momentum(self):
+        classify = reversal_context._short_term_direction
+        self.assertEqual(classify(102, 100, 0.2), "BULLISH")
+        self.assertEqual(classify(98, 100, -0.2), "BEARISH")
+        self.assertEqual(classify(102, 100, -0.2), "MIXED")
+        self.assertEqual(classify(98, 100, 0.2), "MIXED")
+        self.assertIsNone(classify(None, 100, 0.2))
+
     def test_stale_flows_cannot_advance_live_reversal_rule(self):
         context = {
             "india_vix": {"status": "AVAILABLE", "value": 14.0, "change_pct": -1.0},

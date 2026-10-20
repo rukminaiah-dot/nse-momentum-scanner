@@ -56,6 +56,18 @@ def _number(value: Any) -> float | None:
         return None
 
 
+def _short_term_direction(ema9: Any, ema20: Any, momentum: Any) -> str | None:
+    """Classify stored completed-candle EMA/momentum context for display only."""
+    e9, e20, mom = _number(ema9), _number(ema20), _number(momentum)
+    if e9 is None or e20 is None or mom is None:
+        return None
+    if e9 > e20 and mom > 0:
+        return "BULLISH"
+    if e9 < e20 and mom < 0:
+        return "BEARISH"
+    return "MIXED"
+
+
 def _get_json(url: str, headers: dict[str, str] | None = None) -> Any:
     request_headers = {"User-Agent": "Mozilla/5.0 NSE-Momentum-Scanner/1.0",
                        "Accept": "application/json"}
@@ -589,6 +601,7 @@ def reversal_context() -> dict[str, Any]:
     except sqlite3.Error:
         pass
     direction = None
+    observed_direction = None
     candle_time = None
     price = None
     status = "UNAVAILABLE"
@@ -596,26 +609,28 @@ def reversal_context() -> dict[str, Any]:
         candle_time = index_row.get("updated_at")
         price = _number(index_row.get("price"))
         e9, e20, momentum = (_number(index_row.get(k)) for k in ("ema9", "ema20", "momentum"))
+        observed_direction = _short_term_direction(e9, e20, momentum)
         try:
             stamp = datetime.strptime(candle_time, "%Y-%m-%d %H:%M:%S").replace(tzinfo=IST)
             age = now - stamp
             if session_open and stamp.date() == now.date() and timedelta(0) <= age <= timedelta(minutes=3):
                 status = "LIVE_FRESH"
-                if e9 is not None and e20 is not None and momentum is not None:
-                    direction = "BULLISH" if e9 > e20 and momentum > 0 else "BEARISH" if e9 < e20 and momentum < 0 else "MIXED"
+                direction = observed_direction
             else:
                 status = "HISTORICAL"
         except (TypeError, ValueError):
             status = "STALE"
     evidence = assess_long_reversal_evidence(
         {"status": status, "direction": direction, "candle_ist": candle_time,
-         "basis": "latest Nifty scanner row; 5-minute EMA9/EMA20 and momentum"},
+         "basis": "latest Nifty scanner row; completed 1-minute EMA9/EMA20 and five-bar momentum"},
         pe, vix, flows, volume)
     evidence["as_of"] = now.isoformat()
     context = {"status": "READY" if pe["status"] == "AVAILABLE" else "PARTIAL",
                "as_of_ist": now.isoformat(), "market_session": "OPEN" if session_open else "CLOSED",
-               "price_structure": {"status": status, "direction": direction, "price": price, "candle_ist": candle_time,
-                                   "basis": "latest Nifty scanner row; 5-minute EMA9/EMA20 and momentum"},
+               "price_structure": {"status": status, "direction": direction,
+                                   "observed_direction": observed_direction,
+                                   "price": price, "candle_ist": candle_time,
+                                   "basis": "latest Nifty scanner row; completed 1-minute EMA9/EMA20 and five-bar momentum"},
                "nifty_pe": pe, "india_vix": vix, "institutional_flows": flows, "volume": volume, "reversal_evidence": evidence,
                "five_session": {"event": event_spec(), **rule_definition()},
                "long_horizon_reversal": long_horizon_rule_definition(),

@@ -41,6 +41,17 @@ class ReversalEvidenceUiTests(unittest.TestCase):
         self.assertIn("NIFTY reversal rules do not cover this index", dashboard)
         self.assertIn("verified 500-point move against the prior trend", dashboard)
 
+    def test_timestamped_news_is_related_to_the_verified_short_term_trend(self):
+        helper = HTML.parent / "news_trend_relation.js"
+        source = helper.read_text(encoding="utf-8")
+        self.assertIn('src="./news_trend_relation.js"', self.html)
+        self.assertIn("window.classifyNewsTrendRelation(newsImpact,newsTrend)", self.html)
+        self.assertIn("Supports reversal", source)
+        self.assertIn("Supports continuation", source)
+        self.assertIn("Neutral / unclear", self.html)
+        self.assertIn("trend unverified", source)
+        self.assertIn("not automatically scored", self.html)
+
 
 if __name__ == "__main__":
     unittest.main()

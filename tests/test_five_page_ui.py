@@ -513,7 +513,7 @@ class FivePageUiTests(unittest.TestCase):
                       "FII / DII cash flows", "Observed volume"):
             self.assertIn(label, self.html)
         self.assertIn("Building baseline", self.html)
-        self.assertIn("no crude quote or verified market impact", self.html)
+        self.assertIn("not confirmed market impact", self.html)
         self.assertIn("not NIFTY cash-index volume", self.html)
         self.assertIn("Historical · bullish stock RVOL", self.html)
         self.assertIn("role=\"img\" aria-label=", self.html)
