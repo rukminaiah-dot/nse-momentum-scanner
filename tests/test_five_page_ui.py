@@ -506,6 +506,21 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("CREATE TABLE IF NOT EXISTS daily_nifty_valuations", archive)
         self.assertIn("POSTGRESQL_AND_LOCAL", archive)
 
+    def test_premarket_has_individual_color_bands_for_market_factors(self):
+        self.assertIn('id="pm-factor-analysis"', self.html)
+        self.assertIn('id="pm-factor-bands"', self.html)
+        for label in ("NIFTY 50 P/E", "Crude & geopolitical news", "India VIX",
+                      "FII / DII cash flows", "Observed volume"):
+            self.assertIn(label, self.html)
+        self.assertIn("Building baseline", self.html)
+        self.assertIn("no crude quote or verified market impact", self.html)
+        self.assertIn("not NIFTY cash-index volume", self.html)
+        self.assertIn("Historical · bullish stock RVOL", self.html)
+        self.assertIn("role=\"img\" aria-label=", self.html)
+        reversal = (pathlib.Path(__file__).resolve().parents[1] /
+                    "v2/backend/reversal_context.py").read_text(encoding="utf-8")
+        self.assertIn("read_nifty_pe_history(60)", reversal)
+
     def test_premarket_discloses_five_session_event_rules_without_probability(self):
         self.assertIn('id="pm-five-session-card"', self.html)
         self.assertIn("latest verified completed-session close within the next five trading sessions", self.html)
