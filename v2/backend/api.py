@@ -375,6 +375,14 @@ from fastapi.responses import FileResponse
 def dashboard():
     return FileResponse("v2/frontend/index.html")
 
+@app.get("/news_trend_relation.js")
+def news_trend_relation_script():
+    """Serve the shared news classifier used by the dashboard HTML."""
+    return FileResponse(
+        "v2/frontend/news_trend_relation.js",
+        media_type="application/javascript",
+    )
+
 @app.get("/api/v2/scanner")
 def get_scanner_results():
     con = sqlite3.connect(DB_PATH, timeout=10)
