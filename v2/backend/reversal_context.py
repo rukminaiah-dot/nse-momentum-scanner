@@ -16,7 +16,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
-from datetime import datetime, time as clock_time, timedelta, timezone
+from datetime import date, datetime, time as clock_time, timedelta, timezone
 from http.cookiejar import CookieJar
 from html.parser import HTMLParser
 from typing import Any
@@ -27,6 +27,7 @@ from fastapi import APIRouter
 from .database import DB_PATH
 from .five_session_rules import event_spec, rule_definition
 from .long_horizon_reversal import rule_definition as long_horizon_rule_definition
+from .nifty_pe_archive import read_latest_nifty_pe, save_daily_nifty_pe
 from .stock_universe import NIFTY_200
 
 router = APIRouter()
@@ -38,6 +39,12 @@ _cache_at = 0.0
 _flow_cache: dict[str, Any] | None = None
 _flow_cache_date = None
 _flow_cache_lock = threading.Lock()
+_pe_cache: dict[str, Any] | None = None
+_pe_cache_date: date | None = None
+_pe_last_attempt: datetime | None = None
+_pe_cache_lock = threading.Lock()
+PE_DAILY_REFRESH_AFTER = clock_time(16, 0)
+PE_REFRESH_RETRY_MINUTES = 30
 
 
 def _number(value: Any) -> float | None:
@@ -57,37 +64,127 @@ def _get_json(url: str, headers: dict[str, str] | None = None) -> Any:
         return json.loads(response.read(2_000_000).decode("utf-8"))
 
 
-def _nse_index_pe() -> dict[str, Any]:
-    """Read the public NSE index snapshot; return unavailable on any schema drift."""
-    now = datetime.now(timezone.utc).isoformat()
+def _nse_pe_session_date(raw_timestamp: Any) -> tuple[str, str] | None:
+    """Return a source-reported session date and display timestamp, without inventing one."""
+    if not isinstance(raw_timestamp, str) or not raw_timestamp.strip():
+        return None
+    raw = raw_timestamp.strip()
+    for fmt in ("%d-%b-%Y %H:%M:%S", "%d-%b-%Y %H:%M", "%d-%b-%Y",
+                "%d-%m-%Y %H:%M:%S", "%d-%m-%Y %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            parsed = datetime.strptime(raw, fmt)
+            return parsed.date().isoformat(), raw
+        except ValueError:
+            continue
     try:
-        jar = CookieJar()
-        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
-        base_headers = {"User-Agent": "Mozilla/5.0 NSE-Momentum-Scanner/1.0",
-                        "Accept": "text/html,application/xhtml+xml,application/json",
-                        "Accept-Language": "en-US,en;q=0.9"}
-        with opener.open(urllib.request.Request("https://www.nseindia.com/", headers=base_headers), timeout=6):
-            pass
-        req = urllib.request.Request("https://www.nseindia.com/api/allIndices",
-                                     headers={**base_headers, "Referer": "https://www.nseindia.com/market-data/live-market-indices",
-                                              "Accept": "application/json, text/plain, */*"})
-        with opener.open(req, timeout=6) as response:
-            payload = json.loads(response.read(2_000_000).decode("utf-8"))
-        rows = payload.get("data") if isinstance(payload, dict) else None
-        if not isinstance(rows, list):
-            raise ValueError("NSE index response schema unavailable")
-        row = next((item for item in rows if isinstance(item, dict)
-                    and str(item.get("indexSymbol", "")).strip().upper() in {"NIFTY 50", "NIFTY50"}), None)
-        pe = _number(row.get("pe")) if row else None
-        if pe is None or pe <= 0:
-            raise ValueError("NIFTY 50 P/E unavailable")
-        source_time = row.get("timestamp") or payload.get("timestamp")
-        return {"status": "AVAILABLE", "value": pe, "source": "NSE India index snapshot",
-                "as_of": source_time or now, "fetched_at": now,
-                "interpretation": "Context only; no cheap/expensive label without a chosen comparison baseline."}
-    except Exception as exc:
-        return {"status": "UNAVAILABLE", "value": None, "source": "NSE India index snapshot",
-                "as_of": None, "fetched_at": now, "reason": type(exc).__name__}
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=IST)
+        return parsed.astimezone(IST).date().isoformat(), parsed.isoformat()
+    except ValueError:
+        return None
+
+
+def _daily_pe_result(record: dict[str, Any] | None, now: datetime, storage: str,
+                     fetch_error: str | None = None) -> dict[str, Any]:
+    if not record:
+        return {"status": "UNAVAILABLE", "value": None,
+                "source": "NSE Indices daily valuation snapshot", "as_of": None,
+                "session_date": None, "fetched_at": None, "storage": storage,
+                "refresh_status": "FAILED" if fetch_error else "AWAITING_DAILY_SNAPSHOT",
+                "reason": fetch_error}
+    today = now.astimezone(IST).date().isoformat()
+    same_day = record.get("session_date") == today
+    return {"status": "AVAILABLE" if same_day else "HISTORICAL",
+            "freshness": "DAILY_EOD" if same_day else "LAST_STORED_DAILY_READING",
+            "value": record.get("value"), "source": record.get("source") or "NSE Indices",
+            "as_of": record.get("as_of"), "session_date": record.get("session_date"),
+            "fetched_at": record.get("fetched_at"), "basis": record.get("basis") or "",
+            "storage": storage,
+            "refresh_status": "FAILED_USING_LAST_STORED" if fetch_error else ("UPDATED_TODAY" if same_day else "NO_TODAY_SNAPSHOT"),
+            "reason": fetch_error,
+            "interpretation": "Daily end-of-day context only; not a live valuation signal."}
+
+
+def _fetch_daily_nifty_pe(now: datetime) -> dict[str, Any]:
+    """Fetch the official NSE index snapshot once the daily close is published."""
+    jar = CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+    base_headers = {"User-Agent": "Mozilla/5.0 NSE-Momentum-Scanner/1.0",
+                    "Accept": "text/html,application/xhtml+xml,application/json",
+                    "Accept-Language": "en-US,en;q=0.9"}
+    with opener.open(urllib.request.Request("https://www.nseindia.com/", headers=base_headers), timeout=6):
+        pass
+    req = urllib.request.Request("https://www.nseindia.com/api/allIndices",
+                                 headers={**base_headers, "Referer": "https://www.nseindia.com/market-data/live-market-indices",
+                                          "Accept": "application/json, text/plain, */*"})
+    with opener.open(req, timeout=6) as response:
+        payload = json.loads(response.read(2_000_000).decode("utf-8"))
+    rows = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(rows, list):
+        raise ValueError("NSE index response schema unavailable")
+    row = next((item for item in rows if isinstance(item, dict)
+                and str(item.get("indexSymbol", "")).strip().upper() in {"NIFTY 50", "NIFTY50"}), None)
+    pe = _number(row.get("pe")) if row else None
+    if pe is None or pe <= 0:
+        raise ValueError("NIFTY 50 P/E unavailable")
+    source_timestamp = (row.get("timestamp") or row.get("date")
+                        or payload.get("timestamp") or payload.get("date"))
+    parsed = _nse_pe_session_date(source_timestamp)
+    if not parsed:
+        raise ValueError("NSE P/E source date unavailable")
+    session_date, as_of = parsed
+    record = {"session_date": session_date, "value": pe, "as_of": as_of,
+              "fetched_at": now.astimezone(timezone.utc).isoformat(),
+              "source": "NSE India index snapshot (daily close)",
+              "basis": "NSE index P/E; trailing constituent earnings as published by NSE Indices"}
+    return record
+
+
+def _nse_index_pe(now: datetime | None = None) -> dict[str, Any]:
+    """Return today's end-of-day NIFTY P/E, or the last stored dated reading."""
+    global _pe_cache, _pe_cache_date, _pe_last_attempt
+    now = (now or datetime.now(IST)).astimezone(IST)
+    today = now.date()
+    now_utc = now.astimezone(timezone.utc)
+    with _pe_cache_lock:
+        if _pe_cache is not None and _pe_cache_date == today:
+            if _pe_cache.get("status") == "AVAILABLE":
+                return _pe_cache
+            if _pe_last_attempt and now_utc - _pe_last_attempt < timedelta(minutes=PE_REFRESH_RETRY_MINUTES):
+                return _pe_cache
+
+        record, storage = read_latest_nifty_pe()
+        can_refresh = (now.weekday() < 5 and now.time() >= PE_DAILY_REFRESH_AFTER)
+        if not can_refresh:
+            result = _daily_pe_result(record, now, storage)
+            _pe_cache, _pe_cache_date = result, today
+            return result
+        if record and record.get("session_date") == today.isoformat():
+            result = _daily_pe_result(record, now, storage)
+            _pe_cache, _pe_cache_date = result, today
+            return result
+
+        _pe_last_attempt = now_utc
+        try:
+            new_record = _fetch_daily_nifty_pe(now)
+            if new_record["session_date"] > today.isoformat():
+                raise ValueError("NSE P/E source date is after the current date")
+            storage = save_daily_nifty_pe(new_record)
+            result = _daily_pe_result(new_record, now, storage)
+            if new_record["session_date"] == today.isoformat():
+                _pe_cache, _pe_cache_date = result, today
+                return result
+            # Holiday/late-published snapshot: preserve its actual source date.
+            record, storage = new_record, storage
+        except Exception as exc:
+            fetch_error = type(exc).__name__
+            result = _daily_pe_result(record, now, storage, fetch_error)
+            _pe_cache, _pe_cache_date = result, today
+            return result
+        result = _daily_pe_result(record, now, storage)
+        _pe_cache, _pe_cache_date = result, today
+        return result
 
 
 def _upstox_get(path: str, params: list[tuple[str, str]], token: str) -> Any:
