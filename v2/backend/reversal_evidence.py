@@ -65,9 +65,9 @@ def assess_long_reversal_evidence(price: dict[str, Any], pe: dict[str, Any],
     factors.append(_factor(
         "pe_trend", "NIFTY P/E trend", "ASSESSED" if pe_ok else "NOT_SCORED",
         WEIGHTS["pe_trend"] if falling_pe else 0 if pe_ok else None,
-        ("Three consecutive stored daily readings are falling; valuation remains context, not a trigger."
+        ("The three latest comparable stored daily readings are falling; valuation remains context, not a trigger."
          if falling_pe else
-         "P/E is not falling across three consecutive comparable daily records." if pe_ok else
+         "P/E is not falling across three comparable daily records." if pe_ok else
          "Need three comparable daily P/E records to assess direction; one P/E reading cannot establish a trend."),
         recent_pe[-1][0] if recent_pe else pe.get("session_date"), pe.get("source")))
 
@@ -136,7 +136,7 @@ def assess_long_reversal_evidence(price: dict[str, Any], pe: dict[str, Any],
         "as_of": None,
         "factors": factors,
         "method": (
-            "Fixed additive evidence points: trend structure 25, three-session P/E decline 15, "
+            "Fixed additive evidence points: trend structure 25, declining P/E across the three latest comparable stored readings 15, "
             "VIX >=25 and falling 15, same-date DII absorption of FII/FPI selling 20, bullish "
             "verified volume 15. Timestamped news is displayed but not scored. This heuristic is "
             "uncalibrated, not a probability or profit estimate; missing factors remain unscored."
