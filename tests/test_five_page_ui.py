@@ -493,6 +493,7 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("latest verified completed-session close within the next five trading sessions", self.html)
         self.assertIn("UP ONLY, DOWN ONLY, BOTH thresholds touched, or NEITHER", self.html)
         self.assertIn("not currently a trained ML forecast", self.html)
+        self.assertIn("The five-session period is the separate forecast horizon, not the movement threshold.", self.html)
         reversal = (pathlib.Path(__file__).resolve().parents[1] /
                     "v2/backend/reversal_context.py").read_text(encoding="utf-8")
         self.assertIn('"five_session": {"event": event_spec(), **rule_definition()}', reversal)
