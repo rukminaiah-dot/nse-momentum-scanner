@@ -238,9 +238,15 @@ def get_premarket_data():
                 "as_of": None, "instruments": [], "order_execution_enabled": False, **external_context()}
 
     now = time.monotonic()
+    from zoneinfo import ZoneInfo
+    market_now = datetime.now(ZoneInfo("Asia/Kolkata"))
+    session_open = (market_now.weekday() < 5
+                    and market_now.replace(hour=9, minute=15, second=0, microsecond=0) <= market_now
+                    < market_now.replace(hour=15, minute=30, second=0, microsecond=0))
     cache = getattr(get_premarket_data, "_cache", None)
     cache_at = getattr(get_premarket_data, "_cache_at", 0.0)
-    if cache and now - cache_at < 60:
+    cache_ttl = 10 if session_open else 60
+    if cache and now - cache_at < cache_ttl:
         return {**cache, "cache_age_seconds": round(now - cache_at, 1)}
 
     token = (os.environ.get("UPSTOX_ANALYTICS_TOKEN") or os.environ.get("UPSTOX_ACCESS_TOKEN", "")).strip()
