@@ -87,9 +87,31 @@ def _upstox_get(path: str, params: list[tuple[str, str]], token: str) -> Any:
                      {"Authorization": "Bearer " + token, "Accept": "application/json"})
 
 
+def _quote_timestamp(raw_stamp: Any) -> datetime:
+    """Parse Upstox quote timestamps in epoch seconds/ms or ISO-8601 form."""
+    if raw_stamp is None or isinstance(raw_stamp, bool):
+        raise ValueError("quote timestamp unavailable")
+    try:
+        numeric_stamp = float(raw_stamp)
+    except (TypeError, ValueError, OverflowError):
+        numeric_stamp = None
+    if numeric_stamp is not None and math.isfinite(numeric_stamp) and numeric_stamp > 0:
+        seconds = numeric_stamp / 1000 if numeric_stamp >= 10_000_000_000 else numeric_stamp
+        return datetime.fromtimestamp(seconds, timezone.utc)
+    stamp_text = str(raw_stamp).strip()
+    if not stamp_text:
+        raise ValueError("quote timestamp unavailable")
+    stamp = datetime.fromisoformat(stamp_text.replace("Z", "+00:00"))
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    return stamp.astimezone(timezone.utc)
+
+
 def _upstox_quote(tokens: str | list[str]) -> dict[str, Any]:
     now = datetime.now(timezone.utc).isoformat()
     response_keys = []
+    quote_fields = []
+    field_presence: dict[str, bool] = {}
     try:
         candidates = list(dict.fromkeys(
             item.strip() for item in (tokens if isinstance(tokens, list) else [tokens])
@@ -119,28 +141,31 @@ def _upstox_quote(tokens: str | list[str]) -> dict[str, Any]:
                 break
         if not isinstance(quote, dict):
             raise last_error or ValueError("India VIX quote missing")
+        quote_fields = sorted(str(key) for key in quote.keys())
+        field_presence = {key: key in quote and quote.get(key) is not None
+                          for key in ("last_price", "prev_close_price", "net_change",
+                                      "last_trade_time", "timestamp")}
         price = _number(quote.get("last_price"))
         prev = _number(quote.get("prev_close_price"))
+        # Some quote payloads can omit prev_close_price while still supplying
+        # Upstox's documented net_change. Reconstruct only from those source fields.
+        net_change = _number(quote.get("net_change"))
+        if prev is None and price is not None and net_change is not None:
+            prev = price - net_change
         raw_stamp = quote.get("last_trade_time") or quote.get("timestamp")
-        if not price or not prev or not raw_stamp:
+        if price is None or price <= 0 or prev is None or prev <= 0 or raw_stamp is None:
             raise ValueError("India VIX quote incomplete")
-        try:
-            numeric_stamp = float(raw_stamp)
-            if numeric_stamp > 10_000_000_000:
-                stamp = datetime.fromtimestamp(numeric_stamp / 1000, timezone.utc)
-            else:
-                stamp = datetime.fromtimestamp(numeric_stamp, timezone.utc)
-        except (TypeError, ValueError, OverflowError, OSError):
-            stamp = datetime.fromisoformat(str(raw_stamp).replace("Z", "+00:00"))
-            if stamp.tzinfo is None:
-                stamp = stamp.replace(tzinfo=timezone.utc)
+        stamp = _quote_timestamp(raw_stamp)
         change_pct = (price / prev - 1) * 100
         return {"status": "AVAILABLE", "value": price, "previous_close": prev,
                 "change_pct": round(change_pct, 3), "as_of": stamp.isoformat(), "fetched_at": now,
-                "source": "Upstox Full Market Quotes V3"}
+                "source": "Upstox Full Market Quotes V3", "response_keys": response_keys,
+                "quote_fields": quote_fields, "field_presence": field_presence}
     except Exception as exc:
         return {"status": "UNAVAILABLE", "value": None, "as_of": None, "fetched_at": now,
-                "source": "Upstox Full Market Quotes V3", "reason": type(exc).__name__, "response_keys": response_keys}
+                "source": "Upstox Full Market Quotes V3", "reason": type(exc).__name__,
+                "response_keys": response_keys, "quote_fields": quote_fields,
+                "field_presence": field_presence}
 
 
 def _flow_record(token: str, path: str, flow_type: str, from_date: str) -> dict[str, Any]:
