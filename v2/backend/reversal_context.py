@@ -235,9 +235,9 @@ def _rule_state(context: dict[str, Any]) -> dict[str, Any]:
     bottom = direction == "BULLISH" and bottom_support_count >= 2
     top = direction == "BEARISH" and top_support_count >= 2
     if bottom:
-        summary = "Potential bottom reversal watch: fresh bullish structure plus at least one supporting input. Confirmation remains incomplete."
+        summary = "Potential bottom reversal watch: fresh bullish structure plus at least two of three confirmations. Confirmation remains incomplete."
     elif top:
-        summary = "Potential top reversal watch: fresh bearish structure plus at least one risk input. Confirmation remains incomplete."
+        summary = "Potential top reversal watch: fresh bearish structure plus at least two of three confirmations. Confirmation remains incomplete."
     else:
         summary = "No current reversal watch is triggered by the available rules."
     return {"status": "WATCH_ONLY" if bottom or top else "NO_REVERSAL_WATCH",
