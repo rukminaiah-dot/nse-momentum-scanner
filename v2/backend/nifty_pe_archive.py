@@ -1,9 +1,4 @@
-"""Persistence for daily NIFTY 50 valuation snapshots.
-
-PostgreSQL is preferred so the last published reading survives Render restarts.
-The scanner's SQLite database remains a local fallback for development and for
-deployments without DATABASE_URL.
-"""
+"""Daily NIFTY valuation history from the durable/local snapshot archive."""
 from __future__ import annotations
 
 import os
@@ -79,10 +74,63 @@ def save_daily_nifty_pe(record: dict[str, Any]) -> str:
     try:
         postgres_saved = _save_postgres(values)
     except Exception:
-        # Keep the numeric reading local if the optional durable store is down.
         postgres_saved = False
     _save_sqlite(values)
     return "POSTGRESQL_AND_LOCAL" if postgres_saved else "LOCAL_FALLBACK"
+
+
+def _row_record(row: Any) -> dict[str, Any]:
+    return {"session_date": row[0].isoformat() if hasattr(row[0], "isoformat") else str(row[0]),
+            "value": float(row[1]), "as_of": row[2],
+            "fetched_at": row[3].isoformat() if hasattr(row[3], "isoformat") else row[3],
+            "source": row[4], "basis": row[5]}
+
+
+def _read_history_postgres(limit: int) -> list[dict[str, Any]]:
+    url = os.environ.get("DATABASE_URL")
+    if not url:
+        return []
+    import psycopg
+    with psycopg.connect(url, connect_timeout=3) as db:
+        rows = db.execute("""
+            SELECT session_date, pe, source_as_of, fetched_at, source, basis
+            FROM daily_nifty_valuations ORDER BY session_date DESC LIMIT %s
+        """, (limit,)).fetchall()
+    return [_row_record(row) for row in reversed(rows)]
+
+
+def _read_history_sqlite(limit: int) -> list[dict[str, Any]]:
+    with sqlite3.connect(DB_PATH, timeout=3) as db:
+        exists = db.execute("""
+            SELECT 1 FROM sqlite_master WHERE type='table' AND name='daily_nifty_valuations'
+        """).fetchone()
+        if not exists:
+            return []
+        rows = db.execute("""
+            SELECT session_date, pe, source_as_of, fetched_at, source, basis
+            FROM daily_nifty_valuations ORDER BY session_date DESC LIMIT ?
+        """, (limit,)).fetchall()
+    return [_row_record(row) for row in reversed(rows)]
+
+
+def read_nifty_pe_history(limit: int = 6) -> tuple[list[dict[str, Any]], str]:
+    """Return recent verified daily records, oldest first, with storage provenance."""
+    try:
+        requested = max(1, min(60, int(limit)))
+    except (TypeError, ValueError, OverflowError):
+        requested = 6
+    if os.environ.get("DATABASE_URL"):
+        try:
+            rows = _read_history_postgres(requested)
+            if rows:
+                return rows, "POSTGRESQL"
+        except Exception:
+            pass
+    try:
+        rows = _read_history_sqlite(requested)
+        return rows, "LOCAL_FALLBACK" if rows else "UNAVAILABLE"
+    except (sqlite3.Error, OSError):
+        return [], "UNAVAILABLE"
 
 
 def _read_postgres() -> dict[str, Any] | None:
@@ -95,10 +143,7 @@ def _read_postgres() -> dict[str, Any] | None:
             SELECT session_date, pe, source_as_of, fetched_at, source, basis
             FROM daily_nifty_valuations ORDER BY session_date DESC LIMIT 1
         """).fetchone()
-    if not row:
-        return None
-    return {"session_date": row[0].isoformat(), "value": float(row[1],), "as_of": row[2],
-            "fetched_at": row[3].isoformat(), "source": row[4], "basis": row[5]}
+    return _row_record(row) if row else None
 
 
 def _read_sqlite() -> dict[str, Any] | None:
@@ -112,10 +157,7 @@ def _read_sqlite() -> dict[str, Any] | None:
             SELECT session_date, pe, source_as_of, fetched_at, source, basis
             FROM daily_nifty_valuations ORDER BY session_date DESC LIMIT 1
         """).fetchone()
-    if not row:
-        return None
-    return {"session_date": row[0], "value": float(row[1]), "as_of": row[2],
-            "fetched_at": row[3], "source": row[4], "basis": row[5]}
+    return _row_record(row) if row else None
 
 
 def read_latest_nifty_pe() -> tuple[dict[str, Any] | None, str]:
