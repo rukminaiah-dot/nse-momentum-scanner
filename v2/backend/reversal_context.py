@@ -15,7 +15,6 @@ import time
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
-from email.utils import parsedate_to_datetime
 from http.cookiejar import CookieJar
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -251,7 +250,8 @@ def reversal_context() -> dict[str, Any]:
         return _cache
     now = datetime.now(IST)
     session_open = now.weekday() < 5 and datetime.strptime("09:15", "%H:%M").time() <= now.time() < datetime.strptime("15:30", "%H:%M").time()
-    token = os.environ.get("UPSTOX_ACCESS_TOKEN", "").strip()
+    token = (os.environ.get("UPSTOX_ANALYTICS_TOKEN")
+             or os.environ.get("UPSTOX_ACCESS_TOKEN", "")).strip()
     pe = _nse_index_pe()
     vix = _upstox_quote(token) if token else {"status": "TOKEN_NOT_CONFIGURED", "value": None, "as_of": None, "source": "Upstox"}
     flows = _institutional_flows(token) if token else {"status": "TOKEN_NOT_CONFIGURED", "fii": {"status": "TOKEN_NOT_CONFIGURED"}, "dii": {"status": "TOKEN_NOT_CONFIGURED"}, "latest_absorption_ratio": None, "as_of_date": None}
