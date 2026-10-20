@@ -27,7 +27,8 @@ from fastapi import APIRouter
 from .database import DB_PATH
 from .five_session_rules import event_spec, rule_definition
 from .long_horizon_reversal import rule_definition as long_horizon_rule_definition
-from .nifty_pe_archive import read_latest_nifty_pe, save_daily_nifty_pe
+from .nifty_pe_archive import read_latest_nifty_pe, read_nifty_pe_history, save_daily_nifty_pe
+from .reversal_evidence import assess_long_reversal_evidence
 from .stock_universe import NIFTY_200
 
 router = APIRouter()
@@ -539,6 +540,8 @@ def reversal_context() -> dict[str, Any]:
         ) if value and value.strip()
     ))
     pe = _nse_index_pe()
+    pe_history, pe_history_storage = read_nifty_pe_history(6)
+    pe = {**pe, "history": pe_history, "history_storage": pe_history_storage}
     vix = _upstox_quote(quote_tokens) if quote_tokens else {"status": "TOKEN_NOT_CONFIGURED", "value": None, "as_of": None, "source": "Upstox"}
     flows = _institutional_flows()
     volume = _observed_volume(now, session_open)
@@ -569,11 +572,16 @@ def reversal_context() -> dict[str, Any]:
                 status = "HISTORICAL"
         except (TypeError, ValueError):
             status = "STALE"
+    evidence = assess_long_reversal_evidence(
+        {"status": status, "direction": direction, "candle_ist": candle_time,
+         "basis": "latest Nifty scanner row; 5-minute EMA9/EMA20 and momentum"},
+        pe, vix, flows, volume)
+    evidence["as_of"] = now.isoformat()
     context = {"status": "READY" if pe["status"] == "AVAILABLE" else "PARTIAL",
                "as_of_ist": now.isoformat(), "market_session": "OPEN" if session_open else "CLOSED",
                "price_structure": {"status": status, "direction": direction, "price": price, "candle_ist": candle_time,
                                    "basis": "latest Nifty scanner row; 5-minute EMA9/EMA20 and momentum"},
-               "nifty_pe": pe, "india_vix": vix, "institutional_flows": flows, "volume": volume,
+               "nifty_pe": pe, "india_vix": vix, "institutional_flows": flows, "volume": volume, "reversal_evidence": evidence,
                "five_session": {"event": event_spec(), **rule_definition()},
                "long_horizon_reversal": long_horizon_rule_definition(),
                "rules": None, "order_execution_enabled": False}
