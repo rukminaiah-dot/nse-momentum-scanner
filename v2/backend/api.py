@@ -6,11 +6,13 @@ from fastapi import FastAPI
 from .database import DB_PATH
 from .stock_universe import NIFTY_200
 from .persisted_learning import learning_report_from_records
+from .reversal_context import router as reversal_context_router
 
 instrument_symbols = {key: symbol for symbol, key in NIFTY_200.items()}
 
 app = FastAPI(title="NSE Momentum Scanner V2")
 app.include_router(smart_option_router)
+app.include_router(reversal_context_router)
 
 @app.get("/api/v2/premarket-data")
 def get_premarket_data():
