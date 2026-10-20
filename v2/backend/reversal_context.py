@@ -25,6 +25,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter
 
 from .database import DB_PATH
+from .five_session_rules import event_spec, rule_definition
 from .stock_universe import NIFTY_200
 
 router = APIRouter()
@@ -475,6 +476,7 @@ def reversal_context() -> dict[str, Any]:
                "price_structure": {"status": status, "direction": direction, "price": price, "candle_ist": candle_time,
                                    "basis": "latest Nifty scanner row; 5-minute EMA9/EMA20 and momentum"},
                "nifty_pe": pe, "india_vix": vix, "institutional_flows": flows, "volume": volume,
+               "five_session": {"event": event_spec(), **rule_definition()},
                "rules": None, "order_execution_enabled": False}
     context["rules"] = _rule_state(context)
     _cache, _cache_at = context, now_epoch
