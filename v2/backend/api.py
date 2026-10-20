@@ -26,7 +26,7 @@ def get_premarket_data():
     import re
     from datetime import datetime, timezone
     from fastapi import HTTPException
-    from .upstox_quote_client import fetch_full_quotes
+    from .upstox_quote_client import fetch_quote_groups
 
     def financial_news():
         """Fetch recent RSS headline metadata; never infer sentiment from a headline."""
@@ -181,33 +181,58 @@ def get_premarket_data():
             "NIFTY FINANCIAL SERVICES": "NSE_INDEX|Nifty Financial Services",
             "NIFTY ENERGY": "NSE_INDEX|Nifty Energy",
         }
-        def fetch_with_token_fallback(keys):
-            return fetch_full_quotes(keys, token_candidates)
+        def safe_feed_error(exc, feed_stage):
+            status_code = getattr(exc, "code", None)
+            details = {"stage": feed_stage}
+            if isinstance(status_code, int) and 100 <= status_code <= 599:
+                details["status_code"] = status_code
+            else:
+                details["error"] = type(exc).__name__
+            attempts = getattr(exc, "upstox_attempts", [])
+            safe_attempts = []
+            for item in attempts if isinstance(attempts, list) else []:
+                if not isinstance(item, dict) or item.get("api") not in ("v2", "v3"):
+                    continue
+                code = item.get("status_code")
+                code = code if isinstance(code, int) and 100 <= code <= 599 else None
+                error_type = item.get("error")
+                error_type = error_type if error_type in ("TimeoutError", "URLError", "ValueError", "HTTPError") else None
+                entry = {"api": item["api"], "status_code": code}
+                if error_type:
+                    entry["error"] = error_type
+                if entry not in safe_attempts:
+                    safe_attempts.append(entry)
+            if safe_attempts:
+                details["attempts"] = safe_attempts
+            return details
 
         # Query upstream groups separately. A permission or catalogue error in one
         # group must not hide valid global quotes or India VIX from the page.
-        stage = "global_quotes"
-        global_quotes, global_source = fetch_with_token_fallback([item["key"] for item in selected.values()])
-        quote_maps = [(global_quotes, global_source)]
+        group_stages = {
+            "global_indices": "global_quotes",
+            "sector_indices": "sector_quotes",
+            "india_vix": "india_vix_quote",
+        }
+        group_results, group_failures = fetch_quote_groups({
+            "global_indices": [item["key"] for item in selected.values()],
+            "sector_indices": list(sector_keys.values()),
+            "india_vix": ["NSE_INDEX|India VIX"],
+        }, token_candidates)
+        stage = "quote_processing"
+        quote_maps = list(group_results.values())
+        group_errors = {}
         feed_errors = {}
-        stage = "sector_quotes"
-        try:
-            sector_quotes, sector_source = fetch_with_token_fallback(list(sector_keys.values()))
-            quote_maps.append((sector_quotes, sector_source))
-        except Exception as exc:
-            sector_quotes = {}
+        for group, exc in group_failures.items():
+            group_errors[group] = safe_feed_error(exc, group_stages[group])
             code = getattr(exc, "code", None)
-            feed_errors["sector_indices"] = "HTTP_" + str(code) if code else type(exc).__name__
-            print("PREMARKET_UPSTOX_SECTOR_QUOTES_UNAVAILABLE:", feed_errors["sector_indices"], flush=True)
-        stage = "india_vix_quote"
-        try:
-            vix_quotes, vix_source = fetch_with_token_fallback(["NSE_INDEX|India VIX"])
-            quote_maps.append((vix_quotes, vix_source))
-        except Exception as exc:
-            vix_quotes = {}
-            code = getattr(exc, "code", None)
-            feed_errors["india_vix"] = "HTTP_" + str(code) if code else type(exc).__name__
-            print("PREMARKET_UPSTOX_VIX_QUOTE_UNAVAILABLE:", feed_errors["india_vix"], flush=True)
+            feed_errors[group] = "HTTP_" + str(code) if isinstance(code, int) else type(exc).__name__
+            print("PREMARKET_UPSTOX_" + group.upper() + "_UNAVAILABLE:", feed_errors[group], flush=True)
+
+        if not quote_maps:
+            error = group_errors.get("global_indices") or next(iter(group_errors.values()), {"stage": "all_quote_groups", "error": "Unavailable"})
+            result = upstox_fallback(now, cache, cache_at, error)
+            result["feed_errors"] = group_errors
+            return result
 
         def quote_for(key):
             wanted_key = key.replace("|", ":").casefold()
@@ -274,9 +299,13 @@ def get_premarket_data():
         india_vix = quote_record("INDIA VIX", "NSE_INDEX|India VIX")
 
         sources = sorted({source for _, source in quote_maps})
-        result = {"status": "UPSTOX_QUOTES_AVAILABLE", "source": sources[0] if len(sources) == 1 else "Upstox Full Market Quotes V2/V3",
+        result = {"status": "UPSTOX_QUOTES_PARTIAL" if feed_errors else "UPSTOX_QUOTES_AVAILABLE",
+                  "source": sources[0] if len(sources) == 1 else "Upstox Full Market Quotes V2/V3",
                   "as_of": datetime.now(timezone.utc).isoformat(), "instruments": instruments, "sector_indices": sector_indices,
-                  "india_vix": india_vix, "feed_errors": feed_errors, "order_execution_enabled": False, **external_context()}
+                  "india_vix": india_vix, "feed_errors": feed_errors,
+                  "feed_error_details": group_errors,
+                  **({"upstox_error": group_errors.get("global_indices")} if "global_indices" in group_errors else {}),
+                  "order_execution_enabled": False, **external_context()}
         get_premarket_data._cache = result
         get_premarket_data._cache_at = now
         return {**result, "cache_age_seconds": 0}

@@ -464,7 +464,7 @@ class FivePageUiTests(unittest.TestCase):
         quote_client = (pathlib.Path(__file__).resolve().parents[1] / "v2/backend/upstox_quote_client.py").read_text(encoding="utf-8")
         self.assertIn("Full Market Quotes V3", quote_client)
         self.assertIn("Full Market Quotes V2", quote_client)
-        self.assertIn("fetch_full_quotes", api)
+        self.assertIn("fetch_quote_groups", api)
         self.assertIn("GIFT NIFTY", self.html)
         self.assertIn("PRE-MARKET CUES UNAVAILABLE", self.html)
         self.assertIn("INDICATIVE PRE-MARKET · BULLISH", self.html)

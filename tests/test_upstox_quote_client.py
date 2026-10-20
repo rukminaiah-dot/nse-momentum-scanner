@@ -1,6 +1,6 @@
 import unittest
 
-from v2.backend.upstox_quote_client import fetch_full_quotes
+from v2.backend.upstox_quote_client import fetch_full_quotes, fetch_quote_groups
 
 
 class UpstoxQuoteClientTests(unittest.TestCase):
@@ -72,6 +72,24 @@ class UpstoxQuoteClientTests(unittest.TestCase):
         ])
         self.assertNotIn("secret-token", repr(raised.exception.upstox_attempts))
         self.assertNotIn("private provider response text", repr(raised.exception.upstox_attempts))
+
+    def test_one_feed_failure_does_not_hide_other_quote_groups(self):
+        def request(path, _token, keys):
+            if "GLOBAL_INDEX" in keys[0]:
+                error = PermissionError("global feed unavailable")
+                error.code = 403
+                raise error
+            return {"status": "success", "data": {"NSE_INDEX:India VIX": {"last_price": 14}}}
+
+        groups, errors = fetch_quote_groups({
+            "global_indices": ["GLOBAL_INDEX|GIFT NIFTY"],
+            "sector_indices": ["NSE_INDEX|Nifty Bank"],
+            "india_vix": ["NSE_INDEX|India VIX"],
+        }, ["token"], request_json=request)
+
+        self.assertNotIn("global_indices", groups)
+        self.assertEqual(set(groups), {"sector_indices", "india_vix"})
+        self.assertEqual(set(errors), {"global_indices"})
 
 
 if __name__ == "__main__":
