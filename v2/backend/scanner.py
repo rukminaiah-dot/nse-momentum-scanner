@@ -507,9 +507,6 @@ def analyse(key):
         current_volume = None
         baseline_volume = None
         rvol_available = False
-    if not rvol_available:
-        rvol = 0.0
-
     market = index_signal(price, ema9, ema20, vwap_value)
     if key == INDICES["NIFTY 50"]:
         market_regimes["NIFTY 50"] = market
