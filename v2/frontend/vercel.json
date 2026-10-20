@@ -6,6 +6,10 @@
       "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/premarket-data"
     },
     {
+      "source": "/api/v2/reversal-context",
+      "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/reversal-context"
+    },
+    {
       "source": "/api/v2/scanner",
       "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/scanner"
     },
