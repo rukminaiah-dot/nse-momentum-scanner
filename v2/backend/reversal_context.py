@@ -134,6 +134,7 @@ def _upstox_quote(tokens: str | list[str]) -> dict[str, Any]:
             if item and item.strip()
         ))
         quote = None
+        quote_source = "Upstox Full Market Quotes"
         last_error = None
         # Try each configured quote token, V3 first and V2 for compatibility.
         for candidate in candidates:
@@ -149,6 +150,8 @@ def _upstox_quote(tokens: str | list[str]) -> dict[str, Any]:
                                       if isinstance(item, dict)
                                       and str(key).split(":", 1)[-1].casefold() == "india vix"), None)
                     if isinstance(quote, dict):
+                        quote_source = ("Upstox Full Market Quotes V3" if quote_path.startswith("/v3/")
+                                        else "Upstox Full Market Quotes V2")
                         break
                     last_error = ValueError("India VIX quote missing")
                 except Exception as exc:
@@ -176,12 +179,12 @@ def _upstox_quote(tokens: str | list[str]) -> dict[str, Any]:
         change_pct = (price / prev - 1) * 100
         return {"status": freshness, "value": price, "previous_close": prev,
                 "change_pct": round(change_pct, 3), "as_of": stamp.isoformat(), "fetched_at": now,
-                "source": "Upstox Full Market Quotes V3", "response_keys": response_keys,
+                "source": quote_source, "response_keys": response_keys,
                 "quote_fields": quote_fields, "field_presence": field_presence,
                 "age_seconds": age_seconds, "freshness_threshold_seconds": 900}
     except Exception as exc:
         return {"status": "UNAVAILABLE", "value": None, "as_of": None, "fetched_at": now,
-                "source": "Upstox Full Market Quotes V3", "reason": type(exc).__name__,
+                "source": quote_source, "reason": type(exc).__name__,
                 "response_keys": response_keys, "quote_fields": quote_fields,
                 "field_presence": field_presence}
 

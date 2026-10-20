@@ -26,6 +26,7 @@ def get_premarket_data():
     import re
     from datetime import datetime, timezone
     from fastapi import HTTPException
+    from .upstox_quote_client import fetch_full_quotes
 
     def financial_news():
         """Fetch recent RSS headline metadata; never infer sentiment from a headline."""
@@ -180,39 +181,19 @@ def get_premarket_data():
             "NIFTY FINANCIAL SERVICES": "NSE_INDEX|Nifty Financial Services",
             "NIFTY ENERGY": "NSE_INDEX|Nifty Energy",
         }
-        def fetch_quote_batch(keys, request_token=None):
-            query = urllib.parse.urlencode({"instrument_key": ",".join(keys)})
-            request = urllib.request.Request(
-                "https://api.upstox.com/v3/market-quote/quotes?" + query,
-                headers={"Authorization": "Bearer " + (request_token or token), "Accept": "application/json"},
-            )
-            with urllib.request.urlopen(request, timeout=5) as response:
-                response_payload = json.loads(response.read().decode("utf-8"))
-            if (not isinstance(response_payload, dict)
-                    or response_payload.get("status") != "success"
-                    or not isinstance(response_payload.get("data"), dict)):
-                raise ValueError("Upstox quote response was not successful")
-            return response_payload["data"]
-
         def fetch_with_token_fallback(keys):
-            last_error = None
-            for candidate in token_candidates:
-                try:
-                    return fetch_quote_batch(keys, candidate)
-                except Exception as exc:
-                    last_error = exc
-            raise last_error or ValueError("Upstox quote request failed")
+            return fetch_full_quotes(keys, token_candidates)
 
         # Query upstream groups separately. A permission or catalogue error in one
         # group must not hide valid global quotes or India VIX from the page.
         stage = "global_quotes"
-        global_quotes = fetch_with_token_fallback([item["key"] for item in selected.values()])
-        quote_maps = [global_quotes]
+        global_quotes, global_source = fetch_with_token_fallback([item["key"] for item in selected.values()])
+        quote_maps = [(global_quotes, global_source)]
         feed_errors = {}
         stage = "sector_quotes"
         try:
-            sector_quotes = fetch_with_token_fallback(list(sector_keys.values()))
-            quote_maps.append(sector_quotes)
+            sector_quotes, sector_source = fetch_with_token_fallback(list(sector_keys.values()))
+            quote_maps.append((sector_quotes, sector_source))
         except Exception as exc:
             sector_quotes = {}
             code = getattr(exc, "code", None)
@@ -220,8 +201,8 @@ def get_premarket_data():
             print("PREMARKET_UPSTOX_SECTOR_QUOTES_UNAVAILABLE:", feed_errors["sector_indices"], flush=True)
         stage = "india_vix_quote"
         try:
-            vix_quotes = fetch_with_token_fallback(["NSE_INDEX|India VIX"])
-            quote_maps.append(vix_quotes)
+            vix_quotes, vix_source = fetch_with_token_fallback(["NSE_INDEX|India VIX"])
+            quote_maps.append((vix_quotes, vix_source))
         except Exception as exc:
             vix_quotes = {}
             code = getattr(exc, "code", None)
@@ -231,45 +212,55 @@ def get_premarket_data():
         def quote_for(key):
             wanted_key = key.replace("|", ":").casefold()
             suffix = key.split("|", 1)[-1].casefold()
-            for quotes in quote_maps:
+            for quotes, source in quote_maps:
                 quote = quotes.get(wanted_key)
                 if isinstance(quote, dict):
-                    return quote
+                    return quote, source
                 quote = next((value for response_key, value in quotes.items()
                               if isinstance(value, dict)
                               and str(response_key).casefold() == wanted_key), None)
                 if isinstance(quote, dict):
-                    return quote
+                    return quote, source
                 quote = next((value for response_key, value in quotes.items()
                               if isinstance(value, dict)
                               and str(response_key).split(":", 1)[-1].casefold() == suffix), None)
                 if isinstance(quote, dict):
-                    return quote
+                    return quote, source
             return None
 
         def quote_record(name, key, latency=None):
-            quote = quote_for(key)
-            if not isinstance(quote, dict):
-                return {"name": name, "status": "NO_QUOTE", "source": "Upstox Full Market Quotes V3",
+            found = quote_for(key)
+            if not found:
+                return {"name": name, "status": "NO_QUOTE", "source": "Upstox Full Market Quotes",
                         **({"latency": latency} if latency else {})}
+            quote, source = found
             try:
                 price = float(quote["last_price"])
-                previous_close = float(quote["prev_close_price"])
+                previous_close_value = quote.get("prev_close_price")
+                if previous_close_value is None:
+                    net_change_value = quote.get("net_change")
+                    if net_change_value is None:
+                        raise ValueError("Missing previous-close fields")
+                    previous_close_value = price - float(net_change_value)
+                previous_close = float(previous_close_value)
                 trade_ms = int(float(quote.get("last_trade_time") or quote.get("timestamp") or 0))
                 if price <= 0 or previous_close <= 0 or trade_ms <= 0:
                     raise ValueError("Invalid quote values")
                 quote_time = datetime.fromtimestamp(trade_ms / 1000, timezone.utc).isoformat()
                 change = price - previous_close
+                age_seconds = (datetime.now(timezone.utc) - datetime.fromtimestamp(trade_ms / 1000, timezone.utc)).total_seconds()
+                freshness = "CURRENT" if -120 <= age_seconds <= 900 else "HISTORICAL"
                 return {
                     "name": name, "status": "QUOTED", "price": price,
                     "previous_close": previous_close, "change": change,
                     "change_pct": change / previous_close * 100,
-                    "last_trade_at": quote_time, "source": "Upstox Full Market Quotes V3",
+                    "last_trade_at": quote_time, "age_seconds": round(max(0, age_seconds), 1),
+                    "freshness": freshness, "source": source,
                     **({"latency": latency} if latency else {}),
                 }
             except (KeyError, TypeError, ValueError, OverflowError, OSError):
                 return {"name": name, "status": "INVALID_QUOTE",
-                        "source": "Upstox Full Market Quotes V3",
+                        "source": source,
                         **({"latency": latency} if latency else {})}
 
         instruments = [
@@ -282,7 +273,8 @@ def get_premarket_data():
         ]
         india_vix = quote_record("INDIA VIX", "NSE_INDEX|India VIX")
 
-        result = {"status": "UPSTOX_QUOTES_AVAILABLE", "source": "Upstox Full Market Quotes V3",
+        sources = sorted({source for _, source in quote_maps})
+        result = {"status": "UPSTOX_QUOTES_AVAILABLE", "source": sources[0] if len(sources) == 1 else "Upstox Full Market Quotes V2/V3",
                   "as_of": datetime.now(timezone.utc).isoformat(), "instruments": instruments, "sector_indices": sector_indices,
                   "india_vix": india_vix, "feed_errors": feed_errors, "order_execution_enabled": False, **external_context()}
         get_premarket_data._cache = result

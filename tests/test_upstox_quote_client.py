@@ -1,0 +1,62 @@
+import unittest
+
+from v2.backend.upstox_quote_client import fetch_full_quotes
+
+
+class UpstoxQuoteClientTests(unittest.TestCase):
+    def test_uses_v3_when_available(self):
+        calls = []
+
+        def request(path, token, keys):
+            calls.append((path, token, keys))
+            return {"status": "success", "data": {"GLOBAL_INDEX:GIFT NIFTY": {"last_price": 1}}}
+
+        data, source = fetch_full_quotes(["GLOBAL_INDEX|GIFT NIFTY"], ["token"], request_json=request)
+
+        self.assertIn("GLOBAL_INDEX:GIFT NIFTY", data)
+        self.assertEqual(source, "Upstox Full Market Quotes V3")
+        self.assertEqual([call[0] for call in calls], ["/v3/market-quote/quotes"])
+
+    def test_uses_v2_when_v3_is_rejected(self):
+        calls = []
+
+        def request(path, _token, _keys):
+            calls.append(path)
+            if path.startswith("/v3/"):
+                raise PermissionError("V3 unavailable")
+            return {"status": "success", "data": {"NSE_INDEX:India VIX": {"last_price": 14}}}
+
+        data, source = fetch_full_quotes(["NSE_INDEX|India VIX"], ["token"], request_json=request)
+
+        self.assertIn("NSE_INDEX:India VIX", data)
+        self.assertEqual(source, "Upstox Full Market Quotes V2")
+        self.assertEqual(calls, ["/v3/market-quote/quotes", "/v2/market-quote/quotes"])
+
+    def test_tries_compatibility_paths_before_next_configured_token(self):
+        calls = []
+
+        def request(path, token, _keys):
+            calls.append((path, token))
+            if token == "first":
+                raise PermissionError("not authorized")
+            return {"status": "success", "data": {}}
+
+        _data, source = fetch_full_quotes(["GLOBAL_INDEX|GIFT NIFTY"], ["first", "second"], request_json=request)
+
+        self.assertEqual(source, "Upstox Full Market Quotes V3")
+        self.assertEqual(calls, [
+            ("/v3/market-quote/quotes", "first"),
+            ("/v2/market-quote/quotes", "first"),
+            ("/v3/market-quote/quotes", "second"),
+        ])
+
+    def test_never_returns_success_with_invalid_payload(self):
+        def request(_path, _token, _keys):
+            return {"status": "success", "data": []}
+
+        with self.assertRaisesRegex(ValueError, "not successful"):
+            fetch_full_quotes(["GLOBAL_INDEX|GIFT NIFTY"], ["token"], request_json=request)
+
+
+if __name__ == "__main__":
+    unittest.main()
