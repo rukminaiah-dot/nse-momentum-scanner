@@ -206,7 +206,6 @@ def _observed_volume(now: datetime, session_open: bool) -> dict[str, Any]:
 
 
 def _rule_state(context: dict[str, Any]) -> dict[str, Any]:
-    pe_ok = context["nifty_pe"]["status"] == "AVAILABLE"
     vix = context["india_vix"]
     flow = context["institutional_flows"]
     volume = context["volume"]
@@ -214,10 +213,15 @@ def _rule_state(context: dict[str, Any]) -> dict[str, Any]:
     if not live_price:
         return {"status": "LIVE_RULE_CHECK_PENDING", "summary": "Waiting for fresh Nifty candles during market hours.",
                 "bottom_watch": False, "top_watch": False}
-    missing = not pe_ok or vix["status"] != "AVAILABLE" or flow["status"] != "AVAILABLE" or volume["status"] != "AVAILABLE"
+    missing = [name for name, available in (("India VIX", vix["status"] == "AVAILABLE"),
+                                                ("same-date FII/DII cash", flow["status"] == "AVAILABLE"),
+                                                ("verified completed-candle volume", volume["status"] == "AVAILABLE"))
+               if not available]
     if missing:
-        return {"status": "PARTIAL_INPUTS", "summary": "Some live rule inputs are missing; no reversal state is assigned.",
-                "bottom_watch": False, "top_watch": False}
+        return {"status": "PARTIAL_INPUTS",
+                "summary": "Rule check pending: unavailable inputs are " + ", ".join(missing) + ". No reversal state is assigned.",
+                "bottom_watch": False, "top_watch": False,
+                "valuation_note": "Nifty P/E is context only and does not gate the rule check."}
     direction = context["price_structure"].get("direction")
     vix_stress_falling = vix["value"] >= 25 and vix.get("change_pct", 0) < 0
     vix_rising = vix.get("change_pct", 0) >= 5
