@@ -90,33 +90,40 @@ def _upstox_get(path: str, params: list[tuple[str, str]], token: str) -> Any:
 def _upstox_quote(token: str) -> dict[str, Any]:
     now = datetime.now(timezone.utc).isoformat()
     try:
-        payload = _upstox_get("/v3/market-quote/quotes",
-                              [("instrument_key", "NSE_INDEX|India VIX")], token)
-        data = payload.get("data") if isinstance(payload, dict) else None
-        quote = data.get("NSE_INDEX:India VIX") if isinstance(data, dict) else None
-        if not isinstance(quote, dict) and isinstance(data, dict):
-            quote = next((item for key, item in data.items()
-                          if isinstance(item, dict)
-                          and str(key).split(":", 1)[-1].casefold() == "india vix"), None)
+        quote = None
+        response_keys = []
+        last_error = None
+        # Try V3 first, then the V2 quote endpoint as a compatibility fallback.
+        for quote_path in ("/v3/market-quote/quotes", "/v2/market-quote/quotes"):
+            try:
+                payload = _upstox_get(quote_path,
+                                      [("instrument_key", "NSE_INDEX|India VIX")], token)
+                data = payload.get("data") if isinstance(payload, dict) else None
+                response_keys = list(data.keys())[:12] if isinstance(data, dict) else []
+                quote = data.get("NSE_INDEX:India VIX") if isinstance(data, dict) else None
+                if not isinstance(quote, dict) and isinstance(data, dict):
+                    quote = next((item for key, item in data.items()
+                                  if isinstance(item, dict)
+                                  and str(key).split(":", 1)[-1].casefold() == "india vix"), None)
+                if isinstance(quote, dict):
+                    break
+                last_error = ValueError("India VIX quote missing")
+            except Exception as exc:
+                last_error = exc
         if not isinstance(quote, dict):
-            raise ValueError("India VIX quote missing")
+            raise last_error or ValueError("India VIX quote missing")
         price = _number(quote.get("last_price"))
         prev = _number(quote.get("prev_close_price"))
         raw_stamp = quote.get("last_trade_time") or quote.get("timestamp")
         if not price or not prev or not raw_stamp:
             raise ValueError("India VIX quote incomplete")
-        try:
-            numeric_stamp = float(raw_stamp)
-            stamp = datetime.fromtimestamp(numeric_stamp / 1000, timezone.utc).isoformat() if numeric_stamp > 10_000_000_000 else datetime.fromtimestamp(numeric_stamp, timezone.utc).isoformat()
-        except (TypeError, ValueError, OverflowError, OSError):
-            stamp = str(raw_stamp)
         change_pct = (price / prev - 1) * 100
         return {"status": "AVAILABLE", "value": price, "previous_close": prev,
                 "change_pct": round(change_pct, 3), "as_of": stamp, "fetched_at": now,
                 "source": "Upstox Full Market Quotes V3"}
     except Exception as exc:
         return {"status": "UNAVAILABLE", "value": None, "as_of": None, "fetched_at": now,
-                "source": "Upstox Full Market Quotes V3", "reason": type(exc).__name__}
+                "source": "Upstox Full Market Quotes V3", "reason": type(exc).__name__, "response_keys": response_keys}
 
 
 def _flow_record(token: str, path: str, flow_type: str, from_date: str) -> dict[str, Any]:
