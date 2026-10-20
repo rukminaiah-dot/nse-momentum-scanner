@@ -14,7 +14,7 @@ class ReversalEvidenceUiTests(unittest.TestCase):
         self.assertIn("Long reversal evidence score · heuristic points, not probability", self.html)
         self.assertIn("rc.market_session==='CLOSED'?'HISTORICAL INPUT REVIEW'", self.html)
         self.assertIn("historical last stored readings", self.html)
-        self.assertIn("Live/current inputs when verified", self.html)
+        self.assertIn("live/current inputs when verified", self.html)
 
     def test_meter_disclaims_probability_and_lists_missing_factors(self):
         self.assertIn("not a probability", self.html)
