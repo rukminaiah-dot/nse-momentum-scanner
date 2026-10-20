@@ -27,6 +27,7 @@ from .stock_universe import NIFTY_200
 router = APIRouter()
 IST = ZoneInfo("Asia/Kolkata")
 RVOL_THRESHOLD = 1.5
+FLOW_FRESHNESS_DAYS = 4
 _cache: dict[str, Any] | None = None
 _cache_at = 0.0
 
@@ -230,14 +231,28 @@ def _institutional_flows(token: str) -> dict[str, Any]:
         d_net = dii["latest"]["net_cr"]
         if f_net < 0 and d_net > 0:
             ratio = d_net / abs(f_net)
+    freshness = _flow_freshness(fii["as_of_date"] if same_date else None)
     return {"status": "AVAILABLE" if same_date else "UNAVAILABLE_OR_DATE_MISMATCH",
             "as_of_date": fii["as_of_date"] if same_date else None,
+            "freshness": freshness,
             "fii": fii, "dii": dii,
             "latest_absorption_ratio": round(ratio, 3) if ratio is not None else None,
             "latest_absorption_ratio_basis": "DII positive net cash flow / absolute FII negative net cash flow; same NSE cash date",
             "recent_5d": {"fii_net_cr": round(sum(x["net_cr"] for x in fii["recent"]), 2) if fii["recent"] else None,
                           "dii_net_cr": round(sum(x["net_cr"] for x in dii["recent"]), 2) if dii["recent"] else None},
             "publication_note": "Cash-market institutional activity is end-of-day data, not an intraday feed."}
+
+
+def _flow_freshness(as_of_date: str | None, today=None) -> str:
+    """Only use recent end-of-day cash flows as a current-session confirmation."""
+    if not as_of_date:
+        return "UNKNOWN"
+    try:
+        report_date = datetime.strptime(as_of_date, "%Y-%m-%d").date()
+        age_days = ((today or datetime.now(IST).date()) - report_date).days
+    except (TypeError, ValueError):
+        return "UNKNOWN"
+    return "CURRENT" if 0 <= age_days <= FLOW_FRESHNESS_DAYS else "STALE"
 
 
 def _observed_volume(now: datetime, session_open: bool) -> dict[str, Any]:
@@ -289,7 +304,7 @@ def _rule_state(context: dict[str, Any]) -> dict[str, Any]:
         return {"status": "LIVE_RULE_CHECK_PENDING", "summary": "Waiting for fresh Nifty candles during market hours.",
                 "bottom_watch": False, "top_watch": False}
     missing = [name for name, available in (("India VIX", vix["status"] == "AVAILABLE"),
-                                                ("same-date FII/DII cash", flow["status"] == "AVAILABLE"),
+                                                ("recent same-date FII/DII cash", flow["status"] == "AVAILABLE" and flow.get("freshness") == "CURRENT"),
                                                 ("verified completed-candle volume", volume["status"] == "AVAILABLE"))
                if not available]
     if missing:
