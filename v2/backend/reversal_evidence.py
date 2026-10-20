@@ -76,7 +76,7 @@ def assess_long_reversal_evidence(price: dict[str, Any], pe: dict[str, Any],
     vix_age = _num(vix.get("age_seconds"))
     vix_valid = (vix_status in {"AVAILABLE", "HISTORICAL"} and vix_value is not None
                  and vix_value > 0 and vix_change is not None
-                 and (vix_age is None or 0 <= vix_age <= 5 * 86400))
+                 and vix_age is not None and 0 <= vix_age <= 5 * 86400 and bool(vix.get("as_of")))
     vix_supports = vix_valid and vix_value >= 25 and vix_change < 0
     factors.append(_factor(
         "india_vix", "India VIX", "ASSESSED" if vix_valid else "NOT_SCORED",
