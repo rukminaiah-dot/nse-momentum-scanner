@@ -298,6 +298,25 @@ def get_premarket_data():
         error = {"stage": stage, "status_code": exc.code}
         if error_code:
             error["error_code"] = error_code
+        raw_attempts = getattr(exc, "upstox_attempts", [])
+        safe_attempts = []
+        seen_attempts = set()
+        for attempt in raw_attempts if isinstance(raw_attempts, list) else []:
+            if not isinstance(attempt, dict) or attempt.get("api") not in ("v2", "v3"):
+                continue
+            code = attempt.get("status_code")
+            code = code if isinstance(code, int) and 100 <= code <= 599 else None
+            attempt_error = attempt.get("error")
+            attempt_error = attempt_error if attempt_error in ("TimeoutError", "URLError", "ValueError", "HTTPError") else None
+            item = {"api": attempt["api"], "status_code": code}
+            if attempt_error:
+                item["error"] = attempt_error
+            signature = (item["api"], code, attempt_error)
+            if signature not in seen_attempts:
+                seen_attempts.add(signature)
+                safe_attempts.append(item)
+        if safe_attempts:
+            error["attempts"] = safe_attempts
         return upstox_fallback(now, cache, cache_at, error)
     except Exception as exc:
         print("PREMARKET_UPSTOX_QUOTES_UNAVAILABLE:", type(exc).__name__, flush=True)

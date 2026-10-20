@@ -31,6 +31,7 @@ def fetch_full_quotes(
         raise ValueError("Upstox token not configured")
 
     last_error: Exception | None = None
+    attempts: list[dict[str, Any]] = []
     for token in candidates:
         for path, source in QUOTE_ENDPOINTS:
             try:
@@ -42,6 +43,17 @@ def fetch_full_quotes(
                 return payload["data"], source
             except Exception as exc:
                 last_error = exc
+                status_code = getattr(exc, "code", None)
+                attempts.append({
+                    "api": "v3" if path.startswith("/v3/") else "v2",
+                    "status_code": status_code if isinstance(status_code, int) else None,
+                    "error": None if isinstance(status_code, int) else type(exc).__name__,
+                })
+    if last_error is not None:
+        # Keep only non-sensitive endpoint and status diagnostics on the exception.
+        # The API layer can report which compatibility paths were attempted
+        # without including credentials, headers, or provider response bodies.
+        last_error.upstox_attempts = attempts
     raise last_error or ValueError("Upstox quote request failed")
 
 
