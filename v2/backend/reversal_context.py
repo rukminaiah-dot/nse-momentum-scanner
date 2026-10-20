@@ -107,6 +107,21 @@ def _quote_timestamp(raw_stamp: Any) -> datetime:
     return stamp.astimezone(timezone.utc)
 
 
+def _quote_freshness(stamp: datetime, now: datetime | None = None) -> tuple[str, float]:
+    """Only treat an India VIX quote as live during the NSE session when recent."""
+    now = now or datetime.now(timezone.utc)
+    local_now = now.astimezone(IST)
+    session_open = (local_now.weekday() < 5
+                    and datetime.strptime("09:15", "%H:%M").time() <= local_now.time()
+                    < datetime.strptime("15:30", "%H:%M").time())
+    age_seconds = (now.astimezone(timezone.utc) - stamp.astimezone(timezone.utc)).total_seconds()
+    if not session_open:
+        return "HISTORICAL", round(age_seconds, 1)
+    if -120 <= age_seconds <= 15 * 60:
+        return "AVAILABLE", round(max(0, age_seconds), 1)
+    return "STALE", round(age_seconds, 1)
+
+
 def _upstox_quote(tokens: str | list[str]) -> dict[str, Any]:
     now = datetime.now(timezone.utc).isoformat()
     response_keys = []
@@ -156,11 +171,13 @@ def _upstox_quote(tokens: str | list[str]) -> dict[str, Any]:
         if price is None or price <= 0 or prev is None or prev <= 0 or raw_stamp is None:
             raise ValueError("India VIX quote incomplete")
         stamp = _quote_timestamp(raw_stamp)
+        freshness, age_seconds = _quote_freshness(stamp)
         change_pct = (price / prev - 1) * 100
-        return {"status": "AVAILABLE", "value": price, "previous_close": prev,
+        return {"status": freshness, "value": price, "previous_close": prev,
                 "change_pct": round(change_pct, 3), "as_of": stamp.isoformat(), "fetched_at": now,
                 "source": "Upstox Full Market Quotes V3", "response_keys": response_keys,
-                "quote_fields": quote_fields, "field_presence": field_presence}
+                "quote_fields": quote_fields, "field_presence": field_presence,
+                "age_seconds": age_seconds, "freshness_threshold_seconds": 900}
     except Exception as exc:
         return {"status": "UNAVAILABLE", "value": None, "as_of": None, "fetched_at": now,
                 "source": "Upstox Full Market Quotes V3", "reason": type(exc).__name__,
