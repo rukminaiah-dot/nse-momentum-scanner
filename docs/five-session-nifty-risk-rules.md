@@ -39,7 +39,15 @@ Every run records cutoff, anchor close/date, target levels/percentage, source an
 
 The API currently exposes the rule definition and marks probabilities `NOT_BACKTESTED`. It does not yet have the joined ten-year, point-in-time data needed to produce this forecast. The existing current-session reversal watch is a separate rule and must not be described as this five-session model.
 
-## 5. Validation required before probabilities
+## 5. Suggested medium-term sustained-reversal target
+
+For the separate question “could a reversal persist?”, use a 60-trading-session horizon (about three months, a medium-term outlook rather than a multi-year forecast). Set the prior regime using only the 60 completed daily closes available at cutoff: UP when the latest 20-session return is positive and SMA20 is above SMA50; DOWN when both are negative/below; otherwise MIXED.
+
+Label a sustained 500-point reversal only when the close has moved at least 500 points from the anchor against the prior UP/DOWN regime and at least 10 of the final 15 completed closes in the 60-session horizon remain beyond that barrier. If ±500 is touched but the persistence condition fails, label `THRESHOLD_TOUCHED_NOT_SUSTAINED`; if no barrier is reached, label `NO_500_POINT_MOVE`. If the prior regime is MIXED, do not call the move a reversal or continuation. The 10-of-15 persistence threshold is a proposed outcome definition; test it against alternative windows and volatility-scaled targets before treating it as useful.
+
+The live evidence can create a reversal **watch** before this outcome is realized, but it is not a confirmed reversal and has no probability until a backtest supports one. A horizon of 60 sessions is roughly a quarter; a multi-year outlook needs a separate target and validation.
+
+## 6. Validation required before probabilities
 
 Use roughly ten years of daily history where coverage is consistent. Preserve publication/availability times for flows, news, and quotes. Prevent look-ahead and survivorship leakage; keep the final test period untouched. Use chronological walk-forward folds and compare:
 
