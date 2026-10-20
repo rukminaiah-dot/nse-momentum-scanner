@@ -470,6 +470,11 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("INDICATIVE PRE-MARKET · BULLISH", self.html)
         self.assertIn("No confidence percentage is invented", self.html)
 
+    def test_premarket_labels_stale_upstox_quotes_but_keeps_last_values_visible(self):
+        self.assertIn("const vixValue=Number(vix.value)", self.html)
+        self.assertIn("HISTORICAL · no live reading", self.html)
+        self.assertIn("LAST QUOTE · HISTORICAL", self.html)
+
     def test_premarket_shows_flow_report_date_and_marks_old_cash_data_stale(self):
         self.assertIn('id="pm-flow-status"', self.html)
         self.assertIn('id="pm-flow-data"', self.html)
