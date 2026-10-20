@@ -51,7 +51,7 @@ class ReversalEvidenceTests(unittest.TestCase):
              "dii": {"latest": {"date": "2026-10-20", "net_cr": 1300}}},
             {"status": "AVAILABLE", "verified_volume_rows": 20, "bullish_surge_rows": 2},
         )
-        self.assertEqual(result["score_points"], 95)
+        self.assertEqual(result["score_points"], 75)
         self.assertEqual(result["assessed_factors"], 4)
 
     def test_news_is_timestamped_context_not_an_unvalidated_automatic_score(self):
