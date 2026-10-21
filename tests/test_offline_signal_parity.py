@@ -226,10 +226,8 @@ class OfflineSignalParityTests(unittest.TestCase):
             evaluate(history(), session_date=datetime(2026, 10, 16).date(),
                      is_index=True, is_stock=True)
 
-    def test_sixty_bar_cap_can_flip_both_index_classes(self):
-        from v2.backend.offline_signal_parity import evaluate
-        for direction, seed, expected in ((1, 150.0, "BUY"),
-                                           (-1, 50.0, "SELL")):
+    def test_sixty_bar_cap_cannot_bypass_breakout_confirmation(self):
+        for direction, seed in ((1, 150.0), (-1, 50.0)):
             prices = [seed] * 340 + [100 + direction * i * 0.01
                                      for i in range(60)]
             bars = []
@@ -244,7 +242,7 @@ class OfflineSignalParityTests(unittest.TestCase):
                                 is_primary_index=primary)
                     self.assertEqual(evaluate(bars, **opts)["signal"], "HOLD")
                     self.assertEqual(evaluate(bars[-60:], **opts)["signal"],
-                                     expected)
+                                     "HOLD")
 
     def test_five_minute_trend_requires_three_complete_buckets(self):
         bars = history(14)
