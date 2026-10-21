@@ -36,8 +36,8 @@ class IndexTrendShiftTests(unittest.TestCase):
         start = datetime(2026, 10, 21, 10, 0, tzinfo=IST)
         old = make_rows(start, "BEARISH", 4)
         shifted = [
-            (start + timedelta(minutes=4), 97.0, 97.5, 98.5, 0.2),
-            (start + timedelta(minutes=5), 97.5, 97.8, 98.1, 0.3),
+            (start + timedelta(minutes=4), 97.0, 97.5, 97.2, 0.2),
+            (start + timedelta(minutes=5), 97.5, 97.8, 97.4, 0.3),
             (start + timedelta(minutes=6), 98.0, 98.1, 98.0, 0.4),
         ]
         result = assess_index_shift(old + shifted, now=start + timedelta(minutes=7))
