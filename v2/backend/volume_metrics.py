@@ -1,4 +1,4 @@
-"""Verified relative volume from real completed one-minute candles."""
+"""Volume metrics from observed completed candles and dated Upstox history."""
 
 from datetime import timedelta
 from math import isfinite
