@@ -967,6 +967,12 @@ def stock_setups():
         if not open_now or not fresh:
             previous = row.get("status")
             row["previous_session_status"] = previous
+            row["historical_only"] = True
+            row["previous_session_heuristic_rank_score"] = row.get("heuristic_rank_score")
+            row["previous_session_verified_level"] = row.get("verified_level")
+            row["previous_session_verified_level_name"] = row.get("verified_level_name")
+            row["previous_session_verified_level_session_date"] = row.get("verified_level_session_date")
+            row["previous_session_trigger_candle_time"] = row.get("trigger_candle_time")
             row["status"] = "WAIT"
             row["reasons"] = ["Market closed; stored setup is historical only" if not open_now
                               else "WAIT: scanner setup data is stale or unverified"]

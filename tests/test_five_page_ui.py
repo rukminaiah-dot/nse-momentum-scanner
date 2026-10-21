@@ -255,6 +255,17 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("function renderStockSetups(hostId)", self.html)
         self.assertIn("['WATCH','TRIGGERED','CONFIRMED','INVALID']", self.html)
         self.assertIn("Heuristic rank ", self.html)
+        self.assertIn("HISTORICAL ONLY · LAST STATUS ", self.html)
+        self.assertIn("historical_only&&statuses.includes(x.previous_session_status)", self.html)
+        self.assertIn("Historical setup details only; no current entry or live signal.", self.html)
+
+    def test_closed_stock_setups_keep_historical_rank_but_clear_entry_plan(self):
+        api = (pathlib.Path(__file__).resolve().parents[1] / "v2/backend/api.py").read_text(encoding="utf-8")
+        setups = api[api.index('@app.get("/api/v2/stock-setups")'):api.index('@app.get("/api/v2/stock-setup-backtest")')]
+        self.assertIn('row["previous_session_heuristic_rank_score"] = row.get("heuristic_rank_score")', setups)
+        self.assertIn('row["historical_only"] = True', setups)
+        self.assertIn('row["entry_reference"] = None', setups)
+        self.assertIn('row["trade_plan"] = None', setups)
 
     def test_stock_analysis_requires_scanner_rating_direction_agreement(self):
         self.assertIn("r.signal===rating.signal&&['BUY','SELL'].includes(r.signal)", self.html)
