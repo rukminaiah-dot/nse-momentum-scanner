@@ -169,3 +169,9 @@ def assess_index_shift(rows, *, now=None):
                      "reason": "Index trend history is unavailable."}
                     for symbol in INDEX_NAMES]}
     return {"status": "READY", "as_of_ist": now.isoformat(), "indices": results}
+
+
+@router.get("/api/v2/index-trend-changes")
+def index_trend_changes():
+    """Return fresh, explainable index shift states for the dashboard."""
+    return read_index_trend_changes()
