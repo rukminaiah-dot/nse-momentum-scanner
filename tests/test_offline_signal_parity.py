@@ -3,6 +3,10 @@ import unittest
 from datetime import datetime, timedelta
 from v2.backend.candles import Candle
 from v2.backend.offline_signal_parity import evaluate, five_minute_trend, five_minute_breakout
+from v2.backend.volume_metrics import (
+    completed_intraday_bars, verified_same_slot_relative_volume,
+    confirmed_range_breakout,
+)
 
 
 def history(count=30, direction=1):
@@ -70,11 +74,78 @@ class OfflineSignalParityTests(unittest.TestCase):
                           session_date=datetime(2026, 10, 16).date(), is_index=True)
         self.assertEqual(result["signal"], "SELL")
 
-    def test_stock_rvol_computed_without_orders(self):
-        result = evaluate(history(), session_date=datetime(2026, 10, 16).date(),
+    def test_stock_volume_baseline_missing_blocks_rvol(self):
+        result = evaluate(history(60), session_date=datetime(2026, 10, 16).date(),
                           is_stock=True)
-        self.assertEqual(result["rvol"], 1.0)
-        self.assertIn(result["signal"], ("BUY", "SELL", "HOLD"))
+        self.assertIsNone(result["rvol"])
+        self.assertEqual(result["signal"], "HOLD")
+
+    def test_stock_requires_20_session_volume_and_15m_confirmation(self):
+        bars = history(60)
+        for candle in bars[:45]:
+            candle.open = candle.close = 100.0
+            candle.high, candle.low = 101.0, 99.0
+            candle.volume = 10.0
+        for i, candle in enumerate(bars[45:]):
+            if i < 5:
+                candle.open = 100.0 if i == 0 else 101.0
+                candle.high, candle.low, candle.close = 101.0, 100.0, 101.0
+            elif i < 10:
+                candle.open = 101.0 if i == 5 else 101.5
+                candle.high, candle.low, candle.close = 101.5, 100.0, 101.5
+            else:
+                j = i - 10
+                candle.open = 101.5 + 0.1 * j
+                candle.high, candle.low = 101.6 + 0.1 * j, 100.0
+                candle.close = 101.6 + 0.1 * j
+            candle.volume = 10.0
+        historical_rows = []
+        current_slot = bars[-1].timestamp.replace(minute=0, second=0, microsecond=0)
+        for i in range(1, 21):
+            stamp = current_slot - timedelta(days=i)
+            historical_rows.append([
+                stamp.isoformat(), 100.0, 101.0, 99.0, 100.0, 100.0, 0
+            ])
+        result = evaluate(
+            bars, session_date=datetime(2026, 10, 16).date(), is_stock=True,
+            historical_15m_rows=historical_rows,
+        )
+        self.assertEqual(result["rvol"], 1.5)
+        self.assertEqual(result["current_volume"], 150.0)
+        self.assertEqual(result["baseline_volume"], 100.0)
+        self.assertEqual(result["signal"], "BUY")
+
+    def test_15m_volume_compares_only_matching_slot_and_prior_sessions(self):
+        current = {"timestamp": datetime(2026, 10, 16, 10, 0),
+                   "open": 100.0, "close": 101.0, "volume": 150.0}
+        rows = []
+        for i in range(1, 21):
+            stamp = current["timestamp"] - timedelta(days=i)
+            rows.append([stamp.isoformat(), 100, 101, 99, 100, 100, 0])
+        rows.append([(current["timestamp"] - timedelta(days=1)).replace(
+            hour=10, minute=15).isoformat(), 100, 101, 99, 100, 9999, 0])
+        stats = verified_same_slot_relative_volume(current, rows, 20)
+        self.assertEqual(stats["relative_volume"], 1.5)
+        self.assertEqual(stats["candle_direction"], "BULLISH")
+        self.assertIsNone(verified_same_slot_relative_volume(current, rows[:19], 20))
+
+    def test_15m_aggregation_ignores_partial_and_gapped_bars(self):
+        bars = history(30)
+        bars = [c for c in bars if c.timestamp != datetime(2026, 10, 16, 9, 21)]
+        result = completed_intraday_bars(bars, 15)
+        self.assertEqual([bar["timestamp"].minute for bar in result], [30])
+
+    def test_15m_range_breakout_uses_completed_contiguous_bars(self):
+        bars = []
+        start = datetime(2026, 10, 16, 9, 15)
+        for i in range(4):
+            close = 102.0 if i == 3 else 100.0
+            bars.append({"timestamp": start + timedelta(minutes=15 * i),
+                         "open": 100.0, "high": close, "low": 100.0,
+                         "close": close, "volume": 100.0})
+        self.assertTrue(confirmed_range_breakout(bars, "BUY"))
+        bars[-1]["timestamp"] += timedelta(minutes=15)
+        self.assertFalse(confirmed_range_breakout(bars, "BUY"))
 
     def test_incomplete_five_minute_bucket_is_not_used(self):
         bars = history(29)
@@ -95,8 +166,8 @@ class OfflineSignalParityTests(unittest.TestCase):
             candle.volume = 0
         result = evaluate(bars, session_date=datetime(2026, 10, 16).date(),
                           is_stock=True)
-        self.assertEqual(result["rvol"], 0.0)
-        self.assertNotEqual(result["signal"], "BUY")
+        self.assertIsNone(result["rvol"])
+        self.assertEqual(result["signal"], "HOLD")
 
     def test_index_excludes_previous_session_from_ema(self):
         bars = history()

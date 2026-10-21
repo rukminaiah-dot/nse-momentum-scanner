@@ -13,7 +13,10 @@ from v2.backend.indicators import ema, momentum, atr
 from v2.backend.signal_engine import generate_signal
 from v2.backend.market_regime import index_signal
 from v2.backend.offline_signal_parity import evaluate, five_minute_trend, five_minute_breakout
-from v2.backend.volume_metrics import verified_relative_volume
+from v2.backend.volume_metrics import (
+    verified_relative_volume, completed_intraday_bars,
+    verified_same_slot_relative_volume, confirmed_range_breakout,
+)
 
 
 SOURCE = (pathlib.Path(__file__).resolve().parents[1] /
@@ -49,6 +52,10 @@ def source_decision(history, *, is_index, is_stock, primary, nifty_market):
         "NIFTY_200": stocks, "ema": ema, "momentum": momentum,
         "atr": atr, "generate_signal": generate_signal,
         "verified_relative_volume": verified_relative_volume,
+        "completed_intraday_bars": completed_intraday_bars,
+        "verified_same_slot_relative_volume": verified_same_slot_relative_volume,
+        "confirmed_range_breakout": confirmed_range_breakout,
+        "historical_15m_volume": {},
         "index_signal": regime, "five_minute_trend": five_minute_trend,
         "five_minute_breakout": five_minute_breakout,
         "market_regimes": {"NIFTY 50": nifty_market},

@@ -6,6 +6,10 @@ from datetime import timedelta
 from v2.backend.indicators import ema, momentum, atr
 from v2.backend.signal_engine import generate_signal
 from v2.backend.market_regime import index_signal
+from v2.backend.volume_metrics import (
+    completed_intraday_bars, verified_same_slot_relative_volume,
+    confirmed_range_breakout,
+)
 
 
 def five_minute_trend(history):
@@ -88,7 +92,8 @@ def five_minute_breakout(history, direction):
     return False
 
 def evaluate(history, *, session_date, is_index=False, is_stock=False,
-             nifty_market="NEUTRAL", is_primary_index=True):
+             nifty_market="NEUTRAL", is_primary_index=True,
+             historical_15m_rows=()):
     """Return pure indicator/decision data; no persistence or trading."""
     if is_index and is_stock:
         raise ValueError("instrument cannot be both index and stock")
@@ -120,12 +125,24 @@ def evaluate(history, *, session_date, is_index=False, is_stock=False,
     mom = momentum(closes)
     atr14 = atr(highs, lows, closes, 14)
     rvol = None
-    if is_stock:
-        volumes = [float(c.volume) for c in history[-20:]]
-        baseline = volumes[:-1]
-        rvol = (volumes[-1] / (sum(baseline) / 19)
-                if len(baseline) == 19 and all(v >= 0 for v in volumes)
-                and sum(baseline) > 0 else 0.0)
+    current_volume = baseline_volume = None
+    bars_15m = completed_intraday_bars(history, 15) if is_stock else []
+    current_15m = bars_15m[-1] if bars_15m else None
+    if current_15m is not None:
+        latest_minute_end = history[-1].timestamp + timedelta(minutes=1)
+        current_15m_end = current_15m["timestamp"] + timedelta(minutes=15)
+        age = latest_minute_end - current_15m_end
+        if age < timedelta(0) or age >= timedelta(minutes=15):
+            current_15m = None
+    volume_stats_15m = (
+        verified_same_slot_relative_volume(
+            current_15m, historical_15m_rows, reference_sessions=20
+        ) if current_15m is not None else None
+    )
+    if volume_stats_15m is not None:
+        rvol = volume_stats_15m["relative_volume"]
+        current_volume = volume_stats_15m["current_volume"]
+        baseline_volume = volume_stats_15m["baseline_volume"]
     market = (index_signal(price, e9, e20, None)
               if is_index and is_primary_index else nifty_market)
     signal = generate_signal(price, e9, e20, None, mom, rvol, market,
@@ -133,7 +150,16 @@ def evaluate(history, *, session_date, is_index=False, is_stock=False,
     trend = five_minute_trend(history)
     if signal in ("BUY", "SELL"):
         expected_trend = "BULLISH" if signal == "BUY" else "BEARISH"
-        if trend != expected_trend or not five_minute_breakout(history, signal):
+        if is_stock:
+            candle_direction = (volume_stats_15m or {}).get("candle_direction")
+            if (
+                trend != expected_trend
+                or current_15m is None
+                or candle_direction != expected_trend
+                or not confirmed_range_breakout(bars_15m, signal, prior_bars=3)
+            ):
+                signal = "HOLD"
+        elif trend != expected_trend or not five_minute_breakout(history, signal):
             signal = "HOLD"
     if is_stock and signal in ("BUY", "SELL"):
         if atr14 is None or atr14 <= 0:
@@ -144,4 +170,5 @@ def evaluate(history, *, session_date, is_index=False, is_stock=False,
             signal = "HOLD"
     return {"signal": signal, "reason": None, "ema9": e9, "ema20": e20,
             "momentum": mom, "atr14": atr14, "rvol": rvol,
+            "current_volume": current_volume, "baseline_volume": baseline_volume,
             "trend_5m": trend, "market": market}

@@ -50,7 +50,7 @@ def init_db():
         )
     """)
     con.execute("CREATE INDEX IF NOT EXISTS idx_decision_snapshots_trade_stage ON trade_decision_snapshots(trade_id, stage, id)")
-    con.execute("""CREATE TABLE IF NOT EXISTS scanner_results (symbol TEXT PRIMARY KEY, updated_at TEXT NOT NULL, price REAL, ema9 REAL, ema20 REAL, momentum REAL, market TEXT, trend_5m TEXT, signal TEXT, rvol REAL, current_volume REAL, baseline_volume REAL)""")
+    con.execute("""CREATE TABLE IF NOT EXISTS scanner_results (symbol TEXT PRIMARY KEY, updated_at TEXT NOT NULL, price REAL, ema9 REAL, ema20 REAL, momentum REAL, market TEXT, trend_5m TEXT, signal TEXT, rvol REAL, current_volume REAL, baseline_volume REAL, volume_candle_at TEXT)""")
     con.executemany("""INSERT OR IGNORE INTO scanner_results (symbol,updated_at,signal) VALUES (?,'1970-01-01 00:00:00','WAITING')""", [(symbol,) for symbol in NIFTY_200.keys()])
     columns = [row[1] for row in con.execute("PRAGMA table_info(scanner_results)")]
     if "previous_close" not in columns:
@@ -58,6 +58,8 @@ def init_db():
     for column in ("rvol", "current_volume", "baseline_volume"):
         if column not in columns:
             con.execute(f"ALTER TABLE scanner_results ADD COLUMN {column} REAL")
+    if "volume_candle_at" not in columns:
+        con.execute("ALTER TABLE scanner_results ADD COLUMN volume_candle_at TEXT")
     con.execute("""CREATE TABLE IF NOT EXISTS scanner_signal_history (
         symbol TEXT NOT NULL,
         candle_time TEXT NOT NULL,
