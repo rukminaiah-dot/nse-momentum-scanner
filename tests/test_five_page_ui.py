@@ -451,7 +451,9 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("qty>0?(sell-buy)*qty:null", self.html)
         self.assertIn("const chargesFor=x=>", self.html)
         self.assertIn("table(['Stock','Entry','SELL exit','Gross P&L','Est. charges','Est. net']", self.html)
-        self.assertIn("gross!=null&&cost!=null?num(gross-cost):'Not verified'", self.html)
+        self.assertIn("net=gross!=null&&cost!=null?gross-cost:null", self.html)
+        self.assertIn('class="completed-positions-mobile"', self.html)
+        self.assertIn("Estimated net P&amp;L", self.html)
 
     def test_pnl_history_returns_cost_adjusted_estimates_with_assumptions(self):
         api = (pathlib.Path(__file__).resolve().parents[1] / "v2/backend/api.py").read_text(encoding="utf-8")
