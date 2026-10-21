@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from v2.backend.volume_metrics import (
     verified_relative_volume, completed_intraday_bars,
     verified_same_slot_relative_volume, confirmed_range_breakout,
+    compact_same_slot_volume_rows,
 )
 
 
@@ -81,6 +82,20 @@ class VerifiedRelativeVolumeTests(unittest.TestCase):
         self.assertEqual(result["baseline_volume"], 100)
         self.assertEqual(result["slot"], "10:00")
         self.assertEqual(result["candle_direction"], "BULLISH")
+
+    def test_compact_same_slot_archive_preserves_twenty_session_rvol(self):
+        current = {"timestamp": datetime(2026, 10, 21, 10, 0),
+                   "open": 100, "close": 101, "volume": 221}
+        rows = []
+        for i in range(1, 26):
+            stamp = current["timestamp"] - timedelta(days=i)
+            rows.append([stamp.isoformat(), 100, 101, 99, 100, 100 + i, 0])
+        compact = compact_same_slot_volume_rows(rows, reference_sessions=20)
+        full = verified_same_slot_relative_volume(current, rows, 20)
+        packed = verified_same_slot_relative_volume(current, compact, 20)
+        self.assertEqual(compact.row_count, 20)
+        self.assertEqual(packed, full)
+        self.assertEqual(packed["baseline_volume"], 110.5)
 
     def test_missing_prior_session_volume_fails_closed(self):
         current = {"timestamp": datetime(2026, 10, 19, 10, 0),

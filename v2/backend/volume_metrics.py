@@ -4,6 +4,57 @@ from datetime import timedelta
 from math import isfinite
 
 
+class CompactSameSlotVolumeHistory:
+    """Columnar 20-session 5-minute volume archive for low-memory scanners."""
+
+    __slots__ = ("slots", "row_count")
+
+    def __init__(self, slots, row_count):
+        self.slots = slots
+        self.row_count = row_count
+
+
+def compact_same_slot_volume_rows(historical_rows, reference_sessions=20):
+    """Keep only date and volume by time slot in compact numeric arrays.
+
+    Upstox returns OHLC fields as well as volume. The setup scanner only needs
+    the historical date, 5-minute slot, and volume for its RVOL baseline.
+    Retaining those fields avoids holding every full API candle in memory.
+    """
+    from array import array
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    if (not isinstance(reference_sessions, int) or isinstance(reference_sessions, bool)
+            or reference_sessions < 1):
+        raise ValueError("reference_sessions must be a positive integer")
+    ist = ZoneInfo("Asia/Kolkata")
+    by_slot = {}
+    for row in historical_rows or ():
+        try:
+            stamp = row[0]
+            if isinstance(stamp, str):
+                stamp = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+            if stamp.tzinfo is not None:
+                stamp = stamp.astimezone(ist).replace(tzinfo=None)
+            volume = float(row[5])
+            if not isfinite(volume) or volume < 0:
+                continue
+            slot = (stamp.hour, stamp.minute)
+            by_slot.setdefault(slot, {})[stamp.date().toordinal()] = volume
+        except (IndexError, TypeError, ValueError, OverflowError, AttributeError):
+            continue
+
+    packed = {}
+    for slot, by_date in by_slot.items():
+        ordered = sorted(by_date.items())[-reference_sessions:]
+        values = array("d")
+        for ordinal, volume in ordered:
+            values.extend((ordinal, volume))
+        packed[slot] = values
+    return CompactSameSlotVolumeHistory(packed, sum(len(v) // 2 for v in packed.values()))
+
+
 def verified_relative_volume(candles, reference_bars=19):
     """Return one-minute RVOL only for a complete, same-session comparison.
 
@@ -130,6 +181,30 @@ def verified_same_slot_relative_volume(current_bar, historical_rows,
     if stamp.tzinfo is not None:
         stamp = stamp.astimezone(ist).replace(tzinfo=None)
     slot = (stamp.hour, stamp.minute)
+    if isinstance(historical_rows, CompactSameSlotVolumeHistory):
+        packed = historical_rows.slots.get(slot, ())
+        current_ordinal = stamp.date().toordinal()
+        observations = [
+            packed[index + 1]
+            for index in range(0, len(packed), 2)
+            if int(packed[index]) < current_ordinal
+        ][-reference_sessions:]
+        if len(observations) != reference_sessions:
+            return None
+        baseline = sum(observations) / reference_sessions
+        if baseline <= 0:
+            return None
+        return {
+            "relative_volume": current_volume / baseline,
+            "current_volume": current_volume,
+            "baseline_volume": baseline,
+            "reference_sessions": reference_sessions,
+            "slot": f"{slot[0]:02d}:{slot[1]:02d}",
+            "candle_direction": ("BULLISH" if current_close > current_open
+                                 else "BEARISH" if current_close < current_open
+                                 else "FLAT"),
+        }
+
     by_date = {}
     for row in historical_rows or ():
         try:
