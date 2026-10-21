@@ -21,15 +21,31 @@ def slot_history(current, volume=100):
     return rows
 
 
+def breakout_bars(stamp, direction="LONG"):
+    """Six-bar compression near a level followed by a strong breakout bar."""
+    bars = []
+    for i in range(6):
+        candle_time = stamp - timedelta(minutes=30 - i * 5)
+        if i < 3:
+            bars.append(bar(candle_time, 99.0, 101.0, 98.0, 100.0, 1000))
+        else:
+            bars.append(bar(candle_time, 99.8, 100.2, 99.4, 99.95, 500))
+    if direction == "LONG":
+        bars.append(bar(stamp, 99.9, 101.3, 99.8, 101.1, 200))
+    else:
+        bars.append(bar(stamp, 100.1, 100.2, 98.7, 98.9, 200))
+    return bars
+
+
 class StockSetupRuleTests(unittest.TestCase):
     def setUp(self):
         self.stamp = datetime(2026, 10, 21, 10, 0)
         self.config = SetupConfig()
 
     def test_trigger_requires_completed_strong_candle_and_verified_rvol(self):
-        latest = bar(self.stamp, 99.9, 101.3, 99.8, 101.1)
+        bars = breakout_bars(self.stamp)
         result = evaluate_stock_setup(
-            "TEST", [latest], slot_history(self.stamp), {"pdh": 100},
+            "TEST", bars, slot_history(self.stamp), {"pdh": 100},
             now=self.stamp + timedelta(minutes=5), config=self.config,
         )
         self.assertEqual(result["status"], "TRIGGERED")
@@ -38,13 +54,23 @@ class StockSetupRuleTests(unittest.TestCase):
         self.assertEqual(result["entry_reference"], None)
         self.assertFalse(result["order_execution_enabled"])
 
+    def test_strong_breakout_without_preceding_compression_does_not_trigger(self):
+        strong = bar(self.stamp, 99.9, 101.3, 99.8, 101.1)
+        result = evaluate_stock_setup(
+            "TEST", [strong], slot_history(self.stamp), {"pdh": 100},
+            now=self.stamp + timedelta(minutes=5),
+        )
+        self.assertNotEqual(result["status"], "TRIGGERED")
+        self.assertTrue(any("compression before the breakout" in reason
+                            for reason in result["reasons"]))
+
     def test_wick_only_and_missing_volume_history_do_not_trigger(self):
         wick = bar(self.stamp, 99.9, 101.3, 99.8, 100.1)
         result = evaluate_stock_setup("TEST", [wick], slot_history(self.stamp), {"pdh": 100},
                                       now=self.stamp + timedelta(minutes=5))
         self.assertNotEqual(result["status"], "TRIGGERED")
-        strong = bar(self.stamp, 99.9, 101.3, 99.8, 101.1)
-        missing = evaluate_stock_setup("TEST", [strong], [], {"pdh": 100},
+        strong_bars = breakout_bars(self.stamp)
+        missing = evaluate_stock_setup("TEST", strong_bars, [], {"pdh": 100},
                                        now=self.stamp + timedelta(minutes=5))
         self.assertEqual(missing["relative_volume_status"], "UNAVAILABLE")
         self.assertNotEqual(missing["status"], "TRIGGERED")
@@ -53,15 +79,16 @@ class StockSetupRuleTests(unittest.TestCase):
         body_too_small = bar(self.stamp, 100.0, 101.4, 99.0, 100.2)
         edge_too_weak = bar(self.stamp, 99.5, 101.5, 99.5, 100.9)
         for candidate in (body_too_small, edge_too_weak):
+            bars = breakout_bars(self.stamp)[:-1] + [candidate]
             result = evaluate_stock_setup(
-                "TEST", [candidate], slot_history(self.stamp), {"pdh": 100},
+                "TEST", bars, slot_history(self.stamp), {"pdh": 100},
                 now=self.stamp + timedelta(minutes=5))
             with self.subTest(candidate=candidate):
                 self.assertNotEqual(result["status"], "TRIGGERED")
 
     def test_short_trigger_is_inverse_and_does_not_require_ema_alignment(self):
-        latest = bar(self.stamp, 100.1, 100.2, 98.7, 98.9)
-        result = evaluate_stock_setup("TEST", [latest], slot_history(self.stamp), {"pdl": 100},
+        bars = breakout_bars(self.stamp, "SHORT")
+        result = evaluate_stock_setup("TEST", bars, slot_history(self.stamp), {"pdl": 100},
                                       now=self.stamp + timedelta(minutes=5), ema9=101, ema20=100)
         self.assertEqual(result["status"], "TRIGGERED")
         self.assertEqual(result["direction"], "SHORT")
@@ -84,12 +111,12 @@ class StockSetupRuleTests(unittest.TestCase):
         self.assertEqual(result["relative_volume_status"], "UNAVAILABLE")
 
     def test_next_completed_candle_confirmation_adds_cost_adjusted_plan(self):
-        first = bar(self.stamp, 99.9, 101.3, 99.8, 101.1)
-        trigger = evaluate_stock_setup("TEST", [first], slot_history(self.stamp), {"pdh": 100},
+        trigger_bars = breakout_bars(self.stamp)
+        trigger = evaluate_stock_setup("TEST", trigger_bars, slot_history(self.stamp), {"pdh": 100},
                                        now=self.stamp + timedelta(minutes=5))
         second_stamp = self.stamp + timedelta(minutes=5)
         second = bar(second_stamp, 101.05, 101.5, 100.9, 101.3, 180)
-        confirmed = evaluate_stock_setup("TEST", [first, second], slot_history(self.stamp),
+        confirmed = evaluate_stock_setup("TEST", trigger_bars + [second], slot_history(self.stamp),
                                          {"pdh": 100}, now=second_stamp + timedelta(minutes=5),
                                          previous_state=trigger)
         self.assertEqual(confirmed["status"], "CONFIRMED")
@@ -99,13 +126,13 @@ class StockSetupRuleTests(unittest.TestCase):
         self.assertEqual(confirmed["trade_plan"]["slippage"], "UNAVAILABLE")
 
     def test_blocked_cost_adjusted_targets_do_not_produce_confirmed_entry(self):
-        first = bar(self.stamp, 99.9, 101.3, 99.8, 101.1)
-        trigger = evaluate_stock_setup("TEST", [first], slot_history(self.stamp),
+        trigger_bars = breakout_bars(self.stamp)
+        trigger = evaluate_stock_setup("TEST", trigger_bars, slot_history(self.stamp),
                                        {"pdh": 100}, now=self.stamp + timedelta(minutes=5))
         second_stamp = self.stamp + timedelta(minutes=5)
         second = bar(second_stamp, 101.05, 101.5, 100.9, 101.3, 180)
         result = evaluate_stock_setup(
-            "TEST", [first, second], slot_history(self.stamp),
+            "TEST", trigger_bars + [second], slot_history(self.stamp),
             {"pdh": 100, "orh": 101.4}, now=second_stamp + timedelta(minutes=5),
             previous_state=trigger)
         self.assertEqual(result["status"], "INVALID")
@@ -132,8 +159,8 @@ class StockSetupRuleTests(unittest.TestCase):
         self.assertNotEqual(result["status"], "CONFIRMED")
 
     def test_ema_context_does_not_block_strong_breakout(self):
-        latest = bar(self.stamp, 99.9, 101.3, 99.8, 101.1)
-        result = evaluate_stock_setup("TEST", [latest], slot_history(self.stamp), {"pdh": 100},
+        bars = breakout_bars(self.stamp)
+        result = evaluate_stock_setup("TEST", bars, slot_history(self.stamp), {"pdh": 100},
                                       now=self.stamp + timedelta(minutes=5), ema9=99,
                                       ema20=100)
         self.assertEqual(result["status"], "TRIGGERED")
