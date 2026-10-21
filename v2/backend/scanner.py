@@ -16,7 +16,10 @@ from .trade_engine import buy, update_state, sell
 from .database import DB_PATH, init_db, reset_scanner_results
 from .decision_learning import classify_market_recovery
 from .offline_preload_selection import select_completed_preload
-from .volume_metrics import (\n    completed_intraday_bars, verified_same_slot_relative_volume,\n    confirmed_range_breakout,\n)
+from .volume_metrics import (
+    completed_intraday_bars, verified_same_slot_relative_volume,
+    confirmed_range_breakout,
+)
 
 candles = CandleManager()
 
