@@ -80,14 +80,22 @@ def evaluate(bars, *, now, same_slot_average_volume, settings=Settings()):
     if len(bars) < required:
         return wait("INSUFFICIENT_15M_HISTORY")
     recent = bars[-required:]
+    # Indicators span sessions; overnight gaps are expected, intraday gaps are not.
     for earlier, later in zip(recent, recent[1:]):
-        if later["timestamp"] - earlier["timestamp"] != timedelta(minutes=15):
-            return wait("NONCONTIGUOUS_15M_CANDLES")
+        delta = later["timestamp"] - earlier["timestamp"]
+        if delta != timedelta(minutes=15):
+            if earlier["timestamp"].date() == later["timestamp"].date():
+                return wait("NONCONTIGUOUS_15M_CANDLES")
+            if delta <= timedelta(0):
+                return wait("UNSORTED_15M_HISTORY")
+    if any(bar["timestamp"].date() != recent[-1]["timestamp"].date()
+           for bar in recent[-settings.breakout_bars - 1:]):
+        return wait("INSUFFICIENT_SAME_SESSION_BREAKOUT_BARS")
     latest = recent[-1]
     age = (now - (latest["timestamp"] + timedelta(minutes=15))).total_seconds() / 60
     if age < 0 or age > settings.max_age_minutes:
         return wait("STALE_OR_INCOMPLETE_15M_CANDLE")
-    if not same_slot_average_volume or not isfinite(same_slot_average_volume) or same_slot_average_volume <= 0:
+    if (not isinstance(same_slot_average_volume, (int, float)) or not isfinite(same_slot_average_volume) or same_slot_average_volume <= 0):
         return wait("MISSING_VERIFIED_20_SESSION_VOLUME_BASELINE")
     try:
         values = [float(bar["close"]) for bar in recent]
