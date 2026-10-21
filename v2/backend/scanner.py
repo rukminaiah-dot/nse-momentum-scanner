@@ -588,7 +588,7 @@ def analyse(key):
         continuity_reason = "MISSING_MINUTE"
     else:
         continuity_reason = None
-    if continuity_reason:
+    if continuity_reason and key not in NIFTY_200.values():
         print(
             "MOMENTUM_CONTINUITY_BLOCKED:", key,
             "| REASON:", continuity_reason,
@@ -604,6 +604,22 @@ def analyse(key):
             history,
         )
         return
+
+    if continuity_reason:
+        # The legacy momentum path needs six consecutive 1-minute candles,
+        # but the read-only stock setup engine uses separately aggregated,
+        # completed and contiguous 5-minute bars. Let it evaluate that data
+        # below; a 1-minute gap must not suppress a valid 5-minute setup.
+        print(
+            "MOMENTUM_CONTINUITY_NOT_REQUIRED_FOR_5M_SETUP:", key,
+            "| REASON:", continuity_reason,
+            "| LAST_SIX:", [
+                getattr(c, "timestamp", None).strftime("%Y-%m-%d %H:%M")
+                if getattr(c, "timestamp", None) is not None else "NO_TIMESTAMP"
+                for c in recent
+            ],
+            flush=True,
+        )
 
     closes = [c.close for c in history]
     highs = [c.high for c in history]
