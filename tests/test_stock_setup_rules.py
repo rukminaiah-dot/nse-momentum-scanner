@@ -64,6 +64,25 @@ class StockSetupRuleTests(unittest.TestCase):
         self.assertTrue(any("compression before the breakout" in reason
                             for reason in result["reasons"]))
 
+    def test_earlier_session_gap_does_not_block_a_fresh_contiguous_setup(self):
+        bars = breakout_bars(self.stamp)
+        earlier = bar(self.stamp - timedelta(minutes=60), 99.0, 100.0, 98.0, 99.5)
+        result = evaluate_stock_setup(
+            "TEST", [earlier] + bars, slot_history(self.stamp), {"pdh": 100},
+            now=self.stamp + timedelta(minutes=5), config=self.config,
+        )
+        self.assertEqual(result["status"], "TRIGGERED")
+
+    def test_gap_inside_current_setup_window_blocks_trigger(self):
+        bars = breakout_bars(self.stamp)
+        bars[-2] = bar(self.stamp - timedelta(minutes=10), 99.8, 100.2, 99.4, 99.95, 500)
+        result = evaluate_stock_setup(
+            "TEST", bars, slot_history(self.stamp), {"pdh": 100},
+            now=self.stamp + timedelta(minutes=5), config=self.config,
+        )
+        self.assertEqual(result["status"], "WAIT")
+        self.assertTrue(any("latest setup window" in reason for reason in result["reasons"]))
+
     def test_wick_only_and_missing_volume_history_do_not_trigger(self):
         wick = bar(self.stamp, 99.9, 101.3, 99.8, 100.1)
         result = evaluate_stock_setup("TEST", [wick], slot_history(self.stamp), {"pdh": 100},
@@ -146,6 +165,22 @@ class StockSetupRuleTests(unittest.TestCase):
         result = evaluate_stock_setup("TEST", [failed], slot_history(self.stamp), {"pdh": 100},
                                       now=second_stamp + timedelta(minutes=5), previous_state=trigger)
         self.assertEqual(result["status"], "INVALID")
+
+    def test_confirmation_must_arrive_on_the_next_five_minute_candle(self):
+        trigger_bars = breakout_bars(self.stamp)
+        trigger = evaluate_stock_setup(
+            "TEST", trigger_bars, slot_history(self.stamp), {"pdh": 100},
+            now=self.stamp + timedelta(minutes=5),
+        )
+        late_stamp = self.stamp + timedelta(minutes=10)
+        late = bar(late_stamp, 101.05, 101.5, 100.9, 101.3, 180)
+        result = evaluate_stock_setup(
+            "TEST", trigger_bars + [late], slot_history(self.stamp), {"pdh": 100},
+            now=late_stamp + timedelta(minutes=5), previous_state=trigger,
+        )
+        self.assertEqual(result["status"], "INVALID")
+        self.assertTrue(any("confirmation window was missed" in reason
+                            for reason in result["reasons"]))
 
     def test_prior_session_confirmation_is_not_carried_forward(self):
         prior = {"status": "CONFIRMED", "direction": "LONG", "verified_level": 100,
