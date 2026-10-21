@@ -168,11 +168,12 @@ const host=$('trend-changes'),feed=state.trendChanges;
 if(!feed||!Array.isArray(feed.indices)){host.innerHTML='<div class="empty">'+(state.trendChanges?'Trend shift feed unavailable. No live status is assigned.':'Loading completed-candle shift history…')+'</div>';return}
 const labels={CONFIRMED_SHIFT:'CONFIRMED SHIFT · RESEARCH ONLY',SHIFT_WATCH:'POSSIBLE SHIFT · WATCH',TREND_BULLISH:'BULLISH STRUCTURE · NO NEW SHIFT',TREND_BEARISH:'BEARISH STRUCTURE · NO NEW SHIFT',MIXED:'MIXED · NO CLEAR SHIFT'};
 host.innerHTML=feed.indices.map(x=>{
-const historical=x.data_status!=='LIVE_FRESH';
+const freshness=x.data_status==='LIVE_FRESH'?'live verified':x.data_status==='HISTORICAL'?'historical':x.data_status==='STALE'?'stale':'unavailable';
 const dir=x.direction?(' · '+x.direction):'';
 const label=labels[x.event]||'NO SHIFT DATA';
-const age=historical?' · '+(x.data_status==='HISTORICAL'?'historical':'stale'):' · live verified';
-return '<article class="card"><strong>'+esc(x.symbol)+'</strong><div class="small '+(historical?'amber':x.event==='CONFIRMED_SHIFT'?'green':x.event==='SHIFT_WATCH'?'amber':'muted')+'" style="margin-top:6px">'+esc(label+dir+age)+'</div><div class="small muted">'+esc(x.last_candle_ist||'No completed candle')+' IST · '+esc(x.reason||'No explanation available')+'</div></article>'
+const age=' · '+freshness;
+const alert=x.event==='CONFIRMED_SHIFT'?'green':x.event==='SHIFT_WATCH'?'amber':'muted';
+return '<article class="card"><strong>'+esc(x.symbol)+'</strong><div class="small '+(freshness==='live verified'?alert:'amber')+'" style="margin-top:6px">'+esc(label+dir+age)+'</div><div class="small muted">'+esc(x.last_candle_ist||'No completed candle')+' IST · '+esc(x.reason||'No explanation available')+'</div></article>'
 }).join('')||'<div class="empty">No index trend rows are available.</div>';
 }const verifiedCandleScore=x=>x&&x.rating!==null&&x.rating!==undefined&&x.rating!==''&&typeof x.rating!=='boolean'&&Number.isFinite(Number(x.rating))&&Number(x.rating)>=0&&Number(x.rating)<=100;function verifiedStockBuy(x){const row=state.rows.find(r=>r.symbol===x.symbol);return x.type==='STOCK'&&x.signal==='BUY'&&x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)&&fresh(row)&&row.signal==='BUY'&&verifiedCandleScore(x)}function rememberLastRatings(){if(!Array.isArray(state.ratings)||!Array.isArray(state.rows))return;const next={...state.lastRatings};for(const rating of state.ratings){if(!rating||rating.data_status==='HISTORICAL_LAST_STORED_CANDLE'||rating.type!=='STOCK'||rating.rating_basis!=='CANDLE_ONLY_HEURISTIC'||!['BUY','SELL'].includes(rating.signal)||!verifiedCandleScore(rating))continue;const row=state.rows.find(x=>x.symbol===rating.symbol);if(!row||!fresh(rating)||!fresh(row)||row.signal!==rating.signal)continue;next[rating.symbol]={rating:Number(rating.rating),signal:rating.signal,candle_ist:rating.candle_ist,trend_5m:rating.trend_5m}}try{localStorage.setItem(SCORE_CACHE_KEY,JSON.stringify(next));state.lastRatings=next}catch(e){}}
 function renderStockSetups(hostId){
