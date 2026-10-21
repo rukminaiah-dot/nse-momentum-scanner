@@ -250,13 +250,27 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("verifiedCandleScore(x)", self.html)
         self.assertIn("verifiedCandleScore(r)", self.html)
 
-    def test_dashboard_summary_separates_live_stock_calls_from_index_wait(self):
+    def test_dashboard_summary_separates_fresh_stock_setups_from_stale_data(self):
         self.assertIn('id="live-call-summary"', self.html)
         self.assertIn("function renderLiveCallSummary()", self.html)
-        self.assertIn("LIVE STOCK CALLS:", self.html)
-        self.assertIn("Index calls are checked separately", self.html)
-        self.assertIn("does not cancel the stock calls", self.html)
-        self.assertIn("Market closed or no live setup feed", self.html)
+        self.assertIn("FRESH STOCK SETUPS:", self.html)
+        self.assertIn("x?.setup_data_fresh===true", self.html)
+        self.assertIn("NO FRESH STOCK SETUP DATA:", self.html)
+        self.assertIn("latest setup data ", self.html)
+        self.assertIn("checked ", self.html)
+        self.assertIn("stale/awaiting", self.html)
+        self.assertIn("Index readings are checked separately", self.html)
+        self.assertIn("stale index data does not change these stock setup counts", self.html)
+        self.assertIn("Market closed: stored setup rows are historical", self.html)
+
+    def test_stock_setup_api_reports_freshness_separately(self):
+        api_path = HTML.parents[1] / "backend" / "api.py"
+        api = api_path.read_text(encoding="utf-8")
+        self.assertIn('"fresh_setup_count": 0', api)
+        self.assertIn('"stale_setup_count": 0', api)
+        self.assertIn('"setup_data_fresh": False', api)
+        self.assertIn('row["setup_data_fresh"] = bool(open_now and fresh)', api)
+        self.assertIn('output["status"] = "NO_FRESH_SETUPS"', api)
 
     def test_stock_setup_rankings_use_all_fresh_api_candidates(self):
         self.assertIn("/api/v2/stock-setups", self.html)
