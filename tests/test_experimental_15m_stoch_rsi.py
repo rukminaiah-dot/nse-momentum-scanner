@@ -50,7 +50,7 @@ class TestExperimental15m(unittest.TestCase):
 
     def test_no_cross_session_breakout(self):
         start = datetime(2026, 10, 20, 9, 15)
-        self.bars = self.bars[:51]
+        self.bars = self.bars[:53]
         for i, bar in enumerate(self.bars):
             day, slot = divmod(i, 25)
             bar["timestamp"] = start + timedelta(days=day, minutes=15 * slot)
