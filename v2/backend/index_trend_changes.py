@@ -97,7 +97,7 @@ def assess_index_shift(rows, *, now=None):
     recent = stable[:-2] if len(stable) > 2 else []
     prior_direction = next((direction for direction in reversed(recent) if direction), None)
     pressure_run = pressure[-2:] if len(pressure) >= 2 else []
-    direction = (pressure_run[-1] if len(pressure_run) == 2 and pressure_run[0] == pressure_run[1]
+    direction = (pressure_run[-1] if len(pressure_run) == 2 and pressure_run[0] is not None and pressure_run[0] == pressure_run[1]
                  else (stable[-1] if stable else None))
     confirmed = False
     if direction and len(rows) >= 3 and stable[-3:] == [direction, direction, direction]:
