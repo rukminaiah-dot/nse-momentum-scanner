@@ -26,7 +26,7 @@ def scanner_trend_from_source():
     fn = matches[0]
     # Deliberately disallow calls or names that could introduce side effects.
     allowed_calls = {"hasattr", "len", "sorted", "append", "date", "replace",
-                     "setdefault", "all", "range", "total_seconds"}
+                     "setdefault", "all", "any", "range", "total_seconds"}
     allowed_names = {"history", "timed", "c", "session_date", "buckets", "ts",
                      "bucket", "complete", "group", "closes", "key", "range",
                      "hasattr", "len", "sorted", "i", "latest_groups"}
@@ -46,7 +46,7 @@ def scanner_trend_from_source():
                 raise AssertionError("unexpected dynamic scanner call")
     module = ast.fix_missing_locations(ast.Module(body=[fn], type_ignores=[]))
     namespace = {"__builtins__": {"hasattr": hasattr, "len": len,
-                                    "sorted": sorted, "all": all, "range": range}}
+                                    "sorted": sorted, "all": all, "any": any, "range": range}}
     exec(compile(module, str(SCANNER), "exec"), namespace)
     return namespace["five_minute_trend"]
 
