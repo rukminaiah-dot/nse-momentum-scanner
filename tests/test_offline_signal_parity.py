@@ -3,6 +3,10 @@ import unittest
 from datetime import datetime, timedelta
 from v2.backend.candles import Candle
 from v2.backend.offline_signal_parity import evaluate, five_minute_trend, five_minute_breakout
+from v2.backend.volume_metrics import (
+    completed_intraday_bars, verified_same_slot_relative_volume,
+    confirmed_range_breakout,
+)
 
 
 def history(count=30, direction=1):
