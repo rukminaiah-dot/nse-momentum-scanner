@@ -27,6 +27,15 @@ class Test15mPaperPipeline(unittest.TestCase):
         self.assertEqual(result["selected_count"], 0)
         self.assertEqual(result["excluded"]["A"], "VOLUME_BELOW_THRESHOLD")
 
+    def test_nonfinite_volume_excluded(self):
+        for value in (float("nan"), float("inf"), -1):
+            with self.subTest(volume=value):
+                bars = [dict(x) for x in self.bars]
+                bars[-1]["volume"] = value
+                result = screen_universe({"A": bars}, {"A": self.history}, now=self.now)
+                self.assertEqual(result["selected_count"], 0)
+                self.assertEqual(result["excluded"]["A"], "INVALID_CURRENT_VOLUME")
+
     def test_no_baseline_excluded(self):
         result = screen_universe({"A": self.bars}, {}, now=self.now)
         self.assertEqual(result["excluded"]["A"],
