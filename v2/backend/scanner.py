@@ -79,7 +79,8 @@ market_regimes = {}
 previous_closes = {}
 _index_recovery_state = {}
 last_trade_updates = {}
-last_cumulative_volumes = {}\nhistorical_15m_volume = {}
+last_cumulative_volumes = {}
+historical_15m_volume = {}
 
 _tick_seen = {}
 _last_accepted_tick_ms = {}
