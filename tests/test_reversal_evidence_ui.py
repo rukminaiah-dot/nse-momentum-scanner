@@ -31,15 +31,17 @@ class ReversalEvidenceUiTests(unittest.TestCase):
         self.assertIn("evidence.score_points", self.html)
         self.assertIn("evidence.assessed_factors", self.html)
 
-    def test_dashboard_exposes_nifty_states_and_limits_other_index_claims(self):
+    def test_dashboard_uses_intraday_shift_feed_not_long_horizon_reversal_rules(self):
         dashboard = self.html.split("function renderTrendChanges()", 1)[1].split(
             "const verifiedCandleScore", 1
         )[0]
-        self.assertIn("BOTTOM REVERSAL WATCH", dashboard)
-        self.assertIn("TOP REVERSAL WATCH", dashboard)
-        self.assertIn("HISTORICAL · no live reversal call", dashboard)
-        self.assertIn("NIFTY reversal rules do not cover this index", dashboard)
-        self.assertIn("verified 500-point move against the prior trend", dashboard)
+        self.assertIn("state.trendChanges", dashboard)
+        self.assertIn("CONFIRMED SHIFT · RESEARCH ONLY", dashboard)
+        self.assertIn("POSSIBLE SHIFT · WATCH", dashboard)
+        self.assertIn("historical", dashboard)
+        self.assertNotIn("BOTTOM REVERSAL WATCH", dashboard)
+        self.assertNotIn("500-point move", dashboard)
+        self.assertIn("/api/v2/index-trend-changes", self.html)
 
     def test_timestamped_news_is_related_to_the_verified_short_term_trend(self):
         helper = HTML.parent / "news_trend_relation.js"
