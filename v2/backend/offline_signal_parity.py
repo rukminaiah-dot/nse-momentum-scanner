@@ -42,6 +42,51 @@ def five_minute_trend(history):
     return "NEUTRAL"
 
 
+
+def five_minute_breakout(history, direction):
+    """Confirm a completed 5-minute close beyond the prior 15-minute range."""
+    timed = [c for c in history if hasattr(c, "timestamp")]
+    if not timed:
+        return False
+    day = timed[-1].timestamp.date()
+    timed = [c for c in timed if c.timestamp.date() == day]
+    buckets = {}
+    for candle in timed:
+        ts = candle.timestamp
+        bucket = ts.replace(minute=(ts.minute // 5) * 5, second=0, microsecond=0)
+        buckets.setdefault(bucket, []).append(candle)
+    complete = []
+    for key in sorted(buckets):
+        group = buckets[key]
+        if len(group) == 5 and all(
+                (group[i].timestamp - group[i-1].timestamp).total_seconds() == 60
+                for i in range(1, 5)):
+            complete.append(group)
+    if len(complete) < 4:
+        return False
+    last_four = complete[-4:]
+    if any((last_four[i][0].timestamp -
+            last_four[i-1][0].timestamp).total_seconds() != 300
+           for i in range(1, 4)):
+        return False
+    prior = last_four[:3]
+    prior_high = max(float(c.high) for group in prior for c in group)
+    prior_low = min(float(c.low) for group in prior for c in group)
+    prior_ranges = [
+        max(float(c.high) for c in group) - min(float(c.low) for c in group)
+        for group in prior
+    ]
+    latest_close = float(last_four[-1][-1].close)
+    if latest_close <= 0:
+        return False
+    buffer = max(latest_close * 0.001,
+                 0.25 * (sum(prior_ranges) / len(prior_ranges)))
+    if direction == "BUY":
+        return latest_close > prior_high + buffer
+    if direction == "SELL":
+        return latest_close < prior_low - buffer
+    return False
+
 def evaluate(history, *, session_date, is_index=False, is_stock=False,
              nifty_market="NEUTRAL", is_primary_index=True):
     """Return pure indicator/decision data; no persistence or trading."""
@@ -86,15 +131,10 @@ def evaluate(history, *, session_date, is_index=False, is_stock=False,
     signal = generate_signal(price, e9, e20, None, mom, rvol, market,
                              require_volume=is_stock)
     trend = five_minute_trend(history)
-    if is_index:
-        if signal == "BUY" and trend != "BULLISH":
+    if signal in ("BUY", "SELL"):
+        expected_trend = "BULLISH" if signal == "BUY" else "BEARISH"
+        if trend != expected_trend or not five_minute_breakout(history, signal):
             signal = "HOLD"
-        elif signal == "SELL" and trend != "BEARISH":
-            signal = "HOLD"
-    elif signal == "BUY" and trend != "BULLISH":
-        signal = "HOLD"
-    elif signal == "SELL" and trend != "BEARISH":
-        signal = "HOLD"
     if is_stock and signal in ("BUY", "SELL"):
         if atr14 is None or atr14 <= 0:
             signal = "HOLD"
