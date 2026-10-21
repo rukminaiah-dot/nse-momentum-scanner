@@ -6,8 +6,8 @@ been validated for profitability; this module never places broker orders.
 
 
 def generate_signal(price, ema9, ema20, vwap, momentum, rvol=None, market=None,
-                    *, require_volume=False, min_relative_volume=1.2,
-                    min_ema_spread_pct=0.05):
+                    *, require_volume=False, min_relative_volume=1.5,
+                    min_ema_spread_pct=0.10):
     # Core price indicators are mandatory.
     if None in (price, ema9, ema20, momentum):
         return "WATCH"
@@ -25,7 +25,7 @@ def generate_signal(price, ema9, ema20, vwap, momentum, rvol=None, market=None,
     if price <= 0:
         return "HOLD"
 
-    # A small EMA gap is commonly candle noise around a crossover.
+    # Require a wider EMA gap; smaller separations are treated as crossover noise.
     spread_pct = abs(ema9 - ema20) / price * 100
     if spread_pct < spread_floor:
         return "HOLD"
