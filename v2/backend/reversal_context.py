@@ -461,7 +461,8 @@ def _observed_volume(now: datetime, session_open: bool) -> dict[str, Any]:
               "threshold_rvol": RVOL_THRESHOLD, "fresh_rows": 0, "verified_volume_rows": 0,
               "bullish_surge_rows": 0, "bearish_surge_rows": 0, "last_candle_ist": None,
               "last_session": None,
-              "source": "scanner_results; completed 15-minute candle volume / same time slot mean across 20 prior sessions",\n              "comparison_basis": "15-minute slot RVOL versus 20 prior sessions"}
+              "source": "scanner_results; completed 15-minute candle volume / same time slot mean across 20 prior sessions",
+              "comparison_basis": "15-minute slot RVOL versus 20 prior sessions"}
     try:
         with sqlite3.connect(DB_PATH, timeout=5) as db:
             db.row_factory = sqlite3.Row
@@ -506,7 +507,10 @@ def _observed_volume(now: datetime, session_open: bool) -> dict[str, Any]:
                     "verified_volume_rows": len(session_rows),
                     "bullish_surge_rows": bullish,
                     "bearish_surge_rows": bearish,
-                    "last_candle_ist": max(\n                        datetime.strptime(row["volume_candle_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=IST)\n                        for _, row in session_rows\n                    ).isoformat(),
+                    "last_candle_ist": max(
+                        datetime.strptime(row["volume_candle_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=IST)
+                        for _, row in session_rows
+                    ).isoformat(),
                 }
             return result
         for row in rows:
@@ -528,9 +532,11 @@ def _observed_volume(now: datetime, session_open: bool) -> dict[str, Any]:
                 ).replace(tzinfo=IST)
             except (TypeError, ValueError):
                 continue
+            volume_end = volume_stamp + timedelta(minutes=15)
             if (rvol is None or current is None or baseline is None or current < 0
                     or baseline <= 0 or volume_stamp.date() != now.date()
-                    or volume_stamp > stamp or stamp - volume_stamp >= timedelta(minutes=15)):
+                    or volume_end > stamp + timedelta(minutes=1)
+                    or stamp + timedelta(minutes=1) - volume_end >= timedelta(minutes=15)):
                 continue
             result["verified_volume_rows"] += 1
             if rvol >= RVOL_THRESHOLD and row["signal"] == "BUY" and row["trend_5m"] == "BULLISH":
