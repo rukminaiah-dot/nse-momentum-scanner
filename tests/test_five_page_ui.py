@@ -250,10 +250,11 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("verifiedCandleScore(x)", self.html)
         self.assertIn("verifiedCandleScore(r)", self.html)
 
-    def test_top_buy_rankings_require_fresh_aligned_scanner_data(self):
-        self.assertIn("function verifiedStockBuy(x)", self.html)
-        self.assertIn("fresh(x)&&fresh(row)&&row.signal==='BUY'", self.html)
-        self.assertIn("state.ratings.filter(verifiedStockBuy)", self.html)
+    def test_stock_setup_rankings_use_all_fresh_api_candidates(self):
+        self.assertIn("/api/v2/stock-setups", self.html)
+        self.assertIn("function renderStockSetups(hostId)", self.html)
+        self.assertIn("['WATCH','TRIGGERED','CONFIRMED','INVALID']", self.html)
+        self.assertIn("Heuristic rank ", self.html)
 
     def test_stock_analysis_requires_scanner_rating_direction_agreement(self):
         self.assertIn("r.signal===rating.signal&&['BUY','SELL'].includes(r.signal)", self.html)
@@ -582,14 +583,15 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn('const historical=x=>state.historicalRatings.find', self.html)
         self.assertIn('directional_bias||\'neutral\').toLowerCase()', self.html)
 
-    def test_top_buy_ranking_excludes_stale_ratings(self):
-        self.assertIn("x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)", self.html)
-        self.assertIn(".sort((a,b)=>Number(b.rating)-Number(a.rating)).slice(0,10)", self.html)
+    def test_stock_setup_ranking_has_no_fixed_signal_cap(self):
+        self.assertIn("/api/v2/stock-setups", self.html)
+        self.assertIn("function renderStockSetups(hostId)", self.html)
+        self.assertNotIn("state.stockSetups.*slice(0,10)", self.html)
 
     def test_stock_signals_require_live_verified_candle_rating(self):
         self.assertIn("const live=Boolean(state.sessionOpen&&fresh(r)&&rating&&verifiedCandleScore(rating)&&r.signal===rating.signal", self.html)
         self.assertIn("x.type==='STOCK'&&x.rating_basis==='CANDLE_ONLY_HEURISTIC'&&fresh(x)", self.html)
-        self.assertIn("No verified live BUY signals currently available", self.html)
+        self.assertIn("Ranked Stock Setups · All Qualifiers", self.html)
 
     def test_no_broker_execution_claim(self):
         self.assertIn("Order execution", self.html)

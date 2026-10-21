@@ -112,9 +112,8 @@ class RetentionTests(unittest.TestCase):
         self.assertEqual(inserted, 2)
         self.assertEqual([c.timestamp.minute for c in completed], [18, 19, 20])
 
-    def test_sixty_bar_cap_can_create_false_core_buy_and_sell(self):
-        # Preserve counterexamples discovered in offline six-regime CI.
-        # These are signal-equivalence tests, not order execution.
+    def test_stronger_core_filters_reject_marginal_short_ema_drift(self):
+        # Tiny 60-bar drifts do not meet the minimum EMA-spread rule.
         history = 400
         scenarios = (
             ("BUY", [150.0] * (history - 60)
@@ -132,7 +131,7 @@ class RetentionTests(unittest.TestCase):
         for capped_decision, prices in scenarios:
             with self.subTest(capped_decision=capped_decision):
                 self.assertEqual(signal(prices), "HOLD")
-                self.assertEqual(signal(prices[-60:]), capped_decision)
+                self.assertEqual(signal(prices[-60:]), "HOLD")
 
 
 if __name__ == "__main__":

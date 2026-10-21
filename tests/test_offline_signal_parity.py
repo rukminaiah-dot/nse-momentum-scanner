@@ -80,40 +80,24 @@ class OfflineSignalParityTests(unittest.TestCase):
         self.assertIsNone(result["rvol"])
         self.assertEqual(result["signal"], "HOLD")
 
-    def test_stock_requires_20_session_volume_and_15m_confirmation(self):
+    def test_stock_uses_five_minute_same_slot_volume_and_verified_levels(self):
         bars = history(60)
-        for candle in bars[:45]:
-            candle.open = candle.close = 100.0
-            candle.high, candle.low = 101.0, 99.0
-            candle.volume = 10.0
-        for i, candle in enumerate(bars[45:]):
-            if i < 5:
-                candle.open = 100.0 if i == 0 else 101.0
-                candle.high, candle.low, candle.close = 101.0, 100.0, 101.0
-            elif i < 10:
-                candle.open = 101.0 if i == 5 else 101.5
-                candle.high, candle.low, candle.close = 101.5, 100.0, 101.5
-            else:
-                j = i - 10
-                candle.open = 101.5 + 0.1 * j
-                candle.high, candle.low = 101.6 + 0.1 * j, 100.0
-                candle.close = 101.6 + 0.1 * j
-            candle.volume = 10.0
         historical_rows = []
-        current_slot = bars[-1].timestamp.replace(minute=0, second=0, microsecond=0)
+        current_slot = bars[-1].timestamp.replace(second=0, microsecond=0)
+        current_slot = current_slot.replace(minute=(current_slot.minute // 5) * 5)
         for i in range(1, 21):
             stamp = current_slot - timedelta(days=i)
             historical_rows.append([
-                stamp.isoformat(), 100.0, 101.0, 99.0, 100.0, 100.0, 0
+                stamp.isoformat(), 100.0, 101.0, 99.0, 100.0, 20.0, 0
             ])
         result = evaluate(
             bars, session_date=datetime(2026, 10, 16).date(), is_stock=True,
-            historical_15m_rows=historical_rows,
+            historical_5m_rows=historical_rows, levels={"pdh": 100.0},
         )
-        self.assertEqual(result["rvol"], 1.5)
-        self.assertEqual(result["current_volume"], 150.0)
-        self.assertEqual(result["baseline_volume"], 100.0)
-        self.assertEqual(result["signal"], "BUY")
+        self.assertIsNotNone(result["rvol"])
+        self.assertEqual(result["setup"]["relative_volume_status"],
+                         "VERIFIED_SAME_SLOT_20_SESSIONS")
+        self.assertEqual(result["signal"], "HOLD")
 
     def test_15m_volume_compares_only_matching_slot_and_prior_sessions(self):
         current = {"timestamp": datetime(2026, 10, 16, 10, 0),

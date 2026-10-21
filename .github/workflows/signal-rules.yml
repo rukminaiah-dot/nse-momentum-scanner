@@ -3,12 +3,14 @@ on:
   pull_request:
     paths:
       - 'v2/backend/scanner.py'
+      - 'v2/backend/stock_setup_rules.py'
       - 'v2/backend/signal_engine.py'
       - 'v2/backend/offline_signal_parity.py'
       - 'v2/backend/volume_metrics.py'
       - 'v2/backend/reversal_context.py'
       - 'v2/backend/api.py'
       - 'v2/backend/database.py'
+      - 'v2/frontend/index.html'
       - 'tests/test_signal_engine.py'
       - 'tests/test_volume_metrics.py'
       - 'tests/test_reversal_context_observed_volume.py'
@@ -16,6 +18,8 @@ on:
       - 'tests/test_scanner_source_decision_parity.py'
       - 'tests/test_scanner_trend_source_parity.py'
       - 'tests/test_scanner_decision_safety_contract.py'
+      - 'tests/test_stock_setup_rules.py'
+      - 'tests/test_five_page_ui.py'
       - '.github/workflows/signal-rules.yml'
   push:
     branches:
@@ -28,7 +32,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python -m py_compile v2/backend/scanner.py v2/backend/signal_engine.py v2/backend/offline_signal_parity.py v2/backend/volume_metrics.py v2/backend/reversal_context.py v2/backend/api.py v2/backend/database.py
+      - run: python -m py_compile v2/backend/scanner.py v2/backend/stock_setup_rules.py v2/backend/signal_engine.py v2/backend/offline_signal_parity.py v2/backend/volume_metrics.py v2/backend/reversal_context.py v2/backend/api.py v2/backend/database.py
       - run: python -m unittest discover -s tests -p 'test_signal_engine.py' -v
       - run: python -m unittest discover -s tests -p 'test_volume_metrics.py' -v
       - run: python -m unittest discover -s tests -p 'test_reversal_context_observed_volume.py' -v
@@ -36,3 +40,5 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_scanner_source_decision_parity.py' -v
       - run: python -m unittest discover -s tests -p 'test_scanner_trend_source_parity.py' -v
       - run: python -m unittest discover -s tests -p 'test_scanner_decision_safety_contract.py' -v
+      - run: python -m unittest discover -s tests -p 'test_stock_setup_rules.py' -v
+      - run: python -m unittest discover -s tests -p 'test_five_page_ui.py' -v

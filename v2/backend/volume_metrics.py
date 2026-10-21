@@ -49,8 +49,12 @@ def verified_relative_volume(candles, reference_bars=19):
 
 
 
-def completed_intraday_bars(candles, interval_minutes=15):
-    """Aggregate only full contiguous one-minute bars into 15-minute bars."""
+def completed_intraday_bars(candles, interval_minutes=15, *, include_all_sessions=False):
+    """Aggregate full contiguous one-minute bars into intraday bars.
+
+    By default only the latest session is returned, preserving existing callers.
+    ``include_all_sessions`` is for verified historical same-slot baselines.
+    """
     if (isinstance(interval_minutes, bool) or not isinstance(interval_minutes, int)
             or interval_minutes < 1):
         raise ValueError("interval_minutes must be a positive integer")
@@ -63,7 +67,7 @@ def completed_intraday_bars(candles, interval_minutes=15):
     buckets = defaultdict(list)
     for candle in timed:
         stamp = candle.timestamp
-        if stamp.date() != day:
+        if not include_all_sessions and stamp.date() != day:
             continue
         minute_bucket = (stamp.hour * 60 + stamp.minute) // interval_minutes
         start_minute = minute_bucket * interval_minutes

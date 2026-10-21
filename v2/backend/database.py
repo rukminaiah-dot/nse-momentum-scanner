@@ -74,6 +74,11 @@ def init_db():
         PRIMARY KEY (symbol, candle_time)
     )""")
     con.execute("CREATE INDEX IF NOT EXISTS idx_signal_history_time ON scanner_signal_history(candle_time)")
+    con.execute("""CREATE TABLE IF NOT EXISTS scanner_stock_setups (
+        symbol TEXT PRIMARY KEY,
+        updated_at TEXT NOT NULL,
+        setup_json TEXT NOT NULL
+    )""")
     con.commit()
     con.close()
 

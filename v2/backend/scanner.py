@@ -12,7 +12,6 @@ from .gap_recovery_worker import GapRecoveryWorker
 from .indicators import ema, momentum, atr
 from .signal_engine import generate_signal
 from .market_regime import index_signal
-from .trade_engine import buy, update_state, sell
 from .database import DB_PATH, init_db, reset_scanner_results
 from .decision_learning import classify_market_recovery
 from .offline_preload_selection import select_completed_preload
@@ -20,6 +19,7 @@ from .volume_metrics import (
     completed_intraday_bars, verified_same_slot_relative_volume,
     confirmed_range_breakout,
 )
+from .stock_setup_rules import SetupConfig, evaluate_stock_setup, verified_previous_day_levels
 
 candles = CandleManager()
 
@@ -73,14 +73,14 @@ def request_recovery_on_gap(key):
         return False
     return worker.request(key)
 
-active_trades = {}
 instrument_symbols = {key: symbol for symbol, key in {**NIFTY_200, **INDICES}.items()}
 market_regimes = {}
 previous_closes = {}
 _index_recovery_state = {}
-last_trade_updates = {}
 last_cumulative_volumes = {}
-historical_15m_volume = {}
+historical_5m_volume = {}
+previous_day_levels = {}
+stock_setup_states = {}
 
 _tick_seen = {}
 _last_accepted_tick_ms = {}
@@ -252,28 +252,6 @@ def write_candle_quality():
         print("CANDLE_QUALITY_WRITE_ERROR:", type(exc).__name__, flush=True)
 
 
-def load_active_trades():
-    active_trades.clear()
-    con = sqlite3.connect(DB_PATH)
-    rows = con.execute("SELECT id,symbol,target_1,target_2,invalidation,status FROM trades WHERE status NOT IN ('SELL','CLOSED')").fetchall()
-    con.close()
-    for trade_id, symbol, t1, t2, invalidation, status in rows:
-        active_trades[symbol] = {"id": trade_id, "target_1": t1, "target_2": t2, "invalidation": invalidation, "status": status}
-    print("ACTIVE TRADE CACHE:", len(active_trades))
-
-def close_stale_trades():
-    con = sqlite3.connect(DB_PATH)
-    con.execute("""UPDATE trades SET status='CLOSED', exit_reason='Session reset', exit_time=datetime('now','+5 hours','+30 minutes'), exit_price=current_price, realized_pnl=current_price-entry_price, realized_pnl_pct=((current_price-entry_price)/entry_price)*100 WHERE status NOT IN ('CLOSED','SELL') AND date(signal_time) < date('now','+5 hours','+30 minutes')""")
-    con.commit()
-    con.close()
-
-    try:
-        from .postgres_history import save_completed_trades
-        save_completed_trades()
-    except Exception as exc:
-        print(f"PostgreSQL session-reset history sync failed: {exc}")
-
-
 def preload_history(key):
     config = upstox_client.Configuration()
     config.access_token = os.environ["UPSTOX_ACCESS_TOKEN"]
@@ -286,25 +264,28 @@ def preload_history(key):
     to_date = today - timedelta(days=1)
     from_date = to_date - timedelta(days=7)
 
-    # One 15-minute historical request per stock per scanner start. The
-    # month window supplies up to 20 prior sessions for same-time-slot RVOL.
+    # One five-minute historical request per stock per scanner start supplies
+    # the same-slot 20-session RVOL baseline used by stock setup rules.
     if key in NIFTY_200.values():
         try:
             volume_from_date = to_date - timedelta(days=29)
             volume_response = api.get_historical_candle_data1(
-                key, "minutes", "15", str(to_date), str(volume_from_date)
+                key, "minutes", "5", str(to_date), str(volume_from_date)
             )
-            historical_15m_volume[key] = volume_response.data.candles or []
-            print("15M VOLUME BASELINE:", key, len(historical_15m_volume[key]), "rows", flush=True)
+            historical_5m_volume[key] = volume_response.data.candles or []
+            print("5M VOLUME BASELINE:", key, len(historical_5m_volume[key]), "rows", flush=True)
         except Exception as exc:
-            historical_15m_volume[key] = []
-            print("15M VOLUME BASELINE UNAVAILABLE:", key, type(exc).__name__, flush=True)
+            historical_5m_volume[key] = []
+            print("5M VOLUME BASELINE UNAVAILABLE:", key, type(exc).__name__, flush=True)
 
     response = api.get_historical_candle_data1(
         key, "minutes", "1",
         str(to_date), str(from_date)
     )
     rows = response.data.candles or []
+
+    if key in NIFTY_200.values():
+        previous_day_levels[key] = verified_previous_day_levels(rows, today) or {}
 
     if not rows:
         print("PRELOAD: no historical candles for", key)
@@ -482,6 +463,38 @@ def save_scan_result(key, price, ema9_value, ema20_value, mom, market, trend_5m,
             print(f"Index snapshot archive unavailable: {type(exc).__name__}", flush=True)
 
 
+def save_stock_setup(setup):
+    import json
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    symbol = setup.get("symbol")
+    if symbol not in NIFTY_200:
+        return
+    now = datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
+    try:
+        with sqlite3.connect(DB_PATH, timeout=5) as con:
+            con.execute("""INSERT INTO scanner_stock_setups(symbol,updated_at,setup_json)
+                VALUES(?,?,?) ON CONFLICT(symbol) DO UPDATE SET
+                updated_at=excluded.updated_at, setup_json=excluded.setup_json""",
+                (symbol, now, json.dumps(setup, separators=(",", ":"), allow_nan=False)))
+    except (sqlite3.Error, TypeError, ValueError) as exc:
+        print("STOCK_SETUP_PERSIST_FAILED:", symbol, type(exc).__name__, flush=True)
+
+
+def load_stock_setup_states():
+    import json
+    try:
+        with sqlite3.connect(DB_PATH, timeout=5) as con:
+            rows = con.execute("SELECT symbol,setup_json FROM scanner_stock_setups").fetchall()
+        for symbol, payload in rows:
+            if symbol in NIFTY_200:
+                setup = json.loads(payload)
+                if isinstance(setup, dict):
+                    stock_setup_states[NIFTY_200[symbol]] = setup
+    except (sqlite3.Error, ValueError, TypeError):
+        return
+
+
 def analyse(key):
     history, _ = candles.snapshot(key)
 
@@ -574,34 +587,41 @@ def analyse(key):
     ema20 = ema(closes, 20)
     mom = momentum(closes)
 
-    # Compare the latest completed 15-minute candle with the same time slot
-    # across 20 prior sessions. Do not call total volume "buying volume";
-    # candle direction supplies price confirmation, while Upstox OHLCV supplies
-    # traded volume only.
+    # Stock setups use completed five-minute candles, verified levels and the
+    # historical mean for the same 5-minute slot across 20 sessions.
     vwap_value = None
     rvol = None
     current_volume = None
     baseline_volume = None
     rvol_available = False
-    bars_15m = completed_intraday_bars(history, 15) if key in NIFTY_200.values() else []
-    current_15m = bars_15m[-1] if bars_15m else None
-    if current_15m is not None:
+    bars_5m_all = (completed_intraday_bars(history, 5, include_all_sessions=True)
+                   if key in NIFTY_200.values() else [])
+    session_date = history[-1].timestamp.date() if history else None
+    bars_5m = [bar for bar in bars_5m_all if bar["timestamp"].date() == session_date]
+    current_5m = bars_5m[-1] if bars_5m else None
+    if current_5m is not None:
         from datetime import timedelta
         latest_minute_end = history[-1].timestamp + timedelta(minutes=1)
-        current_15m_end = current_15m["timestamp"] + timedelta(minutes=15)
-        age = latest_minute_end - current_15m_end
-        if age < timedelta(0) or age >= timedelta(minutes=15):
-            current_15m = None
-    volume_stats_15m = (
+        current_5m_end = current_5m["timestamp"] + timedelta(minutes=5)
+        age = latest_minute_end - current_5m_end
+        if age < timedelta(0) or age >= timedelta(minutes=5):
+            current_5m = None
+    volume_stats_5m = (
         verified_same_slot_relative_volume(
-            current_15m, historical_15m_volume.get(key, ()), reference_sessions=20
+            current_5m,
+            list(historical_5m_volume.get(key, ())) + [
+                [bar["timestamp"].isoformat(), bar["open"], bar["high"], bar["low"],
+                 bar["close"], bar["volume"]]
+                for bar in bars_5m_all
+            ],
+            reference_sessions=20
         )
-        if current_15m is not None else None
+        if current_5m is not None else None
     )
-    if volume_stats_15m is not None:
-        rvol = volume_stats_15m["relative_volume"]
-        current_volume = volume_stats_15m["current_volume"]
-        baseline_volume = volume_stats_15m["baseline_volume"]
+    if volume_stats_5m is not None:
+        rvol = volume_stats_5m["relative_volume"]
+        current_volume = volume_stats_5m["current_volume"]
+        baseline_volume = volume_stats_5m["baseline_volume"]
         rvol_available = True
     market = index_signal(price, ema9, ema20, vwap_value)
     if key == INDICES["NIFTY 50"]:
@@ -609,90 +629,43 @@ def analyse(key):
     elif key in NIFTY_200.values() or key in INDICES.values():
         market = market_regimes.get("NIFTY 50", "NEUTRAL")
 
-    signal = generate_signal(
-        price,
-        ema9,
-        ema20,
-        vwap_value,
-        mom,
-        rvol,
-        market,
-        require_volume=key in NIFTY_200.values(),
-    )
-
     trend_5m = five_minute_trend(history)
-
-    if signal in ("BUY", "SELL"):
-        expected_trend = "BULLISH" if signal == "BUY" else "BEARISH"
-        if key in NIFTY_200.values():
-            candle_direction = (volume_stats_15m or {}).get("candle_direction")
-            if (
-                trend_5m != expected_trend
-                or current_15m is None
-                or candle_direction != expected_trend
-                or not confirmed_range_breakout(bars_15m, signal, prior_bars=3)
-            ):
-                signal = "HOLD"
-        elif trend_5m != expected_trend or not five_minute_breakout(history, signal):
+    setup = None
+    if key in NIFTY_200.values():
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        now_ist = datetime.now(ZoneInfo("Asia/Kolkata")).replace(tzinfo=None)
+        # Refresh levels from verified completed local history each session.
+        # This avoids carrying yesterday's PDH/PDL forward after a long-running
+        # service crosses the market date without a restart.
+        previous_day_levels[key] = verified_previous_day_levels(
+            [[c.timestamp.isoformat(), c.open, c.high, c.low, c.close, c.volume]
+             for c in history], now_ist.date()
+        ) or {}
+        setup = evaluate_stock_setup(
+            instrument_symbols.get(key, key), bars_5m, historical_5m_volume.get(key, ()),
+            previous_day_levels.get(key, {}), now=now_ist, ema9=ema9, ema20=ema20,
+            previous_state=stock_setup_states.get(key), config=SetupConfig.from_env(),
+        )
+        stock_setup_states[key] = setup
+        save_stock_setup(setup)
+        signal = ("BUY" if setup["status"] == "CONFIRMED" and setup["direction"] == "LONG"
+                  else "SELL" if setup["status"] == "CONFIRMED" and setup["direction"] == "SHORT"
+                  else "HOLD")
+    else:
+        signal = generate_signal(price, ema9, ema20, vwap_value, mom, rvol, market)
+        if signal in ("BUY", "SELL") and (trend_5m != ("BULLISH" if signal == "BUY" else "BEARISH")
+                                           or not five_minute_breakout(history, signal)):
             signal = "HOLD"
-
-    # Reject overextended stock entries in either direction.
-    # Indices remain directional research signals, not stock entries.
-    if key in NIFTY_200.values() and signal in ("BUY", "SELL"):
-        if atr_value is None or atr_value <= 0:
-            signal = "HOLD"
-            print("ATR_UNAVAILABLE_REJECTED:", key, flush=True)
-        elif signal == "BUY" and price > ema9 + (0.5 * atr_value):
-            signal = "HOLD"
-            print("LATE BUY REJECTED:", key, "| PRICE:", price, "| EMA9:", ema9, "| ATR:", atr_value)
-        elif signal == "SELL" and price < ema9 - (0.5 * atr_value):
-            signal = "HOLD"
-            print("LATE SELL REJECTED:", key, "| PRICE:", price, "| EMA9:", ema9, "| ATR:", atr_value)
 
     if key in NIFTY_200.values() or key in INDICES.values():
         save_scan_result(
             instrument_symbols.get(key, key), price, ema9, ema20, mom,
             market, trend_5m, signal, previous_closes.get(key),
             rvol if rvol_available else None, current_volume, baseline_volume,
-            current_15m["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
-            if current_15m is not None else None,
+            current_5m["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
+            if current_5m is not None else None,
         )
-    if key in NIFTY_200.values() and signal == "BUY" and atr_value is not None:
-        from datetime import datetime
-        from zoneinfo import ZoneInfo
-        prior_price = closes[-6] if len(closes) >= 6 else None
-        features = {
-            "price_vs_ema9_pct": (price - ema9) / ema9 * 100 if ema9 else None,
-            "price_vs_ema20_pct": (price - ema20) / ema20 * 100 if ema20 else None,
-            "momentum_pct": (price - prior_price) / prior_price * 100 if prior_price else None,
-            "rvol": rvol if rvol_available else None,
-            "atr_pct": atr_value / price * 100 if price else None,
-            "trend_5m": trend_5m,
-            "market_regime": market,
-        }
-        context = _decision_context(
-            key, price, datetime.now(ZoneInfo("Asia/Kolkata")), features=features
-        )
-        buy(key, price, price + atr_value, price + (2 * atr_value),
-            price - atr_value, "V2 momentum BUY", context=context)
-        load_active_trades()
-    elif key in NIFTY_200.values() and signal == "SELL" and key in active_trades:
-        # A confirmed bearish signal exits the paper long on this completed
-        # candle; no broker order is submitted.
-        from datetime import datetime
-        from zoneinfo import ZoneInfo
-        trade = active_trades[key]
-        context = _decision_context(key, price, datetime.now(ZoneInfo("Asia/Kolkata")), features={
-            "price_vs_ema9_pct": (price - ema9) / ema9 * 100 if ema9 else None,
-            "price_vs_ema20_pct": (price - ema20) / ema20 * 100 if ema20 else None,
-            "momentum_pct": mom,
-            "rvol": rvol if rvol_available else None,
-            "atr_pct": atr_value / price * 100 if price else None,
-            "trend_5m": trend_5m,
-            "market_regime": market,
-        })
-        if sell(trade["id"], price, "Confirmed SELL signal", context=context):
-            active_trades.pop(key, None)
 
     print(
         "SIGNAL:",
@@ -754,32 +727,6 @@ def on_tick(key, data):
 
     record_feed_health(key)
 
-    # Manage open trades from memory instead of querying SQLite every tick.
-    trade = active_trades.get(key)
-    if trade:
-        trade_id = trade["id"]
-        t1 = trade["target_1"]
-        t2 = trade["target_2"]
-        invalidation = trade["invalidation"]
-
-        if price >= t2:
-            sell(trade_id, price, "Target 2 hit",
-                 context=_decision_context(key, price, tick_time))
-            active_trades.pop(key, None)
-        elif price >= t1:
-            if trade["status"] != "TARGET_1":
-                trade["status"] = "TARGET_1"
-                update_state(trade_id, price, "TARGET_1", "Target 1 hit",
-                             context=_decision_context(key, price, tick_time))
-                last_trade_updates[key] = time.time()
-            elif time.time() - last_trade_updates.get(key, 0) >= 5:
-                update_state(trade_id, price, "TARGET_1")
-                last_trade_updates[key] = time.time()
-        else:
-            if time.time() - last_trade_updates.get(key, 0) >= 5:
-                update_state(trade_id, price, trade["status"])
-                last_trade_updates[key] = time.time()
-
     cumulative = data.get("vtt")
     minute_volume = 0
     if cumulative is not None:
@@ -803,14 +750,6 @@ def on_tick(key, data):
     # Only a live rollover may trigger decisions. Recovery can grow completed
     # history without closing the active candle.
     if closed is not None:
-        # Confirm simulated invalidation on the completed one-minute close.
-        # A brief intraminute tick below the stop must not close the record.
-        trade = active_trades.get(key)
-        if trade and closed.close <= trade["invalidation"]:
-            sell(trade["id"], closed.close, "Invalidation hit",
-                 context=_decision_context(key, closed.close, tick_time))
-            active_trades.pop(key, None)
-
         request_recovery_on_gap(key)
         write_candle_quality()
         analyse(key)
@@ -818,16 +757,8 @@ def on_tick(key, data):
 
 if __name__ == "__main__":
     init_db()
+    load_stock_setup_states()
     reset_scanner_results()
-    close_stale_trades()
-
-    try:
-        from .postgres_history import restore_active_trades
-        restore_active_trades()
-    except Exception as exc:
-        print(f"Active trade restoration failed: {exc}")
-
-    load_active_trades()
 
     preload_keys = list(INDICES.values()) + list(NIFTY_200.values())
 
