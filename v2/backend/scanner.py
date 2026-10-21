@@ -43,8 +43,6 @@ def _log_process_memory(stage, instrument=None):
 
 candles = CandleManager()
 
-candles = CandleManager()
-
 _recovery_worker = None
 
 
