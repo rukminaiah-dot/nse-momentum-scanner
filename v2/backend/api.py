@@ -153,194 +153,195 @@ def get_premarket_data():
         return upstox_fallback(now, cache, cache_at, {"error": "TOKEN_NOT_CONFIGURED"})
     token = token_candidates[0]
 
-    stage = "global_instruments"
-    wanted = {
-        "GIFT NIFTY": ("GIFT NIFTY", "SGX NIFTY", "GIFTNIFTY", "SGXNIFTY"),
-        "S&P 500": ("S&P 500", "S&P"),
-        "DOW JONES": ("DOW JONES",),
-        "NASDAQ": ("NASDAQ", "US TECH 100"),
-        "FTSE 100": ("FTSE 100",),
-        "DAX": ("DAX",),
-        "NIKKEI 225": ("NIKKEI 225",),
-        "HANG SENG": ("HANG SENG",),
-    }
-    selected = getattr(get_premarket_data, "_global_index_selected", None)
-    selected_at = getattr(get_premarket_data, "_global_index_selected_at", 0.0)
-    if not selected or now - selected_at >= 86400:
-        request = urllib.request.Request(
-            "https://assets.upstox.com/market-quote/instruments/exchange/global.json.gz",
-            headers={"User-Agent": "NSE-Momentum-Scanner/1.0", "Accept": "application/gzip"},
-        )
-        # Avoid retaining the full global-instrument catalogue in the API worker.
-        # Decode directly from gzip to avoid an additional decompressed-bytes copy.
-        import io
-        with urllib.request.urlopen(request, timeout=5) as response:
-            with gzip.GzipFile(fileobj=response, mode="rb") as compressed:
-                catalog = json.load(io.TextIOWrapper(compressed, encoding="utf-8"))
-        if not isinstance(catalog, list):
-            raise ValueError("Unexpected Upstox global instruments format")
-
-        selected = {}
-        for instrument in catalog:
-            if not isinstance(instrument, dict) or instrument.get("segment") != "GLOBAL_INDEX":
-                continue
-            aliases = {str(instrument.get(field, "")).strip().upper()
-                       for field in ("name", "trading_symbol")}
-            key = instrument.get("instrument_key")
-            if not isinstance(key, str) or not key.startswith("GLOBAL_INDEX|"):
-                continue
-            for display_name, candidates in wanted.items():
-                if display_name not in selected and aliases.intersection(candidates):
-                    selected[display_name] = {"key": key, "latency": instrument.get("latency")}
-        del catalog
-        if "GIFT NIFTY" not in selected:
-            raise ValueError("GIFT NIFTY / SGX NIFTY is not present in the Upstox global instruments file")
-        # Cache only the handful of required global indices, not the full catalogue.
-        get_premarket_data._global_index_selected = selected
-        get_premarket_data._global_index_selected_at = now
-
-        # NSE sector indices and India VIX are part of Upstox's NSE_INDEX quote segment.
-        # Keep each feed row explicit so missing instruments are visible in the UI.
-        sector_keys = {
-            "NIFTY BANK": "NSE_INDEX|Nifty Bank",
-            "NIFTY IT": "NSE_INDEX|Nifty IT",
-            "NIFTY AUTO": "NSE_INDEX|Nifty Auto",
-            "NIFTY FMCG": "NSE_INDEX|Nifty FMCG",
-            "NIFTY PHARMA": "NSE_INDEX|Nifty Pharma",
-            "NIFTY METAL": "NSE_INDEX|Nifty Metal",
-            "NIFTY REALTY": "NSE_INDEX|Nifty Realty",
-            "NIFTY PSU BANK": "NSE_INDEX|Nifty PSU Bank",
-            "NIFTY FINANCIAL SERVICES": "NSE_INDEX|Nifty Fin Service",
-            "NIFTY ENERGY": "NSE_INDEX|Nifty Energy",
+    try:
+        stage = "global_instruments"
+        wanted = {
+            "GIFT NIFTY": ("GIFT NIFTY", "SGX NIFTY", "GIFTNIFTY", "SGXNIFTY"),
+            "S&P 500": ("S&P 500", "S&P"),
+            "DOW JONES": ("DOW JONES",),
+            "NASDAQ": ("NASDAQ", "US TECH 100"),
+            "FTSE 100": ("FTSE 100",),
+            "DAX": ("DAX",),
+            "NIKKEI 225": ("NIKKEI 225",),
+            "HANG SENG": ("HANG SENG",),
         }
-        def safe_feed_error(exc, feed_stage):
-            status_code = getattr(exc, "code", None)
-            details = {"stage": feed_stage}
-            if isinstance(status_code, int) and 100 <= status_code <= 599:
-                details["status_code"] = status_code
-            else:
-                details["error"] = type(exc).__name__
-            attempts = getattr(exc, "upstox_attempts", [])
-            safe_attempts = []
-            for item in attempts if isinstance(attempts, list) else []:
-                if not isinstance(item, dict) or item.get("api") not in ("v2", "v3"):
+        selected = getattr(get_premarket_data, "_global_index_selected", None)
+        selected_at = getattr(get_premarket_data, "_global_index_selected_at", 0.0)
+        if not selected or now - selected_at >= 86400:
+            request = urllib.request.Request(
+                "https://assets.upstox.com/market-quote/instruments/exchange/global.json.gz",
+                headers={"User-Agent": "NSE-Momentum-Scanner/1.0", "Accept": "application/gzip"},
+            )
+            # Avoid retaining the full global-instrument catalogue in the API worker.
+            # Decode directly from gzip to avoid an additional decompressed-bytes copy.
+            import io
+            with urllib.request.urlopen(request, timeout=5) as response:
+                with gzip.GzipFile(fileobj=response, mode="rb") as compressed:
+                    catalog = json.load(io.TextIOWrapper(compressed, encoding="utf-8"))
+            if not isinstance(catalog, list):
+                raise ValueError("Unexpected Upstox global instruments format")
+
+            selected = {}
+            for instrument in catalog:
+                if not isinstance(instrument, dict) or instrument.get("segment") != "GLOBAL_INDEX":
                     continue
-                code = item.get("status_code")
-                code = code if isinstance(code, int) and 100 <= code <= 599 else None
-                error_type = item.get("error")
-                error_type = error_type if error_type in ("TimeoutError", "URLError", "ValueError", "HTTPError") else None
-                entry = {"api": item["api"], "status_code": code}
-                if error_type:
-                    entry["error"] = error_type
-                if entry not in safe_attempts:
-                    safe_attempts.append(entry)
-            if safe_attempts:
-                details["attempts"] = safe_attempts
-            return details
+                aliases = {str(instrument.get(field, "")).strip().upper()
+                           for field in ("name", "trading_symbol")}
+                key = instrument.get("instrument_key")
+                if not isinstance(key, str) or not key.startswith("GLOBAL_INDEX|"):
+                    continue
+                for display_name, candidates in wanted.items():
+                    if display_name not in selected and aliases.intersection(candidates):
+                        selected[display_name] = {"key": key, "latency": instrument.get("latency")}
+            del catalog
+            if "GIFT NIFTY" not in selected:
+                raise ValueError("GIFT NIFTY / SGX NIFTY is not present in the Upstox global instruments file")
+            # Cache only the handful of required global indices, not the full catalogue.
+            get_premarket_data._global_index_selected = selected
+            get_premarket_data._global_index_selected_at = now
 
-        # Query upstream groups separately. A permission or catalogue error in one
-        # group must not hide valid global quotes or India VIX from the page.
-        group_stages = {
-            "global_indices": "global_quotes",
-            "sector_indices": "sector_quotes",
-            "india_vix": "india_vix_quote",
-        }
-        group_results, group_failures = fetch_quote_groups({
-            "global_indices": [item["key"] for item in selected.values()],
-            "sector_indices": list(sector_keys.values()),
-            "india_vix": ["NSE_INDEX|India VIX"],
-        }, token_candidates)
-        stage = "quote_processing"
-        quote_maps = list(group_results.values())
-        group_errors = {}
-        feed_errors = {}
-        for group, exc in group_failures.items():
-            group_errors[group] = safe_feed_error(exc, group_stages[group])
-            code = getattr(exc, "code", None)
-            feed_errors[group] = "HTTP_" + str(code) if isinstance(code, int) else type(exc).__name__
-            print("PREMARKET_UPSTOX_" + group.upper() + "_UNAVAILABLE:", feed_errors[group], flush=True)
+            # NSE sector indices and India VIX are part of Upstox's NSE_INDEX quote segment.
+            # Keep each feed row explicit so missing instruments are visible in the UI.
+            sector_keys = {
+                "NIFTY BANK": "NSE_INDEX|Nifty Bank",
+                "NIFTY IT": "NSE_INDEX|Nifty IT",
+                "NIFTY AUTO": "NSE_INDEX|Nifty Auto",
+                "NIFTY FMCG": "NSE_INDEX|Nifty FMCG",
+                "NIFTY PHARMA": "NSE_INDEX|Nifty Pharma",
+                "NIFTY METAL": "NSE_INDEX|Nifty Metal",
+                "NIFTY REALTY": "NSE_INDEX|Nifty Realty",
+                "NIFTY PSU BANK": "NSE_INDEX|Nifty PSU Bank",
+                "NIFTY FINANCIAL SERVICES": "NSE_INDEX|Nifty Fin Service",
+                "NIFTY ENERGY": "NSE_INDEX|Nifty Energy",
+            }
+            def safe_feed_error(exc, feed_stage):
+                status_code = getattr(exc, "code", None)
+                details = {"stage": feed_stage}
+                if isinstance(status_code, int) and 100 <= status_code <= 599:
+                    details["status_code"] = status_code
+                else:
+                    details["error"] = type(exc).__name__
+                attempts = getattr(exc, "upstox_attempts", [])
+                safe_attempts = []
+                for item in attempts if isinstance(attempts, list) else []:
+                    if not isinstance(item, dict) or item.get("api") not in ("v2", "v3"):
+                        continue
+                    code = item.get("status_code")
+                    code = code if isinstance(code, int) and 100 <= code <= 599 else None
+                    error_type = item.get("error")
+                    error_type = error_type if error_type in ("TimeoutError", "URLError", "ValueError", "HTTPError") else None
+                    entry = {"api": item["api"], "status_code": code}
+                    if error_type:
+                        entry["error"] = error_type
+                    if entry not in safe_attempts:
+                        safe_attempts.append(entry)
+                if safe_attempts:
+                    details["attempts"] = safe_attempts
+                return details
 
-        if not quote_maps:
-            error = group_errors.get("global_indices") or next(iter(group_errors.values()), {"stage": "all_quote_groups", "error": "Unavailable"})
-            result = upstox_fallback(now, cache, cache_at, error)
-            result["feed_errors"] = group_errors
-            return result
+            # Query upstream groups separately. A permission or catalogue error in one
+            # group must not hide valid global quotes or India VIX from the page.
+            group_stages = {
+                "global_indices": "global_quotes",
+                "sector_indices": "sector_quotes",
+                "india_vix": "india_vix_quote",
+            }
+            group_results, group_failures = fetch_quote_groups({
+                "global_indices": [item["key"] for item in selected.values()],
+                "sector_indices": list(sector_keys.values()),
+                "india_vix": ["NSE_INDEX|India VIX"],
+            }, token_candidates)
+            stage = "quote_processing"
+            quote_maps = list(group_results.values())
+            group_errors = {}
+            feed_errors = {}
+            for group, exc in group_failures.items():
+                group_errors[group] = safe_feed_error(exc, group_stages[group])
+                code = getattr(exc, "code", None)
+                feed_errors[group] = "HTTP_" + str(code) if isinstance(code, int) else type(exc).__name__
+                print("PREMARKET_UPSTOX_" + group.upper() + "_UNAVAILABLE:", feed_errors[group], flush=True)
 
-        def quote_for(key):
-            wanted_key = key.replace("|", ":").casefold()
-            suffix = key.split("|", 1)[-1].casefold()
-            for quotes, source in quote_maps:
-                quote = quotes.get(wanted_key)
-                if isinstance(quote, dict):
-                    return quote, source
-                quote = next((value for response_key, value in quotes.items()
-                              if isinstance(value, dict)
-                              and str(response_key).casefold() == wanted_key), None)
-                if isinstance(quote, dict):
-                    return quote, source
-                quote = next((value for response_key, value in quotes.items()
-                              if isinstance(value, dict)
-                              and str(response_key).split(":", 1)[-1].casefold() == suffix), None)
-                if isinstance(quote, dict):
-                    return quote, source
-            return None
+            if not quote_maps:
+                error = group_errors.get("global_indices") or next(iter(group_errors.values()), {"stage": "all_quote_groups", "error": "Unavailable"})
+                result = upstox_fallback(now, cache, cache_at, error)
+                result["feed_errors"] = group_errors
+                return result
 
-        def quote_record(name, key, latency=None):
-            found = quote_for(key)
-            if not found:
-                return {"name": name, "status": "NO_QUOTE", "source": "Upstox Full Market Quotes",
-                        **({"latency": latency} if latency else {})}
-            quote, source = found
-            try:
-                price = float(quote["last_price"])
-                previous_close_value = quote.get("prev_close_price")
-                if previous_close_value is None:
-                    net_change_value = quote.get("net_change")
-                    if net_change_value is None:
-                        raise ValueError("Missing previous-close fields")
-                    previous_close_value = price - float(net_change_value)
-                previous_close = float(previous_close_value)
-                trade_ms = int(float(quote.get("last_trade_time") or quote.get("timestamp") or 0))
-                if price <= 0 or previous_close <= 0 or trade_ms <= 0:
-                    raise ValueError("Invalid quote values")
-                quote_time = datetime.fromtimestamp(trade_ms / 1000, timezone.utc).isoformat()
-                change = price - previous_close
-                age_seconds = (datetime.now(timezone.utc) - datetime.fromtimestamp(trade_ms / 1000, timezone.utc)).total_seconds()
-                freshness = "CURRENT" if -120 <= age_seconds <= 900 else "HISTORICAL"
-                return {
-                    "name": name, "status": "QUOTED", "price": price,
-                    "previous_close": previous_close, "change": change,
-                    "change_pct": change / previous_close * 100,
-                    "last_trade_at": quote_time, "age_seconds": round(max(0, age_seconds), 1),
-                    "freshness": freshness, "source": source,
-                    **({"latency": latency} if latency else {}),
-                }
-            except (KeyError, TypeError, ValueError, OverflowError, OSError):
-                return {"name": name, "status": "INVALID_QUOTE",
-                        "source": source,
-                        **({"latency": latency} if latency else {})}
+            def quote_for(key):
+                wanted_key = key.replace("|", ":").casefold()
+                suffix = key.split("|", 1)[-1].casefold()
+                for quotes, source in quote_maps:
+                    quote = quotes.get(wanted_key)
+                    if isinstance(quote, dict):
+                        return quote, source
+                    quote = next((value for response_key, value in quotes.items()
+                                  if isinstance(value, dict)
+                                  and str(response_key).casefold() == wanted_key), None)
+                    if isinstance(quote, dict):
+                        return quote, source
+                    quote = next((value for response_key, value in quotes.items()
+                                  if isinstance(value, dict)
+                                  and str(response_key).split(":", 1)[-1].casefold() == suffix), None)
+                    if isinstance(quote, dict):
+                        return quote, source
+                return None
 
-        instruments = [
-            quote_record(name, meta["key"], meta.get("latency"))
-            for name, meta in selected.items()
-        ]
-        sector_indices = [
-            quote_record(name, key)
-            for name, key in sector_keys.items()
-        ]
-        india_vix = quote_record("INDIA VIX", "NSE_INDEX|India VIX")
+            def quote_record(name, key, latency=None):
+                found = quote_for(key)
+                if not found:
+                    return {"name": name, "status": "NO_QUOTE", "source": "Upstox Full Market Quotes",
+                            **({"latency": latency} if latency else {})}
+                quote, source = found
+                try:
+                    price = float(quote["last_price"])
+                    previous_close_value = quote.get("prev_close_price")
+                    if previous_close_value is None:
+                        net_change_value = quote.get("net_change")
+                        if net_change_value is None:
+                            raise ValueError("Missing previous-close fields")
+                        previous_close_value = price - float(net_change_value)
+                    previous_close = float(previous_close_value)
+                    trade_ms = int(float(quote.get("last_trade_time") or quote.get("timestamp") or 0))
+                    if price <= 0 or previous_close <= 0 or trade_ms <= 0:
+                        raise ValueError("Invalid quote values")
+                    quote_time = datetime.fromtimestamp(trade_ms / 1000, timezone.utc).isoformat()
+                    change = price - previous_close
+                    age_seconds = (datetime.now(timezone.utc) - datetime.fromtimestamp(trade_ms / 1000, timezone.utc)).total_seconds()
+                    freshness = "CURRENT" if -120 <= age_seconds <= 900 else "HISTORICAL"
+                    return {
+                        "name": name, "status": "QUOTED", "price": price,
+                        "previous_close": previous_close, "change": change,
+                        "change_pct": change / previous_close * 100,
+                        "last_trade_at": quote_time, "age_seconds": round(max(0, age_seconds), 1),
+                        "freshness": freshness, "source": source,
+                        **({"latency": latency} if latency else {}),
+                    }
+                except (KeyError, TypeError, ValueError, OverflowError, OSError):
+                    return {"name": name, "status": "INVALID_QUOTE",
+                            "source": source,
+                            **({"latency": latency} if latency else {})}
 
-        sources = sorted({source for _, source in quote_maps})
-        result = {"status": "UPSTOX_QUOTES_PARTIAL" if feed_errors else "UPSTOX_QUOTES_AVAILABLE",
-                  "source": sources[0] if len(sources) == 1 else "Upstox Full Market Quotes V2/V3",
-                  "as_of": datetime.now(timezone.utc).isoformat(), "instruments": instruments, "sector_indices": sector_indices,
-                  "india_vix": india_vix, "feed_errors": feed_errors,
-                  "feed_error_details": group_errors,
-                  **({"upstox_error": group_errors.get("global_indices")} if "global_indices" in group_errors else {}),
-                  "order_execution_enabled": False, **external_context()}
-        get_premarket_data._cache = result
-        get_premarket_data._cache_at = now
-        return {**result, "cache_age_seconds": 0}
+            instruments = [
+                quote_record(name, meta["key"], meta.get("latency"))
+                for name, meta in selected.items()
+            ]
+            sector_indices = [
+                quote_record(name, key)
+                for name, key in sector_keys.items()
+            ]
+            india_vix = quote_record("INDIA VIX", "NSE_INDEX|India VIX")
+
+            sources = sorted({source for _, source in quote_maps})
+            result = {"status": "UPSTOX_QUOTES_PARTIAL" if feed_errors else "UPSTOX_QUOTES_AVAILABLE",
+                      "source": sources[0] if len(sources) == 1 else "Upstox Full Market Quotes V2/V3",
+                      "as_of": datetime.now(timezone.utc).isoformat(), "instruments": instruments, "sector_indices": sector_indices,
+                      "india_vix": india_vix, "feed_errors": feed_errors,
+                      "feed_error_details": group_errors,
+                      **({"upstox_error": group_errors.get("global_indices")} if "global_indices" in group_errors else {}),
+                      "order_execution_enabled": False, **external_context()}
+            get_premarket_data._cache = result
+            get_premarket_data._cache_at = now
+            return {**result, "cache_age_seconds": 0}
     except urllib.error.HTTPError as exc:
         # Read only the provider's machine error code; never log its body, message,
         # request headers, or either configured access token.
