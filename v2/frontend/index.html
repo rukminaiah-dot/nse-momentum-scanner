@@ -169,8 +169,9 @@ if(!feed||!Array.isArray(feed.indices)){host.innerHTML='<div class="empty">'+(st
 const labels={CONFIRMED_SHIFT:'CONFIRMED SHIFT · RESEARCH ONLY',SHIFT_WATCH:'POSSIBLE SHIFT · WATCH',TREND_BULLISH:'BULLISH STRUCTURE · NO NEW SHIFT',TREND_BEARISH:'BEARISH STRUCTURE · NO NEW SHIFT',MIXED:'MIXED · NO CLEAR SHIFT'};
 host.innerHTML=feed.indices.map(x=>{
 const freshness=x.data_status==='LIVE_FRESH'?'live verified':x.data_status==='HISTORICAL'?'historical':x.data_status==='STALE'?'stale':'unavailable';
-const dir=x.direction?(' · '+x.direction):'';
-const label=labels[x.event]||'NO SHIFT DATA';
+const noData=x.data_status==='AWAITING_DATA'||x.data_status==='UNAVAILABLE';
+const dir=!noData&&x.direction?(' · '+x.direction):'';
+const label=noData?(x.data_status==='AWAITING_DATA'?'WAITING FOR CANDLES':'FEED UNAVAILABLE'):(labels[x.event]||'NO SHIFT DATA');
 const age=' · '+freshness;
 const alert=x.event==='CONFIRMED_SHIFT'?'green':x.event==='SHIFT_WATCH'?'amber':'muted';
 return '<article class="card"><strong>'+esc(x.symbol)+'</strong><div class="small '+(freshness==='live verified'?alert:'amber')+'" style="margin-top:6px">'+esc(label+dir+age)+'</div><div class="small muted">'+esc(x.last_candle_ist||'No completed candle')+' IST · '+esc(x.reason||'No explanation available')+'</div></article>'
