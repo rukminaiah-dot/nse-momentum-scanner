@@ -19,7 +19,10 @@ from .volume_metrics import (
     completed_intraday_bars, verified_same_slot_relative_volume,
     confirmed_range_breakout,
 )
-from .stock_setup_rules import SetupConfig, evaluate_stock_setup, verified_previous_day_levels
+from .stock_setup_rules import (
+    SetupConfig, evaluate_stock_setup, verified_previous_day_levels,
+    wait_stock_setup,
+)
 
 candles = CandleManager()
 
@@ -495,6 +498,20 @@ def load_stock_setup_states():
         return
 
 
+def persist_stock_setup_wait(key, reason, history):
+    """Persist a per-stock data-quality blocker instead of leaving an empty row."""
+    if key not in NIFTY_200.values():
+        return
+    latest = history[-1] if history else None
+    stamp = getattr(latest, "timestamp", None)
+    setup = wait_stock_setup(
+        instrument_symbols.get(key, key), reason,
+        last_observed_minute_candle_time=stamp.isoformat() if stamp else None,
+    )
+    stock_setup_states[key] = setup
+    save_stock_setup(setup)
+
+
 def analyse(key):
     history, _ = candles.snapshot(key)
 
@@ -508,6 +525,9 @@ def analyse(key):
 
         if last_candle > now_ist or now_ist - last_candle > timedelta(minutes=3):
             print("STALE_CANDLE_BLOCKED:", key, flush=True)
+            persist_stock_setup_wait(
+                key, "WAIT: latest 1-minute candle is stale or future-dated", history
+            )
             return
 
     # Measure signal processing delay without changing trading rules.
@@ -533,6 +553,10 @@ def analyse(key):
     # EMA20 requires enough completed candles.
     if len(history) < 20:
         print("WARMUP:", key, len(history), "/20 candles")
+        persist_stock_setup_wait(
+            key, f"WAIT: scanner warm-up has {len(history)}/20 completed 1-minute candles",
+            history,
+        )
         return
 
     if key in INDICES.values():
@@ -574,6 +598,10 @@ def analyse(key):
                 for c in recent
             ],
             flush=True,
+        )
+        persist_stock_setup_wait(
+            key, f"WAIT: 1-minute candle continuity is {continuity_reason}; require six consecutive completed bars",
+            history,
         )
         return
 

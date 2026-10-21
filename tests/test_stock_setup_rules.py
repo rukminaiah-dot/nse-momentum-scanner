@@ -3,7 +3,7 @@ import unittest
 
 from v2.backend.stock_setup_rules import (
     SetupConfig, evaluate_stock_setup, verified_previous_day_levels,
-    opening_range_levels,
+    opening_range_levels, wait_stock_setup,
 )
 
 
@@ -179,6 +179,19 @@ class StockSetupRuleTests(unittest.TestCase):
         references = {level["name"]: level for level in result["verified_levels"]}
         self.assertEqual(references["OPENING_RANGE_HIGH"]["value"], 103.0)
         self.assertEqual(references["OPENING_RANGE_LOW"]["value"], 98.0)
+
+    def test_upstream_data_blocker_is_a_read_only_wait_with_specific_reason(self):
+        result = wait_stock_setup(
+            "TEST", "WAIT: 1-minute candle continuity is MISSING_MINUTE",
+            last_observed_minute_candle_time="2026-10-21T10:00:00",
+        )
+
+        self.assertEqual(result["status"], "WAIT")
+        self.assertEqual(result["reasons"], ["WAIT: 1-minute candle continuity is MISSING_MINUTE"])
+        self.assertEqual(result["last_observed_minute_candle_time"], "2026-10-21T10:00:00")
+        self.assertEqual(result["relative_volume_status"], "UNAVAILABLE")
+        self.assertIsNone(result["entry_reference"])
+        self.assertFalse(result["order_execution_enabled"])
 
 
 if __name__ == "__main__":

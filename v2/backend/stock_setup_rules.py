@@ -51,6 +51,23 @@ class SetupConfig:
         )
 
 
+def wait_stock_setup(symbol, reason, *, last_observed_minute_candle_time=None):
+    """Build a safe WAIT response when source data blocks setup evaluation."""
+    return {
+        "symbol": symbol, "direction": None, "status": "WAIT",
+        "verified_level": None, "verified_level_name": None,
+        "verified_level_source": None, "verified_level_session_date": None,
+        "trigger_candle_time": None, "last_completed_candle_time": None,
+        "last_completed_close": None, "last_observed_minute_candle_time": last_observed_minute_candle_time,
+        "verified_levels": [], "relative_volume": None,
+        "relative_volume_baseline": None, "relative_volume_status": "UNAVAILABLE",
+        "ema9": None, "ema20": None, "entry_reference": None,
+        "stop_invalidation": None, "trade_plan": None,
+        "heuristic_rank_score": 0, "reasons": [reason],
+        "order_execution_enabled": False,
+    }
+
+
 def _valid_bar(bar):
     try:
         values = [float(bar[name]) for name in ("open", "high", "low", "close", "volume")]
@@ -209,7 +226,8 @@ def evaluate_stock_setup(symbol, bars_5m, history_5m_rows, levels, *, now,
               "verified_level": None, "verified_level_name": None,
               "verified_level_source": None, "verified_level_session_date": None,
               "trigger_candle_time": None, "last_completed_candle_time": None,
-              "last_completed_close": None, "verified_levels": [],
+              "last_completed_close": None, "last_observed_minute_candle_time": None,
+              "verified_levels": [],
               "relative_volume": None, "relative_volume_baseline": None,
               "relative_volume_status": "UNAVAILABLE", "ema9": ema9, "ema20": ema20,
               "entry_reference": None, "stop_invalidation": None, "trade_plan": None,

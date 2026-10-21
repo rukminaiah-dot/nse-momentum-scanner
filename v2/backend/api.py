@@ -949,6 +949,7 @@ def stock_setups():
             row = {"symbol": symbol, "direction": None, "status": "WAIT",
                    "reasons": ["No scanner result yet; wait for a verified completed 5-minute candle"],
                    "last_completed_candle_time": None, "last_completed_close": None,
+                   "last_observed_minute_candle_time": None,
                    "verified_levels": [],
                    "relative_volume": None, "relative_volume_baseline": None,
                    "relative_volume_status": "UNAVAILABLE", "heuristic_rank_score": 0,
