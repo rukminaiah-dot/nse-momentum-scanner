@@ -153,8 +153,8 @@ def get_premarket_data():
         return upstox_fallback(now, cache, cache_at, {"error": "TOKEN_NOT_CONFIGURED"})
     token = token_candidates[0]
 
+    stage = "global_instruments"
     try:
-        stage = "global_instruments"
         wanted = {
             "GIFT NIFTY": ("GIFT NIFTY", "SGX NIFTY", "GIFTNIFTY", "SGXNIFTY"),
             "S&P 500": ("S&P 500", "S&P"),
