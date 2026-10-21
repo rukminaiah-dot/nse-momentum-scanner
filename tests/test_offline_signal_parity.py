@@ -201,7 +201,7 @@ class OfflineSignalParityTests(unittest.TestCase):
         from v2.backend.offline_signal_parity import evaluate
         for direction, seed, expected in ((1, 150.0, "BUY"),
                                            (-1, 50.0, "SELL")):
-            prices = [seed] * 340 + [100 + direction * i * 0.0001
+            prices = [seed] * 340 + [100 + direction * i * 0.01
                                      for i in range(60)]
             bars = []
             start = datetime(2026, 10, 16, 9, 15)
