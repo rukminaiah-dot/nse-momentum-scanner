@@ -288,6 +288,20 @@ def preload_history(key):
     )
     rows = response.data.candles or []
 
+    # One 15-minute historical request per stock per scanner start. The
+    # month window supplies up to 20 prior sessions for same-time-slot RVOL.
+    if key in NIFTY_200.values():
+        try:
+            volume_from_date = to_date - timedelta(days=29)
+            volume_response = api.get_historical_candle_data1(
+                key, "minutes", "15", str(to_date), str(volume_from_date)
+            )
+            historical_15m_volume[key] = volume_response.data.candles or []
+            print("15M VOLUME BASELINE:", key, len(historical_15m_volume[key]), "rows", flush=True)
+        except Exception as exc:
+            historical_15m_volume[key] = []
+            print("15M VOLUME BASELINE UNAVAILABLE:", key, type(exc).__name__, flush=True)
+
     if not rows:
         print("PRELOAD: no historical candles for", key)
         return
@@ -304,20 +318,6 @@ def preload_history(key):
 
     if key in INDICES.values() and loaded:
         previous_closes[key] = loaded[-1].close
-
-    # One 15-minute historical request per stock per scanner start. The
-    # month window supplies up to 20 prior sessions for same-time-slot RVOL.
-    if key in NIFTY_200.values():
-        try:
-            volume_from_date = to_date - timedelta(days=29)
-            volume_response = api.get_historical_candle_data1(
-                key, "minutes", "15", str(to_date), str(volume_from_date)
-            )
-            historical_15m_volume[key] = volume_response.data.candles or []
-            print("15M VOLUME BASELINE:", key, len(historical_15m_volume[key]), "rows", flush=True)
-        except Exception as exc:
-            historical_15m_volume[key] = []
-            print("15M VOLUME BASELINE UNAVAILABLE:", key, type(exc).__name__, flush=True)
 
     # Warm stocks as well as indices with today's *completed* intraday bars.
     # Keep previous-day data only as an indicator warmup fallback. Never preload
