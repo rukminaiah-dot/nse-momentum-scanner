@@ -10,7 +10,11 @@ import sqlite3
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
+from fastapi import APIRouter
+
 from .database import DB_PATH
+
+router = APIRouter()
 
 IST = ZoneInfo("Asia/Kolkata")
 INDEX_NAMES = ("NIFTY 50", "SENSEX", "BANK NIFTY")
@@ -104,7 +108,11 @@ def assess_index_shift(rows, *, now=None):
         closes = [row[1] for row in rows[-3:]]
         confirmed = (closes[0] < closes[1] < closes[2] if direction == "BULLISH"
                      else closes[0] > closes[1] > closes[2])
-    if confirmed and prior_direction and prior_direction != direction:
+    if confirmed and len(stable) >= 3:
+        prior_confirmed = next((item for item in reversed(stable[:-3]) if item), None)
+    else:
+        prior_confirmed = prior_direction
+    if confirmed and prior_confirmed and prior_confirmed != direction:
         event = "CONFIRMED_SHIFT"
         reason = "Three completed candles align with EMA9/EMA20, momentum and closes after the prior opposite trend."
     elif (direction and prior_direction and prior_direction != direction
@@ -131,7 +139,7 @@ def assess_index_shift(rows, *, now=None):
             "reason": reason}
 
 
-def read_index_trend_changes(*, now=None, db_path=None):
+@router.get("/api/v2/index-trend-changes")\ndef read_index_trend_changes(*, now=None, db_path=None):
     """Read today's completed index rows and return a freshness-labeled assessment."""
     now = now or datetime.now(IST)
     if now.tzinfo is None:
