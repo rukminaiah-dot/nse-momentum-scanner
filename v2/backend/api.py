@@ -937,8 +937,10 @@ def stock_setups():
                 "universe_size": len(NIFTY_200), "setups": [], "order_execution_enabled": False}
 
     output = {"status": "LIVE_SETUPS" if open_now else "MARKET_CLOSED",
-              "as_of_ist": now.isoformat(), "universe_size": len(NIFTY_200),
-              "qualifying_count": 0, "confirmed_count": 0, "watch_count": 0,
+              "as_of_ist": now.isoformat(), "latest_setup_updated_at_ist": None,
+              "universe_size": len(NIFTY_200), "fresh_setup_count": 0,
+              "stale_setup_count": 0, "qualifying_count": 0,
+              "confirmed_count": 0, "watch_count": 0,
               "triggered_count": 0, "wait_count": 0, "invalid_count": 0,
               "relative_volume_basis": "completed 5-minute candle / mean volume for the same 5-minute slot over the prior 20 sessions",
               "score_basis": "heuristic setup-quality rank, not probability",
@@ -953,7 +955,9 @@ def stock_setups():
                    "verified_levels": [],
                    "relative_volume": None, "relative_volume_baseline": None,
                    "relative_volume_status": "UNAVAILABLE", "heuristic_rank_score": 0,
+                   "setup_data_fresh": False,
                    "order_execution_enabled": False}
+            output["stale_setup_count"] += 1
             output["wait_count"] += 1
             output["setups"].append(row)
             continue
@@ -967,6 +971,14 @@ def stock_setups():
             fresh = False
         row = dict(payload)
         row["updated_at_ist"] = updated_at
+        row["setup_data_fresh"] = bool(open_now and fresh)
+        latest = output["latest_setup_updated_at_ist"]
+        if latest is None or updated_at > latest:
+            output["latest_setup_updated_at_ist"] = updated_at
+        if row["setup_data_fresh"]:
+            output["fresh_setup_count"] += 1
+        else:
+            output["stale_setup_count"] += 1
         if not open_now or not fresh:
             previous = row.get("status")
             row["previous_session_status"] = previous
@@ -998,6 +1010,11 @@ def stock_setups():
             if status in ("CONFIRMED", "TRIGGERED", "WATCH"):
                 output["qualifying_count"] += 1
         output["setups"].append(row)
+
+    if open_now and output["fresh_setup_count"] == 0:
+        output["status"] = "NO_FRESH_SETUPS"
+    elif open_now and output["qualifying_count"] == 0:
+        output["status"] = "NO_QUALIFYING_SETUPS"
 
     priority = {"CONFIRMED": 0, "TRIGGERED": 1, "WATCH": 2, "INVALID": 3, "WAIT": 4}
     output["setups"].sort(key=lambda item: (
