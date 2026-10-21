@@ -19,21 +19,35 @@ class SignalEngineTests(unittest.TestCase):
             "HOLD",
         )
         self.assertEqual(
-            generate_signal(100, 100.2, 100.0, None, 0.2, 1.19,
+            generate_signal(100, 100.2, 100.0, None, 0.2, 1.49,
                             require_volume=True),
             "HOLD",
         )
 
     def test_stock_buy_needs_spread_trend_and_elevated_volume(self):
         self.assertEqual(
-            generate_signal(100, 100.2, 100.0, None, 0.2, 1.2,
+            generate_signal(100, 100.2, 100.0, None, 0.2, 1.5,
                             require_volume=True),
             "BUY",
         )
 
     def test_marginal_ema_cross_is_filtered(self):
         self.assertEqual(
-            generate_signal(100, 100.03, 100.0, None, 0.2, 1.8,
+            generate_signal(100, 100.09, 100.0, None, 0.2, 1.8,
+                            require_volume=True),
+            "HOLD",
+        )
+
+    def test_minimum_ema_spread_and_rvol_can_pass(self):
+        self.assertEqual(
+            generate_signal(100, 100.11, 100.0, None, 0.2, 1.5,
+                            require_volume=True),
+            "BUY",
+        )
+
+    def test_volume_below_new_floor_is_filtered(self):
+        self.assertEqual(
+            generate_signal(100, 100.2, 100.0, None, 0.2, 1.49,
                             require_volume=True),
             "HOLD",
         )
