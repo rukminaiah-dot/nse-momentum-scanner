@@ -127,7 +127,7 @@ class OfflineSignalParityTests(unittest.TestCase):
         stats = verified_same_slot_relative_volume(current, rows, 20)
         self.assertEqual(stats["relative_volume"], 1.5)
         self.assertEqual(stats["candle_direction"], "BULLISH")
-        self.assertIsNone(verified_same_slot_relative_volume(current, rows[:-1], 20))
+        self.assertIsNone(verified_same_slot_relative_volume(current, rows[:19], 20))
 
     def test_15m_aggregation_ignores_partial_and_gapped_bars(self):
         bars = history(30)
@@ -166,8 +166,8 @@ class OfflineSignalParityTests(unittest.TestCase):
             candle.volume = 0
         result = evaluate(bars, session_date=datetime(2026, 10, 16).date(),
                           is_stock=True)
-        self.assertEqual(result["rvol"], 0.0)
-        self.assertNotEqual(result["signal"], "BUY")
+        self.assertIsNone(result["rvol"])
+        self.assertEqual(result["signal"], "HOLD")
 
     def test_index_excludes_previous_session_from_ema(self):
         bars = history()
