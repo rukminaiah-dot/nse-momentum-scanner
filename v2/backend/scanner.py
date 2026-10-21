@@ -286,12 +286,6 @@ def preload_history(key):
     to_date = today - timedelta(days=1)
     from_date = to_date - timedelta(days=7)
 
-    response = api.get_historical_candle_data1(
-        key, "minutes", "1",
-        str(to_date), str(from_date)
-    )
-    rows = response.data.candles or []
-
     # One 15-minute historical request per stock per scanner start. The
     # month window supplies up to 20 prior sessions for same-time-slot RVOL.
     if key in NIFTY_200.values():
@@ -305,6 +299,12 @@ def preload_history(key):
         except Exception as exc:
             historical_15m_volume[key] = []
             print("15M VOLUME BASELINE UNAVAILABLE:", key, type(exc).__name__, flush=True)
+
+    response = api.get_historical_candle_data1(
+        key, "minutes", "1",
+        str(to_date), str(from_date)
+    )
+    rows = response.data.candles or []
 
     if not rows:
         print("PRELOAD: no historical candles for", key)
