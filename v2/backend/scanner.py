@@ -24,7 +24,9 @@ from .stock_setup_rules import (
     wait_stock_setup,
 )
 
-candles = CandleManager()
+# Keep enough minute bars for today's indicators and prior-session levels,
+# but bound RAM use on the 512 MiB Render instance.
+candles = CandleManager(max_completed_per_symbol=1000)
 
 _recovery_worker = None
 
