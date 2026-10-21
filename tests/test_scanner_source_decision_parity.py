@@ -13,7 +13,10 @@ from v2.backend.indicators import ema, momentum, atr
 from v2.backend.signal_engine import generate_signal
 from v2.backend.market_regime import index_signal
 from v2.backend.offline_signal_parity import evaluate, five_minute_trend, five_minute_breakout
-from v2.backend.volume_metrics import (\n    verified_relative_volume, completed_intraday_bars,\n    verified_same_slot_relative_volume, confirmed_range_breakout,\n)
+from v2.backend.volume_metrics import (
+    verified_relative_volume, completed_intraday_bars,
+    verified_same_slot_relative_volume, confirmed_range_breakout,
+)
 
 
 SOURCE = (pathlib.Path(__file__).resolve().parents[1] /
