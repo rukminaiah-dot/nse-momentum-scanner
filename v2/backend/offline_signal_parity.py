@@ -5,7 +5,11 @@ This is an independent parity candidate, not wired into production.
 from datetime import timedelta
 from v2.backend.indicators import ema, momentum, atr
 from v2.backend.signal_engine import generate_signal
-from v2.backend.market_regime import index_signal\nfrom v2.backend.volume_metrics import (\n    completed_intraday_bars, verified_same_slot_relative_volume,\n    confirmed_range_breakout,\n)
+from v2.backend.market_regime import index_signal
+from v2.backend.volume_metrics import (
+    completed_intraday_bars, verified_same_slot_relative_volume,
+    confirmed_range_breakout,
+)
 
 
 def five_minute_trend(history):
