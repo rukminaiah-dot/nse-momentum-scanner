@@ -24,6 +24,23 @@ from .stock_setup_rules import (
     wait_stock_setup,
 )
 
+def _log_process_memory(stage, instrument=None):
+    """Emit low-overhead Linux RSS diagnostics to identify preload memory spikes."""
+    try:
+        values = {}
+        with open("/proc/self/status", encoding="utf-8") as status:
+            for line in status:
+                if line.startswith(("VmRSS:", "VmHWM:")):
+                    key, value = line.split(":", 1)
+                    values[key.lower()] = int(value.strip().split()[0])
+        print("PROCESS_MEMORY:", {
+            "process": "scanner", "stage": stage, "instrument": instrument,
+            "rss_kb": values.get("vmrss"), "peak_rss_kb": values.get("vmhwm"),
+        }, flush=True)
+    except (OSError, ValueError, IndexError) as exc:
+        print("PROCESS_MEMORY_UNAVAILABLE:", "scanner", stage, type(exc).__name__, flush=True)
+
+
 candles = CandleManager()
 
 _recovery_worker = None
@@ -288,6 +305,7 @@ def preload_history(key):
             # Do not retain a full SDK response while fetching 1-minute data.
             if "volume_response" in locals():
                 del volume_response
+        _log_process_memory("after_5m_volume_baseline", key)
 
     response = api.get_historical_candle_data1(
         key, "minutes", "1",
@@ -350,6 +368,7 @@ def preload_history(key):
             print("INTRADAY PRELOAD FAILED:", key, type(exc).__name__, flush=True)
 
     candles.preload_completed(key, loaded)
+    _log_process_memory("after_intraday_preload", key)
     print("PRELOAD:", key, len(loaded), "historical candles")
 
 def five_minute_trend(history):
@@ -810,6 +829,7 @@ if __name__ == "__main__":
     reset_scanner_results()
 
     preload_keys = list(INDICES.values()) + list(NIFTY_200.values())
+    _log_process_memory("before_all_preloads")
 
     for key in preload_keys:
         try:
