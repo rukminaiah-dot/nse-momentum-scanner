@@ -35,13 +35,14 @@ class ClosedMarketVolumeTests(unittest.TestCase):
             with sqlite3.connect(db_path) as db:
                 db.execute("""CREATE TABLE scanner_results (
                     symbol TEXT, updated_at TEXT, rvol REAL, current_volume REAL,
-                    baseline_volume REAL, signal TEXT, trend_5m TEXT
+                    baseline_volume REAL, signal TEXT, trend_5m TEXT,
+                    volume_candle_at TEXT
                 )""")
-                db.executemany("INSERT INTO scanner_results VALUES (?, ?, ?, ?, ?, ?, ?)", [
-                    ("RELIANCE", "2026-10-19 15:29:00", 1.7, 170, 100, "BUY", "BULLISH"),
-                    ("TCS", "2026-10-19 15:28:00", 1.8, 180, 100, "SELL", "BEARISH"),
-                    ("INFY", "2026-10-19 15:27:00", 0.8, 80, 100, "WAIT", "MIXED"),
-                    ("RELIANCE", "2026-10-16 15:29:00", 2.0, 200, 100, "BUY", "BULLISH"),
+                db.executemany("INSERT INTO scanner_results VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [
+                    ("RELIANCE", "2026-10-19 15:29:00", 1.7, 170, 100, "BUY", "BULLISH", "2026-10-19 15:15:00"),
+                    ("TCS", "2026-10-19 15:28:00", 1.8, 180, 100, "SELL", "BEARISH", "2026-10-19 15:15:00"),
+                    ("INFY", "2026-10-19 15:27:00", 0.8, 80, 100, "WAIT", "MIXED", "2026-10-19 15:15:00"),
+                    ("RELIANCE", "2026-10-16 15:29:00", 2.0, 200, 100, "BUY", "BULLISH", "2026-10-16 15:15:00"),
                 ])
             now = datetime(2026, 10, 20, 18, 0, tzinfo=IST)
             with patch.object(reversal_context, "DB_PATH", db_path):
