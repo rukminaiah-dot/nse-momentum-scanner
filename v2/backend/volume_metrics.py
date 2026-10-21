@@ -171,10 +171,9 @@ def confirmed_range_breakout(bars, direction, *, prior_bars=3, min_buffer_pct=0.
     stamps = [bar.get("timestamp") for bar in window]
     if any(stamp is None for stamp in stamps):
         return False
-    interval = (stamps[-1] - stamps[-2])
-    if interval.total_seconds() <= 0 or any(
-        stamps[i] - stamps[i - 1] != interval for i in range(1, len(stamps))
-    ):
+    interval = timedelta(minutes=15)
+    if any(stamps[i] - stamps[i - 1] != interval
+           for i in range(1, len(stamps))):
         return False
     try:
         prior = window[:-1]
