@@ -26,10 +26,10 @@ def scanner_trend_from_source():
     fn = matches[0]
     # Deliberately disallow calls or names that could introduce side effects.
     allowed_calls = {"hasattr", "len", "sorted", "append", "date", "replace",
-                     "setdefault"}
+                     "setdefault", "all", "range", "total_seconds"}
     allowed_names = {"history", "timed", "c", "session_date", "buckets", "ts",
                      "bucket", "complete", "group", "closes", "key", "range",
-                     "hasattr", "len", "sorted"}
+                     "hasattr", "len", "sorted", "i", "latest_groups"}
     for node in ast.walk(fn):
         if isinstance(node, (ast.Import, ast.ImportFrom, ast.Global, ast.Nonlocal,
                              ast.With, ast.AsyncWith, ast.Try, ast.Raise,
@@ -46,7 +46,7 @@ def scanner_trend_from_source():
                 raise AssertionError("unexpected dynamic scanner call")
     module = ast.fix_missing_locations(ast.Module(body=[fn], type_ignores=[]))
     namespace = {"__builtins__": {"hasattr": hasattr, "len": len,
-                                    "sorted": sorted}}
+                                    "sorted": sorted, "all": all, "range": range}}
     exec(compile(module, str(SCANNER), "exec"), namespace)
     return namespace["five_minute_trend"]
 
@@ -61,6 +61,15 @@ def bars(start, prices):
 
 
 class ScannerTrendSourceParityTests(unittest.TestCase):
+    def test_missing_minute_in_latest_buckets_blocks_trend(self):
+        scanner_trend = scanner_trend_from_source()
+        start = datetime(2026, 10, 16, 9, 15)
+        case = bars(start, list(range(20)))
+        # Keep five candles per clock bucket, but create a one-minute hole
+        # in the middle bucket so counts alone cannot claim continuity.
+        case = [c for c in case if c.timestamp != start + timedelta(minutes=7)]
+        self.assertEqual(scanner_trend(case), "NEUTRAL")
+
     def test_source_extracted_function_matches_offline_trend(self):
         scanner_trend = scanner_trend_from_source()
         start = datetime(2026, 10, 16, 9, 15)
