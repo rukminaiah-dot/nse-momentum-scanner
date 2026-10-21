@@ -394,16 +394,25 @@ def evaluate_stock_setup(symbol, bars_5m, history_5m_rows, levels, *, now,
                 f"({pre_trigger_compression['level_name']} {pre_trigger_compression['direction']})"
             )
         compression = _compression(today, latest["close"], valid_levels, config)
-        if compression:
-            result.update(status="WATCH", direction=compression["direction"],
-                          verified_level=compression["level"],
-                          verified_level_name=level_sources[compression["level_name"]][0],
-                          verified_level_source=level_sources[compression["level_name"]][1],
-                          verified_level_session_date=level_sources[compression["level_name"]][2],
-                          reasons=[f"Price within {compression['distance_pct']:.3f}% of verified {compression['level_name']} level",
-                                   f"Completed-candle range contraction {compression['range_ratio']:.2f}× and volume easing {compression['volume_ratio']:.2f}×"])
+    if compression:
+        result.update(status="WATCH", direction=compression["direction"],
+                      verified_level=compression["level"],
+                      verified_level_name=level_sources[compression["level_name"]][0],
+                      verified_level_source=level_sources[compression["level_name"]][1],
+                      verified_level_session_date=level_sources[compression["level_name"]][2],
+                      reasons=[f"Price within {compression['distance_pct']:.3f}% of verified {compression['level_name']} level",
+                               f"Completed-candle range contraction {compression['range_ratio']:.2f}× and volume easing {compression['volume_ratio']:.2f}×"])
+        if not rvol_stats:
+            result["reasons"].append("Breakout blocked until verified 20-session same-slot RVOL is available")
+        result["heuristic_rank_score"] = min(59, int(30 + 20 * (1 - compression["range_ratio"]) + 9 * (1 - compression["volume_ratio"])))
+    else:
+        if pre_trigger_compression is None:
+            result["reasons"].append("No completed-candle compression before the breakout near a verified level")
         else:
-            result["reasons"].append("No current completed-candle compression near a verified level")
+            result["reasons"].append(
+                f"Pre-breakout compression did not match the broken level or direction "
+                f"({pre_trigger_compression['level_name']} {pre_trigger_compression['direction']})"
+            )
         if rvol_stats:
             result["reasons"].append(f"Latest 5-minute RVOL {rvol_stats['relative_volume']:.2f}×; trigger threshold {config.rvol_min:.2f}×")
     return result
