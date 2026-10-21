@@ -154,32 +154,32 @@ def get_premarket_data():
     token = token_candidates[0]
 
     stage = "global_instruments"
-    try:
-        catalog = getattr(get_premarket_data, "_catalog", None)
-        catalog_at = getattr(get_premarket_data, "_catalog_at", 0.0)
-        if not catalog or now - catalog_at >= 86400:
-            request = urllib.request.Request(
-                "https://assets.upstox.com/market-quote/instruments/exchange/global.json.gz",
-                headers={"User-Agent": "NSE-Momentum-Scanner/1.0", "Accept": "application/gzip"},
-            )
-            with urllib.request.urlopen(request, timeout=5) as response:
-                raw = gzip.decompress(response.read())
-            catalog = json.loads(raw.decode("utf-8"))
-            if not isinstance(catalog, list):
-                raise ValueError("Unexpected Upstox global instruments format")
-            get_premarket_data._catalog = catalog
-            get_premarket_data._catalog_at = now
+    wanted = {
+        "GIFT NIFTY": ("GIFT NIFTY", "SGX NIFTY", "GIFTNIFTY", "SGXNIFTY"),
+        "S&P 500": ("S&P 500", "S&P"),
+        "DOW JONES": ("DOW JONES",),
+        "NASDAQ": ("NASDAQ", "US TECH 100"),
+        "FTSE 100": ("FTSE 100",),
+        "DAX": ("DAX",),
+        "NIKKEI 225": ("NIKKEI 225",),
+        "HANG SENG": ("HANG SENG",),
+    }
+    selected = getattr(get_premarket_data, "_global_index_selected", None)
+    selected_at = getattr(get_premarket_data, "_global_index_selected_at", 0.0)
+    if not selected or now - selected_at >= 86400:
+        request = urllib.request.Request(
+            "https://assets.upstox.com/market-quote/instruments/exchange/global.json.gz",
+            headers={"User-Agent": "NSE-Momentum-Scanner/1.0", "Accept": "application/gzip"},
+        )
+        # Avoid retaining the full global-instrument catalogue in the API worker.
+        # Decode directly from gzip to avoid an additional decompressed-bytes copy.
+        import io
+        with urllib.request.urlopen(request, timeout=5) as response:
+            with gzip.GzipFile(fileobj=response, mode="rb") as compressed:
+                catalog = json.load(io.TextIOWrapper(compressed, encoding="utf-8"))
+        if not isinstance(catalog, list):
+            raise ValueError("Unexpected Upstox global instruments format")
 
-        wanted = {
-            "GIFT NIFTY": ("GIFT NIFTY", "SGX NIFTY", "GIFTNIFTY", "SGXNIFTY"),
-            "S&P 500": ("S&P 500", "S&P"),
-            "DOW JONES": ("DOW JONES",),
-            "NASDAQ": ("NASDAQ", "US TECH 100"),
-            "FTSE 100": ("FTSE 100",),
-            "DAX": ("DAX",),
-            "NIKKEI 225": ("NIKKEI 225",),
-            "HANG SENG": ("HANG SENG",),
-        }
         selected = {}
         for instrument in catalog:
             if not isinstance(instrument, dict) or instrument.get("segment") != "GLOBAL_INDEX":
@@ -192,8 +192,12 @@ def get_premarket_data():
             for display_name, candidates in wanted.items():
                 if display_name not in selected and aliases.intersection(candidates):
                     selected[display_name] = {"key": key, "latency": instrument.get("latency")}
+        del catalog
         if "GIFT NIFTY" not in selected:
             raise ValueError("GIFT NIFTY / SGX NIFTY is not present in the Upstox global instruments file")
+        # Cache only the handful of required global indices, not the full catalogue.
+        get_premarket_data._global_index_selected = selected
+        get_premarket_data._global_index_selected_at = now
 
         # NSE sector indices and India VIX are part of Upstox's NSE_INDEX quote segment.
         # Keep each feed row explicit so missing instruments are visible in the UI.
