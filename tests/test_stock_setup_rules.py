@@ -160,6 +160,26 @@ class StockSetupRuleTests(unittest.TestCase):
         self.assertEqual(levels["orl"], 99)
         self.assertIsNone(opening_range_levels(bars[1:], session_date=session.date()))
 
+    def test_wait_state_exposes_verified_levels_and_latest_completed_candle(self):
+        session = datetime(2026, 10, 21, 9, 15)
+        bars = [
+            bar(session, 99, 101, 98, 100),
+            bar(session + timedelta(minutes=5), 100, 102, 99, 101),
+            bar(session + timedelta(minutes=10), 101, 103, 100, 102),
+            bar(session + timedelta(minutes=15), 102, 103, 101, 102),
+        ]
+
+        result = evaluate_stock_setup("TEST", bars, [], {},
+                                      now=session + timedelta(minutes=20))
+
+        self.assertEqual(result["status"], "WAIT")
+        self.assertEqual(result["last_completed_candle_time"],
+                         (session + timedelta(minutes=15)).isoformat())
+        self.assertEqual(result["last_completed_close"], 102.0)
+        references = {level["name"]: level for level in result["verified_levels"]}
+        self.assertEqual(references["OPENING_RANGE_HIGH"]["value"], 103.0)
+        self.assertEqual(references["OPENING_RANGE_LOW"]["value"], 98.0)
+
 
 if __name__ == "__main__":
     unittest.main()

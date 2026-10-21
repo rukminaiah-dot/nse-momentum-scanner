@@ -208,7 +208,8 @@ def evaluate_stock_setup(symbol, bars_5m, history_5m_rows, levels, *, now,
     result = {"symbol": symbol, "direction": None, "status": "WAIT",
               "verified_level": None, "verified_level_name": None,
               "verified_level_source": None, "verified_level_session_date": None,
-              "trigger_candle_time": None,
+              "trigger_candle_time": None, "last_completed_candle_time": None,
+              "last_completed_close": None, "verified_levels": [],
               "relative_volume": None, "relative_volume_baseline": None,
               "relative_volume_status": "UNAVAILABLE", "ema9": ema9, "ema20": ema20,
               "entry_reference": None, "stop_invalidation": None, "trade_plan": None,
@@ -237,15 +238,23 @@ def evaluate_stock_setup(symbol, bars_5m, history_5m_rows, levels, *, now,
     valid_levels = {key: float(value) for key, value in levels.items()
                     if key in ("pdh", "pdl", "orh", "orl") and value is not None
                     and isfinite(float(value)) and float(value) > 0}
-    if not valid_levels:
-        result["reasons"] = ["WAIT: verified previous-day or opening-range levels unavailable"]
-        return result
+    result["last_completed_candle_time"] = latest["timestamp"].isoformat()
+    result["last_completed_close"] = round(float(latest["close"]), 4)
     level_sources = {
         "pdh": ("PREVIOUS_DAY_HIGH", levels.get("source"), levels.get("session_date")),
         "pdl": ("PREVIOUS_DAY_LOW", levels.get("source"), levels.get("session_date")),
         "orh": ("OPENING_RANGE_HIGH", "verified_completed_5m_opening_range", session_date.isoformat()),
         "orl": ("OPENING_RANGE_LOW", "verified_completed_5m_opening_range", session_date.isoformat()),
     }
+    result["verified_levels"] = [
+        {"name": level_sources[key][0], "value": round(value, 4),
+         "source": level_sources[key][1] or "source_unavailable",
+         "session_date": level_sources[key][2]}
+        for key, value in valid_levels.items()
+    ]
+    if not valid_levels:
+        result["reasons"] = ["WAIT: verified previous-day or opening-range levels unavailable"]
+        return result
     rvol_stats = _rvol(latest, history_5m_rows)
     if rvol_stats:
         result.update(relative_volume=round(rvol_stats["relative_volume"], 3),

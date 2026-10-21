@@ -258,6 +258,10 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("HISTORICAL ONLY · LAST STATUS ", self.html)
         self.assertIn("historical_only&&statuses.includes(x.previous_session_status)", self.html)
         self.assertIn("Historical setup details only; no current entry or live signal.", self.html)
+        self.assertIn("All waiting stock setup details", self.html)
+        self.assertIn("x.verified_levels", self.html)
+        self.assertIn("x.last_completed_candle_time", self.html)
+        self.assertIn("x.relative_volume_baseline", self.html)
 
     def test_closed_stock_setups_keep_historical_rank_but_clear_entry_plan(self):
         api = (pathlib.Path(__file__).resolve().parents[1] / "v2/backend/api.py").read_text(encoding="utf-8")
@@ -266,6 +270,8 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn('row["historical_only"] = True', setups)
         self.assertIn('row["entry_reference"] = None', setups)
         self.assertIn('row["trade_plan"] = None', setups)
+        self.assertIn('"last_completed_close": None', setups)
+        self.assertIn('"verified_levels": []', setups)
 
     def test_stock_analysis_requires_scanner_rating_direction_agreement(self):
         self.assertIn("r.signal===rating.signal&&['BUY','SELL'].includes(r.signal)", self.html)
