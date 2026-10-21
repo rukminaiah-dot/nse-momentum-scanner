@@ -15,6 +15,27 @@ app = FastAPI(title="NSE Momentum Scanner V2")
 app.include_router(smart_option_router)
 app.include_router(reversal_context_router)
 
+
+def _log_api_process_memory():
+    """Record API process RSS after application imports and router setup."""
+    try:
+        values = {}
+        with open("/proc/self/status", encoding="utf-8") as status:
+            for line in status:
+                if line.startswith(("VmRSS:", "VmHWM:")):
+                    key, value = line.split(":", 1)
+                    values[key.lower()] = int(value.strip().split()[0])
+        print("PROCESS_MEMORY:", {
+            "process": "api", "stage": "after_router_setup",
+            "rss_kb": values.get("vmrss"), "peak_rss_kb": values.get("vmhwm"),
+        }, flush=True)
+    except (OSError, ValueError, IndexError) as exc:
+        print("PROCESS_MEMORY_UNAVAILABLE:", "api", type(exc).__name__, flush=True)
+
+
+_log_api_process_memory()
+
+
 @app.get("/api/v2/index-trend-changes")
 def get_index_trend_changes():
     """Return fresh, explainable index shift states for the dashboard."""
