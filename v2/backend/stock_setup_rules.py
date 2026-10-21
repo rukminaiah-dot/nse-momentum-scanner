@@ -245,10 +245,6 @@ def evaluate_stock_setup(symbol, bars_5m, history_5m_rows, levels, *, now,
     if any(not _valid_bar(bar) for bar in today):
         result["reasons"] = ["WAIT: malformed candle data"]
         return result
-    if any(today[i]["timestamp"] - today[i-1]["timestamp"] != timedelta(minutes=5)
-           for i in range(1, len(today))):
-        result["reasons"] = ["WAIT: missing or non-contiguous completed 5-minute candles"]
-        return result
     levels = dict(levels or {})
     opening = opening_range_levels(today, session_date=session_date)
     if opening:
@@ -307,6 +303,15 @@ def evaluate_stock_setup(symbol, bars_5m, history_5m_rows, levels, *, now,
             result.update(status="INVALID", reasons=["INVALID: " + why])
             return result
         if prev["status"] == "TRIGGERED" and latest["timestamp"].isoformat() > str(prev.get("trigger_candle_time")):
+            try:
+                trigger_time = datetime.fromisoformat(str(prev.get("trigger_candle_time")))
+            except (TypeError, ValueError):
+                trigger_time = None
+            if trigger_time is None or latest["timestamp"] != trigger_time + timedelta(minutes=5):
+                result.update(status="INVALID", reasons=[
+                    "INVALID: next-candle confirmation window was missed; wait for a fresh setup"
+                ])
+                return result
             stop = latest["low"] if direction == "LONG" else latest["high"]
             buffer = latest["close"] * config.stop_buffer_pct / 100
             stop = stop - buffer if direction == "LONG" else stop + buffer
@@ -332,6 +337,21 @@ def evaluate_stock_setup(symbol, bars_5m, history_5m_rows, levels, *, now,
             if compressed is None:
                 result.update(status="INVALID", reasons=["Previous setup invalidated; waiting for a new compression setup"])
                 return result
+
+    # A feed interruption earlier in the session must not poison every later
+    # setup. Check continuity only for bars used to judge compression and the
+    # breakout; shorter histories remain eligible for WATCH/no-setup states.
+    compression_window_size = 2 * config.compression_bars
+    if len(today) >= compression_window_size:
+        setup_window = today[-min(len(today), compression_window_size + 1):]
+        if any(
+            setup_window[i]["timestamp"] - setup_window[i - 1]["timestamp"] != timedelta(minutes=5)
+            for i in range(1, len(setup_window))
+        ):
+            result.update(status="WAIT", reasons=[
+                "WAIT: latest setup window has missing or non-contiguous completed 5-minute candles"
+            ])
+            return result
 
     # Compression must occur before the breakout and at the same verified
     # level. Exclude the trigger candle from this check because its expanded
