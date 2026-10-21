@@ -139,7 +139,7 @@ def assess_index_shift(rows, *, now=None):
             "reason": reason}
 
 
-@router.get("/api/v2/index-trend-changes")\ndef read_index_trend_changes(*, now=None, db_path=None):
+def read_index_trend_changes(*, now=None, db_path=None):
     """Read today's completed index rows and return a freshness-labeled assessment."""
     now = now or datetime.now(IST)
     if now.tzinfo is None:
