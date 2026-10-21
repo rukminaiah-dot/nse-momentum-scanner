@@ -1,0 +1,47 @@
+"""Safety tests for isolated 15-minute research strategy."""
+import unittest
+from datetime import datetime, timedelta
+from v2.backend.experimental_15m_stoch_rsi import evaluate
+
+
+class TestExperimental15m(unittest.TestCase):
+    def setUp(self):
+        start = datetime(2026, 10, 21, 9, 15)
+        self.bars = [
+            {"timestamp": start + timedelta(minutes=15 * i),
+             "open": 100 + i * .1, "high": 101 + i * .1,
+             "low": 99 + i * .1, "close": 100.2 + i * .1,
+             "volume": 200}
+            for i in range(60)
+        ]
+        self.now = self.bars[-1]["timestamp"] + timedelta(minutes=15)
+
+    def test_requires_verified_volume(self):
+        self.assertEqual(evaluate(self.bars, now=self.now,
+                                  same_slot_average_volume=None)["reason"],
+                         "MISSING_VERIFIED_20_SESSION_VOLUME_BASELINE")
+
+    def test_rejects_incomplete_candle(self):
+        self.assertEqual(evaluate(self.bars, now=self.now - timedelta(minutes=1),
+                                  same_slot_average_volume=100)["reason"],
+                         "STALE_OR_INCOMPLETE_15M_CANDLE")
+
+    def test_rejects_stale_candle(self):
+        self.assertEqual(evaluate(self.bars, now=self.now + timedelta(minutes=19),
+                                  same_slot_average_volume=100)["reason"],
+                         "STALE_OR_INCOMPLETE_15M_CANDLE")
+
+    def test_rejects_missing_candle(self):
+        self.bars[-3]["timestamp"] -= timedelta(minutes=1)
+        self.assertEqual(evaluate(self.bars, now=self.now,
+                                  same_slot_average_volume=100)["reason"],
+                         "NONCONTIGUOUS_15M_CANDLES")
+
+    def test_no_live_orders(self):
+        result = evaluate(self.bars, now=self.now, same_slot_average_volume=100)
+        self.assertEqual(result["mode"], "PAPER")
+        self.assertIn(result["signal"], {"WAIT", "PAPER_BUY", "PAPER_SELL"})
+
+
+if __name__ == "__main__":
+    unittest.main()
