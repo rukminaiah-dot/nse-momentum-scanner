@@ -382,6 +382,52 @@ def five_minute_trend(history):
         return "BEARISH"
     return "NEUTRAL"
 
+
+def five_minute_breakout(history, direction):
+    """Confirm a completed 5-minute close beyond the prior 15-minute range."""
+    timed = [c for c in history if hasattr(c, "timestamp")]
+    if not timed:
+        return False
+    session_date = timed[-1].timestamp.date()
+    timed = [c for c in timed if c.timestamp.date() == session_date]
+    buckets = {}
+    for candle in timed:
+        ts = candle.timestamp
+        bucket = ts.replace(minute=(ts.minute // 5) * 5, second=0, microsecond=0)
+        buckets.setdefault(bucket, []).append(candle)
+    complete = []
+    for bucket in sorted(buckets):
+        group = buckets[bucket]
+        if len(group) == 5 and all(
+            (group[i].timestamp - group[i - 1].timestamp).total_seconds() == 60
+            for i in range(1, 5)
+        ):
+            complete.append(group)
+    if len(complete) < 4:
+        return False
+    last_four = complete[-4:]
+    if any(
+        (last_four[i][0].timestamp - last_four[i - 1][0].timestamp).total_seconds() != 300
+        for i in range(1, 4)
+    ):
+        return False
+    prior = last_four[:3]
+    prior_high = max(float(c.high) for group in prior for c in group)
+    prior_low = min(float(c.low) for group in prior for c in group)
+    prior_ranges = [
+        max(float(c.high) for c in group) - min(float(c.low) for c in group)
+        for group in prior
+    ]
+    latest_close = float(last_four[-1][-1].close)
+    if latest_close <= 0:
+        return False
+    buffer = max(latest_close * 0.001, 0.25 * (sum(prior_ranges) / len(prior_ranges)))
+    if direction == "BUY":
+        return latest_close > prior_high + buffer
+    if direction == "SELL":
+        return latest_close < prior_low - buffer
+    return False
+
 def completed_candle_time_for_symbol(symbol):
     """Read the latest completed minute for a displayed symbol under lock."""
     for instrument, display_symbol in instrument_symbols.items():
@@ -537,17 +583,10 @@ def analyse(key):
 
     trend_5m = five_minute_trend(history)
 
-    if key in INDICES.values():
-        # Index labels use the same completed 5-minute structure confirmation
-        # as stocks; a one-minute EMA cross alone is not actionable.
-        if signal == "BUY" and trend_5m != "BULLISH":
+    if signal in ("BUY", "SELL"):
+        expected_trend = "BULLISH" if signal == "BUY" else "BEARISH"
+        if trend_5m != expected_trend or not five_minute_breakout(history, signal):
             signal = "HOLD"
-        elif signal == "SELL" and trend_5m != "BEARISH":
-            signal = "HOLD"
-    elif signal == "BUY" and trend_5m != "BULLISH":
-        signal = "HOLD"
-    elif signal == "SELL" and trend_5m != "BEARISH":
-        signal = "HOLD"
 
     # Reject overextended stock entries in either direction.
     # Indices remain directional research signals, not stock entries.
