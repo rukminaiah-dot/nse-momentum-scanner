@@ -3,6 +3,8 @@
 Caller supplies completed 15-minute OHLCV history per symbol and the prior
 20-session same-slot history. No broker calls, orders, or production imports.
 """
+from math import isfinite
+
 from .experimental_15m_stoch_rsi import Settings, evaluate
 from .experimental_15m_volume import verified_15m_same_slot_average
 
@@ -15,7 +17,7 @@ def screen_universe(stock_bars, historical_volume_bars, *, now,
     historical_volume_bars: {symbol: chronological completed prior-session
     15m candle dicts}. The volume gate is applied BEFORE indicators.
     """
-    if not 0 < min_rvol < 100:
+    if not isinstance(min_rvol, (int, float)) or not isfinite(min_rvol) or not 0 < min_rvol < 100:
         raise ValueError("min_rvol must be positive and below 100")
     settings = settings or Settings(min_rvol=min_rvol)
     selected = []
@@ -32,6 +34,9 @@ def screen_universe(stock_bars, historical_volume_bars, *, now,
                 excluded[symbol] = "STALE_OR_INCOMPLETE_15M_CANDLE"
                 continue
             current_volume = float(latest["volume"])
+            if not isfinite(current_volume) or current_volume < 0:
+                excluded[symbol] = "INVALID_CURRENT_VOLUME"
+                continue
         except (KeyError, TypeError, ValueError, AttributeError):
             excluded[symbol] = "INVALID_CURRENT_CANDLE"
             continue
@@ -39,9 +44,6 @@ def screen_universe(stock_bars, historical_volume_bars, *, now,
             latest, historical_volume_bars.get(symbol, ()))
         if baseline is None:
             excluded[symbol] = "MISSING_VERIFIED_20_SESSION_VOLUME_BASELINE"
-            continue
-        if current_volume < 0:
-            excluded[symbol] = "INVALID_CURRENT_VOLUME"
             continue
         rvol = current_volume / baseline
         if rvol < min_rvol:
