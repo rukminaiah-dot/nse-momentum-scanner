@@ -29,6 +29,19 @@ class ScannerDecisionSafetyContractTests(unittest.TestCase):
         self.assertNotIn("buy", calls)
         self.assertNotIn("sell", calls)
 
+    def test_stock_data_gates_persist_specific_wait_rows(self):
+        tree = ast.parse(SCANNER.read_text(encoding="utf-8"))
+        analyse = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
+                       and node.name == "analyse")
+        wait_calls = [node for node in ast.walk(analyse) if isinstance(node, ast.Call)
+                      and isinstance(node.func, ast.Name)
+                      and node.func.id == "persist_stock_setup_wait"]
+        self.assertEqual(len(wait_calls), 3)
+        self.assertIn("latest 1-minute candle is stale or future-dated",
+                      SCANNER.read_text(encoding="utf-8"))
+        self.assertIn("require six consecutive completed bars",
+                      SCANNER.read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -261,6 +261,7 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("All waiting stock setup details", self.html)
         self.assertIn("x.verified_levels", self.html)
         self.assertIn("x.last_completed_candle_time", self.html)
+        self.assertIn("x.last_observed_minute_candle_time", self.html)
         self.assertIn("x.relative_volume_baseline", self.html)
 
     def test_closed_stock_setups_keep_historical_rank_but_clear_entry_plan(self):
