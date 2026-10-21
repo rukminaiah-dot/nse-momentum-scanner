@@ -250,6 +250,14 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("verifiedCandleScore(x)", self.html)
         self.assertIn("verifiedCandleScore(r)", self.html)
 
+    def test_dashboard_summary_separates_live_stock_calls_from_index_wait(self):
+        self.assertIn('id="live-call-summary"', self.html)
+        self.assertIn("function renderLiveCallSummary()", self.html)
+        self.assertIn("LIVE STOCK CALLS:", self.html)
+        self.assertIn("Index calls are checked separately", self.html)
+        self.assertIn("does not cancel the stock calls", self.html)
+        self.assertIn("Market closed or no live setup feed", self.html)
+
     def test_stock_setup_rankings_use_all_fresh_api_candidates(self):
         self.assertIn("/api/v2/stock-setups", self.html)
         self.assertIn("function renderStockSetups(hostId)", self.html)
