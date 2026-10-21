@@ -456,10 +456,16 @@ def completed_candle_time_for_symbol(symbol):
     return None
 
 
-def save_scan_result(key, price, ema9_value, ema20_value, mom, market, trend_5m, signal, previous_close=None, rvol=None, current_volume=None, baseline_volume=None):
+def save_scan_result(key, price, ema9_value, ema20_value, mom, market, trend_5m, signal, previous_close=None, rvol=None, current_volume=None, baseline_volume=None, volume_candle_time=None):
     candle_time = completed_candle_time_for_symbol(key)
     con = sqlite3.connect(DB_PATH)
-    con.execute("""INSERT OR REPLACE INTO scanner_results (symbol,updated_at,price,ema9,ema20,momentum,market,trend_5m,signal,previous_close,rvol,current_volume,baseline_volume) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""", (key, candle_time, price, ema9_value, ema20_value, mom, market, trend_5m, signal, previous_close, rvol, current_volume, baseline_volume))
+    con.execute("""INSERT OR REPLACE INTO scanner_results
+        (symbol,updated_at,price,ema9,ema20,momentum,market,trend_5m,signal,
+         previous_close,rvol,current_volume,baseline_volume,volume_candle_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (key, candle_time, price, ema9_value, ema20_value, mom, market,
+         trend_5m, signal, previous_close, rvol, current_volume, baseline_volume,
+         volume_candle_time))
     if candle_time is not None:
         con.execute("""INSERT OR REPLACE INTO scanner_signal_history
             (symbol,candle_time,price,ema9,ema20,momentum,market,trend_5m,signal)
@@ -647,6 +653,8 @@ def analyse(key):
             instrument_symbols.get(key, key), price, ema9, ema20, mom,
             market, trend_5m, signal, previous_closes.get(key),
             rvol if rvol_available else None, current_volume, baseline_volume,
+            current_15m["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
+            if current_15m is not None else None,
         )
     if key in NIFTY_200.values() and signal == "BUY" and atr_value is not None:
         from datetime import datetime
