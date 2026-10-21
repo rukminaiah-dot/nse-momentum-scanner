@@ -83,17 +83,17 @@ class OfflineSignalParityTests(unittest.TestCase):
     def test_stock_requires_20_session_volume_and_15m_confirmation(self):
         bars = history(60)
         for candle in bars[:45]:
-            candle.open = candle.high = candle.low = candle.close = 100.0
+            candle.open = candle.close = 100.0
+            candle.high, candle.low = 101.0, 99.0
             candle.volume = 10.0
         for i, candle in enumerate(bars[45:]):
             candle.open = 100.0 if i == 0 else 102.0
-            candle.high = 102.0
-            candle.low = 100.0 if i == 0 else 102.0
+            candle.high, candle.low = 102.0, 100.0
             candle.close = 102.0
             candle.volume = 10.0
         for i, candle in enumerate(bars[-5:]):
             candle.open = 101.5 + 0.1 * i
-            candle.low = candle.open
+            candle.low = 100.0
             candle.high = candle.close = 101.6 + 0.1 * i
         historical_rows = []
         current_slot = bars[-1].timestamp.replace(minute=0, second=0, microsecond=0)
