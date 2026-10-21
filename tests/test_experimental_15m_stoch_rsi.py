@@ -37,6 +37,27 @@ class TestExperimental15m(unittest.TestCase):
                                   same_slot_average_volume=100)["reason"],
                          "NONCONTIGUOUS_15M_CANDLES")
 
+    def test_overnight_history_allowed(self):
+        # 25 completed bars per session; the 50-bar EMA must span days.
+        start = datetime(2026, 10, 20, 9, 15)
+        for i, bar in enumerate(self.bars):
+            day = 0 if i < 25 else 1 if i < 50 else 2
+            slot = i if i < 25 else i - 25 if i < 50 else i - 50
+            bar["timestamp"] = start + timedelta(days=day, minutes=15 * slot)
+        self.now = self.bars[-1]["timestamp"] + timedelta(minutes=15)
+        result = evaluate(self.bars, now=self.now, same_slot_average_volume=100)
+        self.assertNotEqual(result["reason"], "NONCONTIGUOUS_15M_CANDLES")
+
+    def test_no_cross_session_breakout(self):
+        start = datetime(2026, 10, 20, 9, 15)
+        for i, bar in enumerate(self.bars):
+            day, slot = divmod(i, 25)
+            bar["timestamp"] = start + timedelta(days=day, minutes=15 * slot)
+        self.now = self.bars[-1]["timestamp"] + timedelta(minutes=15)
+        self.assertEqual(evaluate(self.bars, now=self.now,
+                         same_slot_average_volume=100)["reason"],
+                         "INSUFFICIENT_SAME_SESSION_BREAKOUT_BARS")
+
     def test_no_live_orders(self):
         result = evaluate(self.bars, now=self.now, same_slot_average_volume=100)
         self.assertEqual(result["mode"], "PAPER")
