@@ -826,81 +826,29 @@ def candle_feed_quality():
 
 @app.get("/api/v2/top-momentum-setups")
 def top_momentum_setups():
-    """Rank verified fresh scanner candidates; research only, never place orders."""
-    from datetime import datetime, time as clock_time, timedelta
-    from math import isfinite
-    from zoneinfo import ZoneInfo
-    now = datetime.now(ZoneInfo("Asia/Kolkata"))
-    session_open = now.weekday() < 5 and clock_time(9, 15) <= now.time() < clock_time(15, 30)
-    output = {"status": "MARKET_CLOSED" if not session_open else "NO_QUALIFYING_SETUPS",
-              "as_of_ist": now.isoformat(), "universe_size": len(NIFTY_200),
-              "order_execution_enabled": False, "mode": "MANUAL_RESEARCH_ONLY",
-              "setups": [], "fresh_stock_rows": 0, "rejected_stale_rows": 0}
-    if not session_open:
-        return output
-    try:
-        with sqlite3.connect(DB_PATH, timeout=5) as db:
-            db.row_factory = sqlite3.Row
-            rows = [dict(row) for row in db.execute(
-                "SELECT symbol,updated_at,price,ema9,ema20,momentum,market,trend_5m,signal FROM scanner_results")]
-    except sqlite3.Error:
-        output["status"] = "SCANNER_DATABASE_UNAVAILABLE"
-        return output
-    eligible_symbols = set(NIFTY_200)
-    for row in rows:
-        if row["symbol"] not in eligible_symbols:
-            continue
-        try:
-            stamp = datetime.strptime(row["updated_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=ZoneInfo("Asia/Kolkata"))
-            if stamp.date() != now.date() or not timedelta(0) <= now - stamp <= timedelta(minutes=3):
-                output["rejected_stale_rows"] += 1
-                continue
-            output["fresh_stock_rows"] += 1
-            price, e9, e20, mom = (float(row[k]) for k in ("price", "ema9", "ema20", "momentum"))
-            if not all(isfinite(v) for v in (price, e9, e20, mom)) or min(price, e9, e20) <= 0:
-                continue
-            if row["signal"] != "BUY" or row["trend_5m"] != "BULLISH" or not (price > e9 > e20 and mom > 0):
-                continue
-            # These are scanner-derived indicative levels, NOT ATR-validated executable orders.
-            # Without an independently verified ATR, suppress targets and stops.
-            score = round(mom + 100 * (e9 - e20) / price, 4)
-            output["setups"].append({
-                "symbol": row["symbol"], "last_price": round(price, 2),
-                "indicative_entry": round(price, 2),
-                "target_1": None, "target_2": None, "stop_loss": None,
-                "levels_status": "ATR_LEVELS_NOT_VERIFIED",
-                "momentum_pct": round(mom, 3), "ema9": round(e9, 2),
-                "ema20": round(e20, 2), "trend_5m": row["trend_5m"],
-                "candle_ist": row["updated_at"], "rank_score": score,
-                "reasons": ["FRESH_COMPLETED_CANDLE", "BUY_SIGNAL",
-                            "BULLISH_5M_TREND", "EMA9_ABOVE_EMA20", "POSITIVE_MOMENTUM"],
-                "trade_status": "RESEARCH_ONLY",
-            })
-        except (ValueError, TypeError, OverflowError):
-            continue
-    output["setups"].sort(key=lambda item: (-item["rank_score"], item["symbol"]))
-    output["setups"] = output["setups"][:5]
-    if output["setups"]:
-        output["status"] = "RESEARCH_SHORTLIST"
+    """Backward-compatible route exposing the same uncapped verified setup scan."""
+    output = stock_setups()
+    output["mode"] = "MANUAL_RESEARCH_ONLY"
     return output
 
 
 @app.get("/api/v2/top-volume-surge")
 def top_volume_surge():
-    """Rank fresh stock volume using 15-minute RVOL versus 20 prior sessions."""
+    """Rank fresh stock volume using completed 5-minute RVOL vs 20 prior sessions."""
     from datetime import datetime, timedelta, time as clock_time
     from math import isfinite
     from zoneinfo import ZoneInfo
 
     now = datetime.now(ZoneInfo("Asia/Kolkata"))
     session_open = now.weekday() < 5 and clock_time(9, 15) <= now.time() < clock_time(15, 30)
-    threshold = 1.5
+    from .stock_setup_rules import SetupConfig
+    threshold = SetupConfig.from_env().rvol_min
     output = {
         "status": "MARKET_CLOSED" if not session_open else "NO_VERIFIED_VOLUME_SURGES",
         "as_of_ist": now.isoformat(),
         "universe_size": len(NIFTY_200),
         "threshold_rvol": threshold,
-        "comparison_basis": "Completed 15-minute candle volume / mean volume for the same 15-minute slot over the prior 20 sessions",
+        "comparison_basis": "Completed 5-minute candle volume / mean volume for the same 5-minute slot over the prior 20 sessions",
         "surges": [],
         "fresh_stock_rows": 0,
         "verified_volume_rows": 0,
@@ -952,17 +900,120 @@ def top_volume_surge():
                 "baseline_volume": round(baseline_volume, 2),
                 "candle_ist": row["volume_candle_at"],
                 "scanner_updated_at_ist": row["updated_at"],
-                "volume_basis": "15-minute candle; same time slot over prior 20 sessions",
+                "volume_basis": "5-minute candle; same time slot over prior 20 sessions",
                 "trade_status": "RESEARCH_ONLY",
             })
         except (TypeError, ValueError, OverflowError):
             continue
 
     output["surges"].sort(key=lambda item: (-item["relative_volume"], item["symbol"]))
-    output["surges"] = output["surges"][:10]
     if output["surges"]:
         output["status"] = "VERIFIED_VOLUME_SURGES_AVAILABLE"
     return output
+
+
+@app.get("/api/v2/stock-setups")
+def stock_setups():
+    """Return all configured NSE 200 setup states, ranked without a row cap."""
+    import json
+    from datetime import datetime, timedelta, time as clock_time
+    from zoneinfo import ZoneInfo
+
+    now = datetime.now(ZoneInfo("Asia/Kolkata"))
+    open_now = now.weekday() < 5 and clock_time(9, 15) <= now.time() < clock_time(15, 30)
+    stored = {}
+    try:
+        with sqlite3.connect(DB_PATH, timeout=5) as con:
+            con.row_factory = sqlite3.Row
+            for row in con.execute("SELECT symbol,updated_at,setup_json FROM scanner_stock_setups"):
+                try:
+                    payload = json.loads(row["setup_json"])
+                    if isinstance(payload, dict):
+                        stored[row["symbol"]] = (row["updated_at"], payload)
+                except (TypeError, ValueError):
+                    continue
+    except sqlite3.Error:
+        return {"status": "SCANNER_DATABASE_UNAVAILABLE", "as_of_ist": now.isoformat(),
+                "universe_size": len(NIFTY_200), "setups": [], "order_execution_enabled": False}
+
+    output = {"status": "LIVE_SETUPS" if open_now else "MARKET_CLOSED",
+              "as_of_ist": now.isoformat(), "universe_size": len(NIFTY_200),
+              "qualifying_count": 0, "confirmed_count": 0, "watch_count": 0,
+              "triggered_count": 0, "wait_count": 0, "invalid_count": 0,
+              "relative_volume_basis": "completed 5-minute candle / mean volume for the same 5-minute slot over the prior 20 sessions",
+              "score_basis": "heuristic setup-quality rank, not probability",
+              "setups": [], "order_execution_enabled": False}
+    for symbol in NIFTY_200:
+        record = stored.get(symbol)
+        if record is None:
+            row = {"symbol": symbol, "direction": None, "status": "WAIT",
+                   "reasons": ["No scanner result yet; wait for a verified completed 5-minute candle"],
+                   "relative_volume": None, "relative_volume_baseline": None,
+                   "relative_volume_status": "UNAVAILABLE", "heuristic_rank_score": 0,
+                   "order_execution_enabled": False}
+            output["wait_count"] += 1
+            output["setups"].append(row)
+            continue
+        updated_at, payload = record
+        try:
+            stamp = datetime.fromisoformat(updated_at)
+            if stamp.tzinfo is None:
+                stamp = stamp.replace(tzinfo=ZoneInfo("Asia/Kolkata"))
+            fresh = stamp.date() == now.date() and timedelta(0) <= now - stamp <= timedelta(minutes=3)
+        except (TypeError, ValueError):
+            fresh = False
+        row = dict(payload)
+        row["updated_at_ist"] = updated_at
+        if not open_now or not fresh:
+            previous = row.get("status")
+            row["previous_session_status"] = previous
+            row["status"] = "WAIT"
+            row["reasons"] = ["Market closed; stored setup is historical only" if not open_now
+                              else "WAIT: scanner setup data is stale or unverified"]
+            row["entry_reference"] = None
+            row["trade_plan"] = None
+            row["heuristic_rank_score"] = 0
+            output["wait_count"] += 1
+        else:
+            status = row.get("status")
+            if status == "CONFIRMED":
+                output["confirmed_count"] += 1
+            elif status == "TRIGGERED":
+                output["triggered_count"] += 1
+            elif status == "WATCH":
+                output["watch_count"] += 1
+            elif status == "INVALID":
+                output["invalid_count"] += 1
+            else:
+                output["wait_count"] += 1
+            if status in ("CONFIRMED", "TRIGGERED", "WATCH"):
+                output["qualifying_count"] += 1
+        output["setups"].append(row)
+
+    priority = {"CONFIRMED": 0, "TRIGGERED": 1, "WATCH": 2, "INVALID": 3, "WAIT": 4}
+    output["setups"].sort(key=lambda item: (
+        -int(item.get("heuristic_rank_score") or 0),
+        priority.get(item.get("status"), 5), item["symbol"]))
+    return output
+
+
+@app.get("/api/v2/stock-setup-backtest")
+def stock_setup_backtest_status():
+    """State why historical performance metrics are withheld until data exists."""
+    return {
+        "status": "NOT_RUN_INSUFFICIENT_POINT_IN_TIME_DATA",
+        "metrics": {"net_expectancy": None, "win_rate": None,
+                    "average_win": None, "average_loss": None,
+                    "maximum_drawdown": None, "signal_count": None,
+                    "by_market_regime": None},
+        "reason": "The service does not retain historical 5-minute OHLCV, point-in-time previous-day/opening-range levels, or historical spread/slippage observations needed to replay the complete rules without look-ahead.",
+        "available_live_inputs": ["current completed 5-minute scanner candles", "in-memory same-slot 20-session volume baseline", "current-session verified levels when available"],
+        "missing_backtest_inputs": ["archived 5-minute OHLCV across multiple years", "point-in-time level snapshots for each session", "historical spread/slippage or a separately validated slippage assumption", "quantity/account schedule for exact charges"],
+        "validation_protocol": "Fixed rules on chronological training data, later validation window, then untouched final out-of-sample period; report net expectancy, win rate, average win/loss, maximum drawdown, signal count, and market-regime breakdown only when all required records pass coverage checks.",
+        "train_validation_test_status": "NOT_RUN",
+        "threshold_tuning_on_test_data": False,
+        "order_execution_enabled": False,
+    }
 
 
 @app.get("/api/v2/nifty200-stock-board")

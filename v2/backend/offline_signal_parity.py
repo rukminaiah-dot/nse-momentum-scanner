@@ -10,6 +10,7 @@ from v2.backend.volume_metrics import (
     completed_intraday_bars, verified_same_slot_relative_volume,
     confirmed_range_breakout,
 )
+from v2.backend.stock_setup_rules import SetupConfig, evaluate_stock_setup
 
 
 def five_minute_trend(history):
@@ -93,8 +94,9 @@ def five_minute_breakout(history, direction):
 
 def evaluate(history, *, session_date, is_index=False, is_stock=False,
              nifty_market="NEUTRAL", is_primary_index=True,
-             historical_15m_rows=()):
-    """Return pure indicator/decision data; no persistence or trading."""
+             historical_15m_rows=(), historical_5m_rows=(), levels=None,
+             now=None, previous_state=None):
+    """Pure offline decision model. Stock setups require verified levels/RVOL."""
     if is_index and is_stock:
         raise ValueError("instrument cannot be both index and stock")
     if len(history) < 20:
@@ -124,51 +126,33 @@ def evaluate(history, *, session_date, is_index=False, is_stock=False,
     e9, e20 = ema(closes, 9), ema(closes, 20)
     mom = momentum(closes)
     atr14 = atr(highs, lows, closes, 14)
-    rvol = None
-    current_volume = baseline_volume = None
-    bars_15m = completed_intraday_bars(history, 15) if is_stock else []
-    current_15m = bars_15m[-1] if bars_15m else None
-    if current_15m is not None:
-        latest_minute_end = history[-1].timestamp + timedelta(minutes=1)
-        current_15m_end = current_15m["timestamp"] + timedelta(minutes=15)
-        age = latest_minute_end - current_15m_end
-        if age < timedelta(0) or age >= timedelta(minutes=15):
-            current_15m = None
-    volume_stats_15m = (
-        verified_same_slot_relative_volume(
-            current_15m, historical_15m_rows, reference_sessions=20
-        ) if current_15m is not None else None
-    )
-    if volume_stats_15m is not None:
-        rvol = volume_stats_15m["relative_volume"]
-        current_volume = volume_stats_15m["current_volume"]
-        baseline_volume = volume_stats_15m["baseline_volume"]
     market = (index_signal(price, e9, e20, None)
               if is_index and is_primary_index else nifty_market)
-    signal = generate_signal(price, e9, e20, None, mom, rvol, market,
-                             require_volume=is_stock)
     trend = five_minute_trend(history)
+    if is_stock:
+        bars_5m = completed_intraday_bars(history, 5)
+        if now is None:
+            now = bars_5m[-1]["timestamp"] + timedelta(minutes=5) if bars_5m else history[-1].timestamp
+        setup = evaluate_stock_setup(
+            "OFFLINE", bars_5m, historical_5m_rows or historical_15m_rows,
+            levels or {}, now=now, ema9=e9, ema20=e20,
+            previous_state=previous_state, config=SetupConfig(),
+        )
+        signal = ("BUY" if setup["status"] == "CONFIRMED" and setup["direction"] == "LONG"
+                  else "SELL" if setup["status"] == "CONFIRMED" and setup["direction"] == "SHORT"
+                  else "HOLD")
+        return {"signal": signal, "reason": None, "setup": setup,
+                "ema9": e9, "ema20": e20, "momentum": mom, "atr14": atr14,
+                "rvol": setup.get("relative_volume"), "current_volume": None,
+                "baseline_volume": setup.get("relative_volume_baseline"),
+                "trend_5m": trend, "market": market}
+    signal = generate_signal(price, e9, e20, None, mom, None, market,
+                             require_volume=False)
     if signal in ("BUY", "SELL"):
         expected_trend = "BULLISH" if signal == "BUY" else "BEARISH"
-        if is_stock:
-            candle_direction = (volume_stats_15m or {}).get("candle_direction")
-            if (
-                trend != expected_trend
-                or current_15m is None
-                or candle_direction != expected_trend
-                or not confirmed_range_breakout(bars_15m, signal, prior_bars=3)
-            ):
-                signal = "HOLD"
-        elif trend != expected_trend or not five_minute_breakout(history, signal):
-            signal = "HOLD"
-    if is_stock and signal in ("BUY", "SELL"):
-        if atr14 is None or atr14 <= 0:
-            signal = "HOLD"
-        elif signal == "BUY" and price > e9 + 0.5 * atr14:
-            signal = "HOLD"
-        elif signal == "SELL" and price < e9 - 0.5 * atr14:
+        if trend != expected_trend or not five_minute_breakout(history, signal):
             signal = "HOLD"
     return {"signal": signal, "reason": None, "ema9": e9, "ema20": e20,
-            "momentum": mom, "atr14": atr14, "rvol": rvol,
-            "current_volume": current_volume, "baseline_volume": baseline_volume,
+            "momentum": mom, "atr14": atr14, "rvol": None,
+            "current_volume": None, "baseline_volume": None,
             "trend_5m": trend, "market": market}

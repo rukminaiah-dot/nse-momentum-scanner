@@ -54,6 +54,19 @@ class VerifiedRelativeVolumeTests(unittest.TestCase):
         self.assertEqual([bar["timestamp"] for bar in result],
                          [datetime(2026, 10, 19, 9, 30)])
 
+    def test_5m_all_session_aggregation_keeps_prior_days_for_rvol(self):
+        rows = []
+        for day in (datetime(2026, 10, 16), datetime(2026, 10, 19)):
+            start = day.replace(hour=9, minute=15)
+            rows.extend(SimpleNamespace(
+                timestamp=start + timedelta(minutes=i), open=100, high=101,
+                low=99, close=100, volume=10,
+            ) for i in range(10))
+        latest_only = completed_intraday_bars(rows, 5)
+        all_sessions = completed_intraday_bars(rows, 5, include_all_sessions=True)
+        self.assertEqual(len(latest_only), 2)
+        self.assertEqual(len(all_sessions), 4)
+
     def test_same_slot_rvol_uses_twenty_prior_sessions(self):
         current = {"timestamp": datetime(2026, 10, 19, 10, 0),
                    "open": 100, "close": 101, "volume": 150}

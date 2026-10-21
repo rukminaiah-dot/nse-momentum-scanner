@@ -461,8 +461,8 @@ def _observed_volume(now: datetime, session_open: bool) -> dict[str, Any]:
               "threshold_rvol": RVOL_THRESHOLD, "fresh_rows": 0, "verified_volume_rows": 0,
               "bullish_surge_rows": 0, "bearish_surge_rows": 0, "last_candle_ist": None,
               "last_session": None,
-              "source": "scanner_results; completed 15-minute candle volume / same time slot mean across 20 prior sessions",
-              "comparison_basis": "15-minute slot RVOL versus 20 prior sessions"}
+              "source": "scanner_results; completed 5-minute candle volume / same time slot mean across 20 prior sessions",
+              "comparison_basis": "5-minute slot RVOL versus 20 prior sessions"}
     try:
         with sqlite3.connect(DB_PATH, timeout=5) as db:
             db.row_factory = sqlite3.Row

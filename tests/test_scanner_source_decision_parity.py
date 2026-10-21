@@ -1,7 +1,6 @@
-"""Source-extracted live scanner decision block versus isolated offline model.
+"""Source-extracted live index decision block versus isolated offline model.
 
-No scanner module import: only AST-selected pure decision statements are run.
-This does not validate scanner startup, persistence, broker, or live orders.
+Stock setup logic is covered by dedicated level/volume/confirmation tests. No scanner module import: only AST-selected pure decision statements are run.
 """
 import ast
 import pathlib
@@ -85,8 +84,7 @@ class ScannerSourceDecisionParityTests(unittest.TestCase):
             for n in (20, 40, 60, 100):
                 history = candles[:n]
                 for is_index, is_stock, primary in (
-                        (True, False, True), (True, False, False),
-                        (False, True, False)):
+                        (True, False, True), (True, False, False)):
                     with self.subTest(regime=name, count=n,
                                       index=is_index, primary=primary):
                         actual = source_decision(

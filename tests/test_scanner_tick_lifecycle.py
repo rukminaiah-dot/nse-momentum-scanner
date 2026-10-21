@@ -1,8 +1,7 @@
-"""Offline execution tests for the scanner's real on_tick lifecycle.
+"""Offline read-only tests for the scanner's real on_tick lifecycle.
 
-The actual scanner module is not imported. The source-defined handler runs with
-fake candle, persistence, feed-health, and trade functions; no network, broker,
-or database is available to this test.
+The actual scanner module is not imported. The handler runs with fake candle,
+feed-health and analysis functions; no network, broker, or database is used.
 """
 import ast
 import math
@@ -109,45 +108,26 @@ class ScannerTickLifecycleTests(unittest.TestCase):
         self.assertEqual(len(candles), len(values))
         self.assertTrue(all(call[4] == 0 for call in candles))
 
-    def test_position_advances_to_target_one_then_closes_at_target_two(self):
-        trade = {
-            "id": 7, "target_1": 101, "target_2": 102,
-            "invalidation": 99, "status": "OPEN",
-        }
+    def test_existing_trade_state_is_not_mutated_by_scanner_ticks(self):
+        trade = {"id": 7, "target_1": 101, "target_2": 102,
+                 "invalidation": 99, "status": "OPEN"}
         self.context["active_trades"]["STOCK"] = trade
-
         first = self.tick(101.5, volume=100)
         self.tick(102.5, timestamp_ms=first + 1000, volume=125)
-
-        updates = [call for call in self.calls if call[0] == "update_state"]
-        sells = [call for call in self.calls if call[0] == "sell"]
-        self.assertEqual(trade["status"], "TARGET_1")
-        self.assertEqual(len(updates), 1)
-        self.assertEqual(updates[0][1][:4], (7, 101.5, "TARGET_1", "Target 1 hit"))
-        self.assertEqual(len(sells), 1)
-        self.assertEqual(sells[0][1][:3], (7, 102.5, "Target 2 hit"))
-        self.assertNotIn("STOCK", self.context["active_trades"])
+        self.assertEqual(trade["status"], "OPEN")
+        self.assertFalse(any(call[0] in ("sell", "update_state") for call in self.calls))
         self.assertEqual(self.context["last_cumulative_volumes"]["STOCK"], 125)
-        self.assertEqual(len([call for call in self.calls if call[0] == "candle"]), 2)
 
-    def test_invalidation_waits_for_completed_one_minute_close(self):
-        now_ms = int(time.time() * 1000)
-        trade = {
-            "id": 11, "target_1": 101, "target_2": 102,
-            "invalidation": 99, "status": "OPEN",
-        }
+    def test_invalidating_price_does_not_write_trade_lifecycle(self):
+        trade = {"id": 11, "target_1": 101, "target_2": 102,
+                 "invalidation": 99, "status": "OPEN"}
         self.context["active_trades"]["STOCK"] = trade
-
+        now_ms = int(time.time() * 1000)
         self.tick(98.5, timestamp_ms=now_ms)
-        self.assertFalse(any(call[0] == "sell" for call in self.calls))
-        self.assertIn("STOCK", self.context["active_trades"])
-
         self.closed = type("ClosedCandle", (), {"close": 98.5})()
         self.tick(98.5, timestamp_ms=now_ms + 1000)
-        sells = [call for call in self.calls if call[0] == "sell"]
-        self.assertEqual(len(sells), 1)
-        self.assertEqual(sells[0][1][:3], (11, 98.5, "Invalidation hit"))
-        self.assertNotIn("STOCK", self.context["active_trades"])
+        self.assertEqual(trade["status"], "OPEN")
+        self.assertFalse(any(call[0] in ("sell", "update_state") for call in self.calls))
 
     def test_live_rollover_runs_gap_quality_and_analysis_in_order(self):
         self.closed = object()
