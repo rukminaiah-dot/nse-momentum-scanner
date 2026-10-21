@@ -54,7 +54,9 @@ def fetch_symbol(api, key, *, now, lookback_days=90):
     complete = [bar for bar in current
                 if bar["timestamp"].date() == today and
                 bar["timestamp"] + timedelta(minutes=15) <= now]
-    # Historical API data must never be used as same-day live evidence.\n    # Retain enough previous-session candles for EMA50 and Stoch RSI.\n    return (history[-100:] + complete), history
+    # Historical API data must never be used as same-day live evidence.
+    # Retain enough previous-session candles for EMA50 and Stoch RSI.
+    return (history[-100:] + complete), history
 
 
 def run(*, limit=5, now=None, api=None):
@@ -84,9 +86,14 @@ def run(*, limit=5, now=None, api=None):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--limit", type=int, default=5)\n    parser.add_argument("--offline", action="store_true", help="Do not contact Upstox; print an empty paper result")
+    parser.add_argument("--limit", type=int, default=5)
+    parser.add_argument("--offline", action="store_true", help="Do not contact Upstox; print an empty paper result")
     args = parser.parse_args()
-    if args.offline:\n        result = {"mode": "PAPER", "selected_count": 0, "selected": [],\n                  "reason": "OFFLINE_NO_MARKET_DATA", "requested_count": args.limit}\n    else:\n        result = run(limit=args.limit)
+    if args.offline:
+        result = {"mode": "PAPER", "selected_count": 0, "selected": [],
+                  "reason": "OFFLINE_NO_MARKET_DATA", "requested_count": args.limit}
+    else:
+        result = run(limit=args.limit)
     print(json.dumps(result, default=str, sort_keys=True))
 
 
