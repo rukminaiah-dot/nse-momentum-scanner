@@ -53,6 +53,8 @@ def fetch_symbol(api, key, *, now, lookback_days=90):
     # for signal freshness; never include today's incomplete 15m candle.
     complete = [bar for bar in current
                 if bar["timestamp"].date() == today and
+                9 * 60 + 15 <= bar["timestamp"].hour * 60 + bar["timestamp"].minute < 15 * 60 + 30 and
+                (bar["timestamp"].hour * 60 + bar["timestamp"].minute - 555) % 15 == 0 and
                 bar["timestamp"] + timedelta(minutes=15) <= now]
     # Historical API data must never be used as same-day live evidence.
     # Retain enough previous-session candles for EMA50 and Stoch RSI.
