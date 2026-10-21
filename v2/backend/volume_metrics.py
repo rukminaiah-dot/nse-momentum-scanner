@@ -46,3 +46,118 @@ def verified_relative_volume(candles, reference_bars=19):
         "baseline_volume": baseline,
         "reference_bars": reference_bars,
     }
+
+
+
+def completed_intraday_bars(candles, interval_minutes=15):
+    """Aggregate only full contiguous one-minute bars into 15-minute bars."""
+    if (isinstance(interval_minutes, bool) or not isinstance(interval_minutes, int)
+            or interval_minutes < 1):
+        raise ValueError("interval_minutes must be a positive integer")
+    from collections import defaultdict
+
+    timed = [c for c in candles if getattr(c, "timestamp", None) is not None]
+    if not timed:
+        return []
+    day = timed[-1].timestamp.date()
+    buckets = defaultdict(list)
+    for candle in timed:
+        stamp = candle.timestamp
+        if stamp.date() != day:
+            continue
+        minute_bucket = (stamp.hour * 60 + stamp.minute) // interval_minutes
+        start_minute = minute_bucket * interval_minutes
+        bucket_time = stamp.replace(
+            hour=start_minute // 60, minute=start_minute % 60,
+            second=0, microsecond=0,
+        )
+        buckets[bucket_time].append(candle)
+
+    result = []
+    for bucket_time in sorted(buckets):
+        group = sorted(buckets[bucket_time], key=lambda c: c.timestamp)
+        if len(group) != interval_minutes:
+            continue
+        if any(
+            group[i].timestamp - group[i - 1].timestamp != timedelta(minutes=1)
+            for i in range(1, len(group))
+        ):
+            continue
+        result.append({
+            "timestamp": bucket_time,
+            "open": float(group[0].open),
+            "high": max(float(c.high) for c in group),
+            "low": min(float(c.low) for c in group),
+            "close": float(group[-1].close),
+            "volume": sum(float(c.volume) for c in group),
+        })
+    return result
+
+
+def verified_same_slot_relative_volume(current_bar, historical_rows,
+                                       reference_sessions=20):
+    """Compare a completed intraday bar with the same time slot over prior sessions.
+
+    Historical rows use Upstox candle arrays: timestamp, open, high, low,
+    close, volume, optional open interest. A full 20-session baseline is
+    required; partial history is unavailable, never guessed.
+    """
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    if (not isinstance(reference_sessions, int) or isinstance(reference_sessions, bool)
+            or reference_sessions < 1):
+        raise ValueError("reference_sessions must be a positive integer")
+    if not current_bar:
+        return None
+    stamp = current_bar.get("timestamp")
+    if stamp is None:
+        return None
+    try:
+        current_volume = float(current_bar["volume"])
+        current_open = float(current_bar["open"])
+        current_close = float(current_bar["close"])
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return None
+    if not all(isfinite(x) and x >= 0 for x in (current_volume, current_open, current_close)):
+        return None
+
+    ist = ZoneInfo("Asia/Kolkata")
+    if stamp.tzinfo is not None:
+        stamp = stamp.astimezone(ist).replace(tzinfo=None)
+    slot = (stamp.hour, stamp.minute)
+    by_date = {}
+    for row in historical_rows or ():
+        try:
+            history_stamp = row[0]
+            if isinstance(history_stamp, str):
+                history_stamp = datetime.fromisoformat(history_stamp.replace("Z", "+00:00"))
+            if history_stamp.tzinfo is not None:
+                history_stamp = history_stamp.astimezone(ist).replace(tzinfo=None)
+            if history_stamp.date() >= stamp.date():
+                continue
+            if (history_stamp.hour, history_stamp.minute) != slot:
+                continue
+            volume = float(row[5])
+            if not isfinite(volume) or volume < 0:
+                continue
+            by_date[history_stamp.date()] = volume
+        except (IndexError, TypeError, ValueError, OverflowError):
+            continue
+
+    observations = [by_date[day] for day in sorted(by_date)[-reference_sessions:]]
+    if len(observations) != reference_sessions:
+        return None
+    baseline = sum(observations) / reference_sessions
+    if baseline <= 0:
+        return None
+    return {
+        "relative_volume": current_volume / baseline,
+        "current_volume": current_volume,
+        "baseline_volume": baseline,
+        "reference_sessions": reference_sessions,
+        "slot": f"{slot[0]:02d}:{slot[1]:02d}",
+        "candle_direction": ("BULLISH" if current_close > current_open
+                             else "BEARISH" if current_close < current_open
+                             else "FLAT"),
+    }
