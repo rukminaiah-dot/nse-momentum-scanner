@@ -2,7 +2,10 @@ import unittest
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 
-from v2.backend.volume_metrics import (\n    verified_relative_volume, completed_intraday_bars,\n    verified_same_slot_relative_volume, confirmed_range_breakout,\n)
+from v2.backend.volume_metrics import (
+    verified_relative_volume, completed_intraday_bars,
+    verified_same_slot_relative_volume, confirmed_range_breakout,
+)
 
 
 class VerifiedRelativeVolumeTests(unittest.TestCase):
