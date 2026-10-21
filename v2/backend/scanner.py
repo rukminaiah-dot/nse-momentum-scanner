@@ -16,7 +16,7 @@ from .trade_engine import buy, update_state, sell
 from .database import DB_PATH, init_db, reset_scanner_results
 from .decision_learning import classify_market_recovery
 from .offline_preload_selection import select_completed_preload
-from .volume_metrics import verified_relative_volume
+from .volume_metrics import (\n    completed_intraday_bars, verified_same_slot_relative_volume,\n    confirmed_range_breakout,\n)
 
 candles = CandleManager()
 
@@ -76,7 +76,7 @@ market_regimes = {}
 previous_closes = {}
 _index_recovery_state = {}
 last_trade_updates = {}
-last_cumulative_volumes = {}
+last_cumulative_volumes = {}\nhistorical_15m_volume = {}
 
 _tick_seen = {}
 _last_accepted_tick_ms = {}
@@ -304,6 +304,20 @@ def preload_history(key):
 
     if key in INDICES.values() and loaded:
         previous_closes[key] = loaded[-1].close
+
+    # One 15-minute historical request per stock per scanner start. The
+    # month window supplies up to 20 prior sessions for same-time-slot RVOL.
+    if key in NIFTY_200.values():
+        try:
+            volume_from_date = to_date - timedelta(days=29)
+            volume_response = api.get_historical_candle_data1(
+                key, "minutes", "15", str(to_date), str(volume_from_date)
+            )
+            historical_15m_volume[key] = volume_response.data.candles or []
+            print("15M VOLUME BASELINE:", key, len(historical_15m_volume[key]), "rows", flush=True)
+        except Exception as exc:
+            historical_15m_volume[key] = []
+            print("15M VOLUME BASELINE UNAVAILABLE:", key, type(exc).__name__, flush=True)
 
     # Warm stocks as well as indices with today's *completed* intraday bars.
     # Keep previous-day data only as an indicator warmup fallback. Never preload
@@ -550,20 +564,35 @@ def analyse(key):
     ema20 = ema(closes, 20)
     mom = momentum(closes)
 
-    # Compare the latest completed stock candle against the prior 19
-    # consecutive completed 1-minute candles. Never estimate missing volume.
+    # Compare the latest completed 15-minute candle with the same time slot
+    # across 20 prior sessions. Do not call total volume "buying volume";
+    # candle direction supplies price confirmation, while Upstox OHLCV supplies
+    # traded volume only.
     vwap_value = None
     rvol = None
-    if key in NIFTY_200.values():
-        volume_stats = verified_relative_volume(history)
-        rvol = volume_stats["relative_volume"] if volume_stats else None
-        current_volume = volume_stats["current_volume"] if volume_stats else None
-        baseline_volume = volume_stats["baseline_volume"] if volume_stats else None
-        rvol_available = volume_stats is not None
-    else:
-        current_volume = None
-        baseline_volume = None
-        rvol_available = False
+    current_volume = None
+    baseline_volume = None
+    rvol_available = False
+    bars_15m = completed_intraday_bars(history, 15) if key in NIFTY_200.values() else []
+    current_15m = bars_15m[-1] if bars_15m else None
+    if current_15m is not None:
+        from datetime import timedelta
+        latest_minute_end = history[-1].timestamp + timedelta(minutes=1)
+        current_15m_end = current_15m["timestamp"] + timedelta(minutes=15)
+        age = latest_minute_end - current_15m_end
+        if age < timedelta(0) or age >= timedelta(minutes=15):
+            current_15m = None
+    volume_stats_15m = (
+        verified_same_slot_relative_volume(
+            current_15m, historical_15m_volume.get(key, ()), reference_sessions=20
+        )
+        if current_15m is not None else None
+    )
+    if volume_stats_15m is not None:
+        rvol = volume_stats_15m["relative_volume"]
+        current_volume = volume_stats_15m["current_volume"]
+        baseline_volume = volume_stats_15m["baseline_volume"]
+        rvol_available = True
     market = index_signal(price, ema9, ema20, vwap_value)
     if key == INDICES["NIFTY 50"]:
         market_regimes["NIFTY 50"] = market
@@ -585,7 +614,16 @@ def analyse(key):
 
     if signal in ("BUY", "SELL"):
         expected_trend = "BULLISH" if signal == "BUY" else "BEARISH"
-        if trend_5m != expected_trend or not five_minute_breakout(history, signal):
+        if key in NIFTY_200.values():
+            candle_direction = (volume_stats_15m or {}).get("candle_direction")
+            if (
+                trend_5m != expected_trend
+                or current_15m is None
+                or candle_direction != expected_trend
+                or not confirmed_range_breakout(bars_15m, signal, prior_bars=3)
+            ):
+                signal = "HOLD"
+        elif trend_5m != expected_trend or not five_minute_breakout(history, signal):
             signal = "HOLD"
 
     # Reject overextended stock entries in either direction.
