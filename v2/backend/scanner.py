@@ -17,7 +17,7 @@ from .decision_learning import classify_market_recovery
 from .offline_preload_selection import select_completed_preload
 from .volume_metrics import (
     completed_intraday_bars, verified_same_slot_relative_volume,
-    confirmed_range_breakout,
+    confirmed_range_breakout, compact_same_slot_volume_rows,
 )
 from .stock_setup_rules import (
     SetupConfig, evaluate_stock_setup, verified_previous_day_levels,
@@ -275,11 +275,19 @@ def preload_history(key):
             volume_response = api.get_historical_candle_data1(
                 key, "minutes", "5", str(to_date), str(volume_from_date)
             )
-            historical_5m_volume[key] = volume_response.data.candles or []
-            print("5M VOLUME BASELINE:", key, len(historical_5m_volume[key]), "rows", flush=True)
+            historical_5m_volume[key] = compact_same_slot_volume_rows(
+                volume_response.data.candles or [], reference_sessions=20
+            )
+            del volume_response
+            print("5M VOLUME BASELINE:", key, historical_5m_volume[key].row_count,
+                  "compact rows", flush=True)
         except Exception as exc:
             historical_5m_volume[key] = []
             print("5M VOLUME BASELINE UNAVAILABLE:", key, type(exc).__name__, flush=True)
+        finally:
+            # Do not retain a full SDK response while fetching 1-minute data.
+            if "volume_response" in locals():
+                del volume_response
 
     response = api.get_historical_candle_data1(
         key, "minutes", "1",
@@ -303,6 +311,7 @@ def preload_history(key):
         c.close = float(row[4])
         c.timestamp = datetime.fromisoformat(row[0]).astimezone(ZoneInfo("Asia/Kolkata")).replace(tzinfo=None)
         loaded.append(c)
+    del rows
 
     if key in INDICES.values() and loaded:
         previous_closes[key] = loaded[-1].close
@@ -335,6 +344,7 @@ def preload_history(key):
             loaded = select_completed_preload(
                 loaded, current, session_date=today, current_minute=current_minute
             )
+            del today_rows, current, seen_minutes
             print("INTRADAY PRELOAD:", key, len(loaded), "completed candles", flush=True)
         except Exception as exc:
             print("INTRADAY PRELOAD FAILED:", key, type(exc).__name__, flush=True)
@@ -652,12 +662,7 @@ def analyse(key):
             current_5m = None
     volume_stats_5m = (
         verified_same_slot_relative_volume(
-            current_5m,
-            list(historical_5m_volume.get(key, ())) + [
-                [bar["timestamp"].isoformat(), bar["open"], bar["high"], bar["low"],
-                 bar["close"], bar["volume"]]
-                for bar in bars_5m_all
-            ],
+            current_5m, historical_5m_volume.get(key, ()),
             reference_sessions=20
         )
         if current_5m is not None else None
