@@ -357,13 +357,24 @@ def five_minute_trend(history):
     complete = []
     for bucket in sorted(buckets):
         group = buckets[bucket]
-        if len(group) == 5:
+        # A 5-minute reading is valid only when all five consecutive minute
+        # closes are present. Partial or duplicated intervals are ignored.
+        if len(group) == 5 and all(
+            (group[i].timestamp - group[i - 1].timestamp).total_seconds() == 60
+            for i in range(1, 5)
+        ):
             complete.append(group)
 
     if len(complete) < 3:
         return "NEUTRAL"
 
-    closes = [group[-1].close for group in complete[-3:]]
+    latest_groups = complete[-3:]
+    if any(
+        (latest_groups[i][0].timestamp - latest_groups[i - 1][0].timestamp).total_seconds() != 300
+        for i in range(1, 3)
+    ):
+        return "NEUTRAL"
+    closes = [group[-1].close for group in latest_groups]
 
     if closes[0] < closes[1] < closes[2]:
         return "BULLISH"
@@ -521,16 +532,17 @@ def analyse(key):
         mom,
         rvol,
         market,
+        require_volume=key in NIFTY_200.values(),
     )
 
     trend_5m = five_minute_trend(history)
 
     if key in INDICES.values():
-        if ema9 > ema20 and mom > 0:
-            signal = "BUY"
-        elif ema9 < ema20 and mom < 0:
-            signal = "SELL"
-        else:
+        # Index labels use the same completed 5-minute structure confirmation
+        # as stocks; a one-minute EMA cross alone is not actionable.
+        if signal == "BUY" and trend_5m != "BULLISH":
+            signal = "HOLD"
+        elif signal == "SELL" and trend_5m != "BEARISH":
             signal = "HOLD"
     elif signal == "BUY" and trend_5m != "BULLISH":
         signal = "HOLD"
@@ -575,6 +587,23 @@ def analyse(key):
         buy(key, price, price + atr_value, price + (2 * atr_value),
             price - atr_value, "V2 momentum BUY", context=context)
         load_active_trades()
+    elif key in NIFTY_200.values() and signal == "SELL" and key in active_trades:
+        # A confirmed bearish signal exits the paper long on this completed
+        # candle; no broker order is submitted.
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        trade = active_trades[key]
+        context = _decision_context(key, price, datetime.now(ZoneInfo("Asia/Kolkata")), features={
+            "price_vs_ema9_pct": (price - ema9) / ema9 * 100 if ema9 else None,
+            "price_vs_ema20_pct": (price - ema20) / ema20 * 100 if ema20 else None,
+            "momentum_pct": mom,
+            "rvol": rvol if rvol_available else None,
+            "atr_pct": atr_value / price * 100 if price else None,
+            "trend_5m": trend_5m,
+            "market_regime": market,
+        })
+        if sell(trade["id"], price, "Confirmed SELL signal", context=context):
+            active_trades.pop(key, None)
 
     print(
         "SIGNAL:",

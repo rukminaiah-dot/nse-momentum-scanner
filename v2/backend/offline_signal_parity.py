@@ -20,10 +20,21 @@ def five_minute_trend(history):
         ts = candle.timestamp
         bucket = ts.replace(minute=(ts.minute // 5) * 5, second=0, microsecond=0)
         buckets.setdefault(bucket, []).append(candle)
-    complete = [buckets[key] for key in sorted(buckets) if len(buckets[key]) == 5]
+    complete = []
+    for key in sorted(buckets):
+        group = buckets[key]
+        if len(group) == 5 and all(
+                (group[i].timestamp - group[i-1].timestamp).total_seconds() == 60
+                for i in range(1, 5)):
+            complete.append(group)
     if len(complete) < 3:
         return "NEUTRAL"
-    closes = [group[-1].close for group in complete[-3:]]
+    latest_groups = complete[-3:]
+    if any((latest_groups[i][0].timestamp -
+            latest_groups[i-1][0].timestamp).total_seconds() != 300
+           for i in range(1, 3)):
+        return "NEUTRAL"
+    closes = [group[-1].close for group in latest_groups]
     if closes[0] < closes[1] < closes[2]:
         return "BULLISH"
     if closes[0] > closes[1] > closes[2]:
@@ -72,11 +83,14 @@ def evaluate(history, *, session_date, is_index=False, is_stock=False,
                 and sum(baseline) > 0 else 0.0)
     market = (index_signal(price, e9, e20, None)
               if is_index and is_primary_index else nifty_market)
-    signal = generate_signal(price, e9, e20, None, mom, rvol, market)
+    signal = generate_signal(price, e9, e20, None, mom, rvol, market,
+                             require_volume=is_stock)
     trend = five_minute_trend(history)
     if is_index:
-        signal = ("BUY" if e9 > e20 and mom > 0 else
-                  "SELL" if e9 < e20 and mom < 0 else "HOLD")
+        if signal == "BUY" and trend != "BULLISH":
+            signal = "HOLD"
+        elif signal == "SELL" and trend != "BEARISH":
+            signal = "HOLD"
     elif signal == "BUY" and trend != "BULLISH":
         signal = "HOLD"
     elif signal == "SELL" and trend != "BEARISH":
