@@ -887,7 +887,7 @@ def top_momentum_setups():
 
 @app.get("/api/v2/top-volume-surge")
 def top_volume_surge():
-    """Rank fresh stock RVOL using actual one-minute candle volumes only."""
+    """Rank fresh stock volume using 15-minute RVOL versus 20 prior sessions."""
     from datetime import datetime, timedelta, time as clock_time
     from math import isfinite
     from zoneinfo import ZoneInfo
@@ -900,7 +900,7 @@ def top_volume_surge():
         "as_of_ist": now.isoformat(),
         "universe_size": len(NIFTY_200),
         "threshold_rvol": threshold,
-        "comparison_basis": "Latest completed 1-minute candle volume / mean of prior 19 consecutive completed 1-minute candles",
+        "comparison_basis": "Completed 15-minute candle volume / mean volume for the same 15-minute slot over the prior 20 sessions",
         "surges": [],
         "fresh_stock_rows": 0,
         "verified_volume_rows": 0,
@@ -913,7 +913,7 @@ def top_volume_surge():
         with sqlite3.connect(DB_PATH, timeout=5) as db:
             db.row_factory = sqlite3.Row
             rows = [dict(row) for row in db.execute(
-                "SELECT symbol,updated_at,price,signal,trend_5m,rvol,current_volume,baseline_volume FROM scanner_results"
+                "SELECT symbol,updated_at,price,signal,trend_5m,rvol,current_volume,baseline_volume,volume_candle_at FROM scanner_results"
             )]
     except sqlite3.Error:
         output["status"] = "SCANNER_DATABASE_UNAVAILABLE"
@@ -950,8 +950,9 @@ def top_volume_surge():
                 "relative_volume": round(rvol, 2),
                 "current_volume": round(current_volume, 2),
                 "baseline_volume": round(baseline_volume, 2),
-                "candle_ist": row["updated_at"],
-                "volume_basis": "1-minute; prior 19 consecutive completed candles",
+                "candle_ist": row["volume_candle_at"],
+                "scanner_updated_at_ist": row["updated_at"],
+                "volume_basis": "15-minute candle; same time slot over prior 20 sessions",
                 "trade_status": "RESEARCH_ONLY",
             })
         except (TypeError, ValueError, OverflowError):
