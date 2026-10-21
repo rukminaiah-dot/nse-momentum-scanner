@@ -161,3 +161,35 @@ def verified_same_slot_relative_volume(current_bar, historical_rows,
                              else "BEARISH" if current_close < current_open
                              else "FLAT"),
     }
+
+
+def confirmed_range_breakout(bars, direction, *, prior_bars=3, min_buffer_pct=0.10):
+    """Confirm the latest completed bar clears the prior range with a buffer."""
+    if len(bars) < prior_bars + 1:
+        return False
+    window = list(bars[-(prior_bars + 1):])
+    stamps = [bar.get("timestamp") for bar in window]
+    if any(stamp is None for stamp in stamps):
+        return False
+    interval = (stamps[-1] - stamps[-2])
+    if interval.total_seconds() <= 0 or any(
+        stamps[i] - stamps[i - 1] != interval for i in range(1, len(stamps))
+    ):
+        return False
+    try:
+        prior = window[:-1]
+        high = max(float(bar["high"]) for bar in prior)
+        low = min(float(bar["low"]) for bar in prior)
+        latest_close = float(window[-1]["close"])
+        ranges = [float(bar["high"]) - float(bar["low"]) for bar in prior]
+        if latest_close <= 0 or not all(isfinite(x) and x >= 0 for x in [high, low, *ranges]):
+            return False
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return False
+    buffer = max(latest_close * float(min_buffer_pct) / 100,
+                 0.25 * (sum(ranges) / len(ranges)))
+    if direction == "BUY":
+        return latest_close > high + buffer
+    if direction == "SELL":
+        return latest_close < low - buffer
+    return False
