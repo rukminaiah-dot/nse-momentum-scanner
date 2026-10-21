@@ -1,8 +1,11 @@
+import sqlite3
+import tempfile
 import unittest
 from datetime import datetime, timedelta
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from v2.backend.index_trend_changes import assess_index_shift
+from v2.backend.index_trend_changes import assess_index_shift, read_index_trend_changes
 
 IST = ZoneInfo("Asia/Kolkata")
 
@@ -50,6 +53,23 @@ class IndexTrendShiftTests(unittest.TestCase):
         result = assess_index_shift(rows, now=start + timedelta(minutes=10))
         self.assertEqual(result["data_status"], "STALE")
         self.assertTrue(result["reason"].startswith("Historical/stale data only."))
+
+    def test_api_reads_same_session_completed_index_history(self):
+        start = datetime(2026, 10, 21, 10, 0, tzinfo=IST)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "scanner.sqlite"
+            with sqlite3.connect(path) as db:
+                db.execute("""CREATE TABLE scanner_signal_history (
+                    symbol TEXT, candle_time TEXT, price REAL, ema9 REAL,
+                    ema20 REAL, momentum REAL)""")
+                for symbol in ("NIFTY 50", "SENSEX", "BANK NIFTY"):
+                    for row in make_rows(start, "BULLISH", 4):
+                        db.execute("INSERT INTO scanner_signal_history VALUES (?,?,?,?,?,?)",
+                                   (symbol, row[0].strftime("%Y-%m-%d %H:%M:%S"), *row[1:]))
+            result = read_index_trend_changes(now=start + timedelta(minutes=5), db_path=path)
+        self.assertEqual(result["status"], "READY")
+        self.assertEqual(len(result["indices"]), 3)
+        self.assertEqual(result["indices"][0]["data_status"], "LIVE_FRESH")
 
     def test_after_close_is_historical_not_live(self):
         start = datetime(2026, 10, 21, 15, 20, tzinfo=IST)
