@@ -6,9 +6,9 @@ from v2.backend.experimental_15m_stoch_rsi import evaluate
 
 class TestExperimental15m(unittest.TestCase):
     def setUp(self):
-        start = datetime(2026, 10, 21, 9, 15)
+        start = datetime(2026, 10, 19, 9, 15)
         self.bars = [
-            {"timestamp": start + timedelta(minutes=15 * i),
+            {"timestamp": start + timedelta(days=i // 25, minutes=15 * (i % 25)),
              "open": 100 + i * .1, "high": 101 + i * .1,
              "low": 99 + i * .1, "close": 100.2 + i * .1,
              "volume": 200}
@@ -50,7 +50,7 @@ class TestExperimental15m(unittest.TestCase):
 
     def test_no_cross_session_breakout(self):
         start = datetime(2026, 10, 20, 9, 15)
-        self.bars = self.bars[:52]
+        self.bars = self.bars[:51]
         for i, bar in enumerate(self.bars):
             day, slot = divmod(i, 25)
             bar["timestamp"] = start + timedelta(days=day, minutes=15 * slot)
