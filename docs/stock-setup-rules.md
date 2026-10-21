@@ -14,7 +14,7 @@ The scanner is a read-only research display. It does not create simulated positi
 ## Setup and confirmation
 
 - `WATCH`: price is within the configured approach distance of a verified level, recent completed bars contract in range, and their volume eases.
-- `TRIGGERED`: the six completed bars before the breakout show configured range contraction and easing volume near the same verified resistance/support; then a completed five-minute candle closes through that level, its body is at least 50% of range, its close is within the outer 25% in the breakout direction, and verified same-slot RVOL meets the threshold. The breakout candle itself is excluded from the compression calculation.
+- `TRIGGERED`: the configured number of completed bars before the breakout show range contraction and easing volume near the same verified resistance/support, compared with the preceding bars. Then a completed five-minute candle closes through that level, its body is at least 50% of range, its close is within the outer 25% in the breakout direction, and verified same-slot RVOL meets the threshold. The breakout candle itself is excluded from the compression calculation.
 - `CONFIRMED`: the next completed candle holds the level. The entry reference is its close; the stop is beyond that candle's structure with the configured buffer.
 - `INVALID`: price closes back through the trigger level, breaches the confirmed stop, or the cost-adjusted target plan fails. A new setup requires invalidation or a new compression watch.
 
