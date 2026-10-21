@@ -10,11 +10,7 @@ import sqlite3
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter
-
 from .database import DB_PATH
-
-router = APIRouter()
 
 IST = ZoneInfo("Asia/Kolkata")
 INDEX_NAMES = ("NIFTY 50", "SENSEX", "BANK NIFTY")
@@ -170,8 +166,3 @@ def read_index_trend_changes(*, now=None, db_path=None):
                     for symbol in INDEX_NAMES]}
     return {"status": "READY", "as_of_ist": now.isoformat(), "indices": results}
 
-
-@router.get("/api/v2/index-trend-changes")
-def index_trend_changes():
-    """Return fresh, explainable index shift states for the dashboard."""
-    return read_index_trend_changes()
