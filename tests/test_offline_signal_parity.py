@@ -2,7 +2,7 @@
 import unittest
 from datetime import datetime, timedelta
 from v2.backend.candles import Candle
-from v2.backend.offline_signal_parity import evaluate, five_minute_trend
+from v2.backend.offline_signal_parity import evaluate, five_minute_trend, five_minute_breakout
 
 
 def history(count=30, direction=1):
@@ -16,6 +16,35 @@ def history(count=30, direction=1):
 
 
 class OfflineSignalParityTests(unittest.TestCase):
+    def test_completed_close_breaking_prior_range_is_confirmed(self):
+        bars = history(20)
+        for candle in bars[:15]:
+            candle.high = candle.low = candle.close = 100.0
+        for candle in bars[15:]:
+            candle.high = candle.low = candle.close = 101.2
+        self.assertTrue(five_minute_breakout(bars, "BUY"))
+
+    def test_close_inside_range_is_not_breakout(self):
+        bars = history(20)
+        for candle in bars[:15]:
+            candle.high = candle.low = candle.close = 100.0
+        for candle in bars[15:]:
+            candle.high = candle.low = candle.close = 100.05
+        self.assertFalse(five_minute_breakout(bars, "BUY"))
+
+    def test_downside_breakout_is_confirmed(self):
+        bars = history(20)
+        for candle in bars[:15]:
+            candle.high = candle.low = candle.close = 100.0
+        for candle in bars[15:]:
+            candle.high = candle.low = candle.close = 98.8
+        self.assertTrue(five_minute_breakout(bars, "SELL"))
+
+    def test_missing_minute_prevents_breakout_confirmation(self):
+        bars = history(20)
+        bars = [c for c in bars if c.timestamp != datetime(2026, 10, 16, 9, 21)]
+        self.assertFalse(five_minute_breakout(bars, "BUY"))
+
     def test_warmup_is_blocked(self):
         result = evaluate(history(19), session_date=datetime(2026, 10, 16).date())
         self.assertEqual(result["reason"], "WARMUP")
