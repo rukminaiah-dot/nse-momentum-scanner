@@ -41,6 +41,8 @@ class ReversalEvidenceUiTests(unittest.TestCase):
         self.assertIn("historical", dashboard)
         self.assertNotIn("BOTTOM REVERSAL WATCH", dashboard)
         self.assertNotIn("500-point move", dashboard)
+        self.assertIn("WAITING FOR CANDLES", dashboard)
+        self.assertIn("FEED UNAVAILABLE", dashboard)
         self.assertIn("/api/v2/index-trend-changes", self.html)
 
     def test_timestamped_news_is_related_to_the_verified_short_term_trend(self):
