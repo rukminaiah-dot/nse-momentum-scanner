@@ -20,7 +20,7 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIsNotNone(load)
         self.assertRegex(load.group(1), r"const boardPromise=get\(corePaths\[1\]\)")
         self.assertIsNotNone(re.search(
-            r"boardPromise\.then\(value=>\{.*?state\.board=.*?renderBoard\(\);",
+            r"const boardPromise=get\(corePaths\[1\]\)\.then\(value=>\{.*?state\.board=.*?renderBoard\(\);",
             load.group(1), re.S,
         ))
         self.assertIn(
