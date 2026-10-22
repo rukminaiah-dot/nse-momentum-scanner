@@ -1,4 +1,4 @@
-package in.nsemomentum.paper
+package com.nsemomentum.paper
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
