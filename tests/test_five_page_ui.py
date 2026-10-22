@@ -196,6 +196,17 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn('id="browse-scorecard"', self.html)
         self.assertIn("$('browse-scorecard').onclick=()=>showPage('board')", self.html)
 
+    def test_nse200_search_matches_company_names_and_exposes_favourite_action(self):
+        self.assertIn('placeholder="Search symbol or company (e.g. ICICI Bank)"', self.html)
+        self.assertIn('id="board-search-status"', self.html)
+        self.assertIn("symbol.includes(q)||q.includes(symbol)", self.html)
+        self.assertIn("aria-pressed=\"'+String(fav.includes(x.symbol))+'\"", self.html)
+        helper = re.search(r"function normalizeBoardSearch\\(value\\)\\{[^}]+\\}", self.html)
+        self.assertIsNotNone(helper, "Search text normalization helper is missing")
+        script = helper.group(0) + "\\nif(normalizeBoardSearch('Icici bank')!=='ICICIBANK') process.exit(1);"
+        result = subprocess.run(["node", "-e", script], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_mobile_favourites_and_limit(self):
         for required in ("board-mobile", "favourites-list", "fav-count",
                          "fav.length<20", "localStorage.setItem('nse-favourites-v1'"):
