@@ -43,7 +43,7 @@ def screen_universe(stock_bars, historical_volume_bars, *, now,
         baseline = verified_15m_same_slot_average(
             latest, historical_volume_bars.get(symbol, ()))
         if baseline is None:
-            excluded[symbol] = "MISSING_VERIFIED_20_SESSION_VOLUME_BASELINE"
+            excluded[symbol] = "MISSING_VERIFIED_21_SESSION_VOLUME_BASELINE"
             continue
         rvol = current_volume / baseline
         if rvol < min_rvol:
@@ -55,7 +55,8 @@ def screen_universe(stock_bars, historical_volume_bars, *, now,
     for symbol, rvol, baseline, bars in selected:
         result = evaluate(bars, now=now,
                           same_slot_average_volume=baseline, settings=settings)
-        analyzed.append({"symbol": symbol, "relative_volume": round(rvol, 3),
+        analyzed.append({"symbol": symbol, "candle_time": latest["timestamp"].isoformat(),
+                         "relative_volume": round(rvol, 3),
                          "signal": result["signal"], "reason": result["reason"],
                          "details": result})
     return {"mode": "PAPER", "universe_count": len(stock_bars),
