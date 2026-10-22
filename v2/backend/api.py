@@ -69,31 +69,51 @@ def get_experimental_15m_index_trends():
 
 
 @app.get("/api/v2/experimental/15m-stock-screen")
-def get_experimental_15m_stock_screen():
-    """Return a read-only, paper-only NSE 200 15m volume screen."""
+def get_experimental_15m_stock_screen(symbols: str | None = None):
+    """Return the volume-first screen or selected-favourite 15m paper context."""
     import time
+    from fastapi import HTTPException
     from .experimental_15m_upstox_runner import run
 
-    cache = getattr(get_experimental_15m_stock_screen, "_cache", None)
-    cached_at = getattr(get_experimental_15m_stock_screen, "_cache_at", 0.0)
     now = time.monotonic()
-    if cache is not None and now - cached_at < 300:
-        return cache
+    requested = None
+    if symbols is not None:
+        requested = [part.strip().upper() for part in symbols.split(",") if part.strip()]
+        if (not 1 <= len(requested) <= 20
+                or len(set(requested)) != len(requested)
+                or any(symbol not in NIFTY_200 for symbol in requested)):
+            raise HTTPException(status_code=400, detail="Invalid favourite symbol list")
+        cache_key = tuple(requested)
+        cache = getattr(get_experimental_15m_stock_screen, "_favourite_cache", {})
+        cached = cache.get(cache_key)
+        if cached and now - cached[0] < 300:
+            return cached[1]
+    else:
+        cache = getattr(get_experimental_15m_stock_screen, "_cache", None)
+        cached_at = getattr(get_experimental_15m_stock_screen, "_cache_at", 0.0)
+        if cache is not None and now - cached_at < 300:
+            return cache
     try:
-        result = run(limit=200)
+        result = run(limit=len(requested) if requested else 200,
+                     symbols=requested)
     except Exception as exc:
         result = {
             "mode": "PAPER",
             "source": "UPSTOX_HISTORY_V3",
             "status": "UNAVAILABLE",
             "reason": type(exc).__name__,
-            "requested_count": 200,
+            "requested_count": len(requested) if requested else 200,
             "selected_count": 0,
             "selected": [],
+            "favorite_analysis": [],
             "fetch_errors": {},
         }
-    get_experimental_15m_stock_screen._cache = result
-    get_experimental_15m_stock_screen._cache_at = now
+    if requested:
+        cache[cache_key] = (now, result)
+        get_experimental_15m_stock_screen._favourite_cache = cache
+    else:
+        get_experimental_15m_stock_screen._cache = result
+        get_experimental_15m_stock_screen._cache_at = now
     return result
 
 
