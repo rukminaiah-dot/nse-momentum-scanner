@@ -7,10 +7,19 @@ import android.database.sqlite.SQLiteOpenHelper
 import java.time.LocalDate
 import java.time.ZoneId
 
-class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candles.db", null, 1) {
+class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candles.db", null, 2) {
     override fun onCreate(db: SQLiteDatabase) {
+        createCandles(db)
+        createHistoryAttempts(db)
+    }
+
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) createHistoryAttempts(db)
+    }
+
+    private fun createCandles(db: SQLiteDatabase) {
         db.execSQL(
-            """CREATE TABLE candles(
+            """CREATE TABLE IF NOT EXISTS candles(
                 symbol TEXT NOT NULL,
                 timestamp TEXT NOT NULL,
                 open REAL NOT NULL,
@@ -21,10 +30,17 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
                 PRIMARY KEY(symbol, timestamp)
             )"""
         )
-        db.execSQL("CREATE INDEX candle_symbol_time ON candles(symbol, timestamp)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS candle_symbol_time ON candles(symbol, timestamp)")
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    private fun createHistoryAttempts(db: SQLiteDatabase) {
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS history_attempts(
+                symbol TEXT NOT NULL PRIMARY KEY,
+                attempted_on TEXT NOT NULL
+            )"""
+        )
+    }
 
     fun save(symbol: String, bars: List<Candle>) {
         if (bars.isEmpty()) return
@@ -76,7 +92,27 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
         return dates.size >= 20
     }
 
+    fun historyAlreadyAttemptedToday(symbol: String, sessionDate: LocalDate): Boolean {
+        readableDatabase.query(
+            "history_attempts", arrayOf("attempted_on"), "symbol=?",
+            arrayOf(symbol), null, null, null
+        ).use { cursor ->
+            return cursor.moveToFirst() && cursor.getString(0) == sessionDate.toString()
+        }
+    }
+
+    fun markHistoryAttempted(symbol: String, sessionDate: LocalDate) {
+        val values = ContentValues().apply {
+            put("symbol", symbol)
+            put("attempted_on", sessionDate.toString())
+        }
+        writableDatabase.insertWithOnConflict(
+            "history_attempts", null, values, SQLiteDatabase.CONFLICT_REPLACE
+        )
+    }
+
     fun clearAll() {
         writableDatabase.delete("candles", null, null)
+        writableDatabase.delete("history_attempts", null, null)
     }
 }
