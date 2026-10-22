@@ -83,6 +83,10 @@ class UpstoxPaperScanner(private val database: CandleDatabase) {
         database.save(symbol, complete)
         val allBars = database.bars(symbol)
         val latest = allBars.lastOrNull() ?: return ScanRow(symbol, reason = "NO_CANDLES")
+        val age = java.time.Duration.between(latest.timestamp.plusSeconds(15 * 60), now).toMinutes()
+        if (age < 0 || age > 18) {
+            return ScanRow(symbol, latest.timestamp.toString(), reason = "STALE_OR_INCOMPLETE_15M_CANDLE")
+        }
         val baseline = PaperStrategy.sameSlotAverage(latest, allBars)
             ?: return ScanRow(symbol, latest.timestamp.toString(), reason = "NO_VERIFIED_20_SESSION_BASELINE")
         val rvol = PaperStrategy.relativeVolume(latest.volume, baseline)
@@ -138,16 +142,23 @@ class UpstoxPaperScanner(private val database: CandleDatabase) {
         val root = JSONObject(body)
         if (root.optString("status") != "success") throw IOException("UPSTOX_RESPONSE_ERROR")
         val candles = root.optJSONObject("data")?.optJSONArray("candles") ?: return emptyList()
-        return (0 until candles.length()).mapNotNull { index ->
-            runCatching {
-                val row = candles.getJSONArray(index)
+        val parsed = (0 until candles.length()).map { index ->
+            val row = candles.getJSONArray(index)
+            val bar = runCatching {
                 Candle(
                     timestamp = java.time.OffsetDateTime.parse(row.getString(0)).toInstant(),
                     open = row.getDouble(1), high = row.getDouble(2), low = row.getDouble(3),
                     close = row.getDouble(4), volume = row.getDouble(5)
                 )
-            }.getOrNull()
-        }.distinctBy { it.timestamp }.sortedBy { it.timestamp }
+            }.getOrElse { throw IOException("INVALID_CANDLE") }
+            if (listOf(bar.open, bar.high, bar.low, bar.close, bar.volume).any { !it.isFinite() } ||
+                bar.open <= 0 || bar.high < maxOf(bar.open, bar.close) ||
+                bar.low > minOf(bar.open, bar.close) || bar.high <= bar.low || bar.volume < 0
+            ) throw IOException("INVALID_CANDLE")
+            bar
+        }
+        if (parsed.map { it.timestamp }.toSet().size != parsed.size) throw IOException("DUPLICATE_CANDLE")
+        return parsed.sortedBy { it.timestamp }
     }
 
     private fun apiReason(error: Throwable): String = when (error.message) {
