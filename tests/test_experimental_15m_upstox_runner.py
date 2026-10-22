@@ -2,7 +2,7 @@
 import unittest
 from datetime import datetime, timedelta
 from types import SimpleNamespace
-from v2.backend.experimental_15m_upstox_runner import (fetch_symbol, run, previous_session_close, _call_with_retry)
+from v2.backend.experimental_15m_upstox_runner import (fetch_symbol, run, previous_session_close, _call_with_retry, _safe_error_label)
 
 
 class FakeApi:
@@ -69,6 +69,14 @@ class TestUpstoxPaperRunner(unittest.TestCase):
             _call_with_retry(request, sleep_fn=delays.append)
         self.assertEqual(len(attempts), 1)
         self.assertEqual(delays, [])
+
+    def test_error_label_only_exposes_safe_status_not_message(self):
+        class ApiException(Exception):
+            status = 401
+
+        exc = ApiException("Authorization: secret-value")
+        self.assertEqual(_safe_error_label(exc), "ApiException:401")
+        self.assertNotIn("secret-value", _safe_error_label(exc))
 
     def test_previous_close_uses_verified_final_15m_bar(self):
         history = [
