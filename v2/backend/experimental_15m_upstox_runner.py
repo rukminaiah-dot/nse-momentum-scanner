@@ -16,6 +16,8 @@ from .experimental_15m_pipeline import screen_universe
 from .stock_universe import NIFTY_200
 
 IST = ZoneInfo("Asia/Kolkata")
+_HISTORICAL_CACHE_DATE = None
+_HISTORICAL_CACHE = {}
 
 
 def _parse_rows(rows):
@@ -37,15 +39,20 @@ def _parse_rows(rows):
     return sorted(bars, key=lambda bar: bar["timestamp"])
 
 
-def fetch_symbol(api, key, *, now, lookback_days=90):
+def fetch_symbol(api, key, *, now, lookback_days=30, historical_cache=None):
     """Fetch 15m historical + current intraday bars for one instrument."""
     today = now.date()
     yesterday = today - timedelta(days=1)
     since = yesterday - timedelta(days=lookback_days)
-    historical = api.get_historical_candle_data1(
-        key, "minutes", "15", str(yesterday), str(since))
-    history = _parse_rows(historical.data.candles or [])
-    del historical
+    if historical_cache is not None and key in historical_cache:
+        history = historical_cache[key]
+    else:
+        historical = api.get_historical_candle_data1(
+            key, "minutes", "15", str(yesterday), str(since))
+        history = _parse_rows(historical.data.candles or [])
+        del historical
+        if historical_cache is not None and history:
+            historical_cache[key] = history
     intraday = api.get_intra_day_candle_data(key, "minutes", "15")
     current = _parse_rows(intraday.data.candles or [])
     del intraday
@@ -73,11 +80,15 @@ def run(*, limit=5, now=None, api=None):
         config = upstox_client.Configuration()
         config.access_token = token
         api = upstox_client.HistoryV3Api(upstox_client.ApiClient(config))
+    global _HISTORICAL_CACHE_DATE, _HISTORICAL_CACHE
+    if _HISTORICAL_CACHE_DATE != now.date():
+        _HISTORICAL_CACHE_DATE = now.date()
+        _HISTORICAL_CACHE = {}
     stock_bars, historical_bars, errors = {}, {}, {}
     for symbol, key in list(NIFTY_200.items())[:limit]:
         try:
             stock_bars[symbol], historical_bars[symbol] = fetch_symbol(
-                api, key, now=now)
+                api, key, now=now, historical_cache=_HISTORICAL_CACHE)
         except Exception as exc:
             errors[symbol] = type(exc).__name__
     result = screen_universe(stock_bars, historical_bars, now=now)
