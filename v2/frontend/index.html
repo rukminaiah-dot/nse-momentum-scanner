@@ -294,7 +294,7 @@ function renderFavourite15m(){
   const mobile='<article class="stock-tile"><div class="topline"><strong>'+esc(symbol)+'</strong>'+pill+'</div><div class="small muted">15-minute candle · '+candleTime+'</div><div class="small">O / H / L / C · '+ohlc+'</div><div class="small">RVOL · '+volume+' vs 20-session same-slot baseline</div><div class="small">EMA 20 / 50 · '+esc(ema)+'</div><div class="small">Stoch RSI K / D · '+esc(stoch)+'</div><div class="small muted">Reason · '+reason+'</div></article>';
   return {symbol,candle:candleTime+' · O/H/L/C '+ohlc,volume,ema,stoch,pill,reason,mobile};
  });
- host.innerHTML='<div class="desktop-stock-list">'+table(headers,display.map(x=>tr([esc(x.symbol),x.candle,x.volume,esc(x.ema),esc(x.stoch),x.pill,x.reason])).join(''))+'</div><div class="mobile-stock-list">'+display.map(x=>x.mobile).join('')+'</div>';
+ host.innerHTML='<div class="desktop-stock-list">'+table(headers,display.map(x=>tr([esc(x.symbol),x.candle,x.volume,esc(x.ema),esc(x.stoch),x.pill,x.reason])))+'</div><div class="mobile-stock-list">'+display.map(x=>x.mobile).join('')+'</div>';
 }
 function refreshFavourite15m(force=false){
  const symbols=getFavourites();
