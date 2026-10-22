@@ -7,7 +7,7 @@ from datetime import timedelta
 from math import isfinite
 
 
-def verified_15m_same_slot_average(current_bar, historical_bars, *, sessions=21):
+def verified_15m_same_slot_average(current_bar, historical_bars, *, sessions=20):
     if not isinstance(sessions, int) or isinstance(sessions, bool) or sessions < 1:
         raise ValueError("sessions must be a positive integer")
     try:
