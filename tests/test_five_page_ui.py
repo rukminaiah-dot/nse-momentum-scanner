@@ -675,6 +675,7 @@ class FivePageUiTests(unittest.TestCase):
             "/api/v2/quality-ratings": "https://nse-momentum-scanner-api.onrender.com/api/v2/quality-ratings",
             "/api/v2/nifty200-feed-health": "https://nse-momentum-scanner-api.onrender.com/api/v2/nifty200-feed-health",
             "/api/v2/experimental/15m-stock-screen": "https://nse-momentum-scanner-api.onrender.com/api/v2/experimental/15m-stock-screen",
+            "/api/v2/experimental/15m-index-trends": "https://nse-momentum-scanner-api.onrender.com/api/v2/experimental/15m-index-trends",
             "/api/v2/trades": "https://nse-momentum-scanner-api.onrender.com/api/v2/trades",
             "/api/v2/preview-status": "https://nse-momentum-scanner-api.onrender.com/api/v2/nifty200-feed-health",
             "/api/v2/premarket-data": "https://nse-momentum-scanner-api.onrender.com/api/v2/premarket-data",
