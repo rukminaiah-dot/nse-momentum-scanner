@@ -1181,59 +1181,8 @@ def nifty200_stock_board():
         nifty200_stock_board._quote_cache = (quotes, quote_source, quote_error)
         nifty200_stock_board._quote_cache_at = monotonic_now
 
-    def quote_for(symbol, instrument_key):
-        expected = instrument_key.replace("|", ":").casefold()
-        direct = quotes.get(expected)
-        if isinstance(direct, dict):
-            return direct
-        for response_key, value in quotes.items():
-            if (isinstance(response_key, str) and isinstance(value, dict)
-                    and response_key.split(":", 1)[-1].casefold() == symbol.casefold()):
-                return value
-        return None
-
-    def quote_fields(symbol, instrument_key):
-        quote = quote_for(symbol, instrument_key)
-        if not quote:
-            return {"daily_change_pct": None, "previous_close": None,
-                    "quote_price": None, "quote_time_ist": None,
-                    "change_status": "UNAVAILABLE" if quote_error else "NO_QUOTE"}
-        try:
-            price = float(quote["last_price"])
-            previous_close = quote.get("prev_close_price")
-            if previous_close is None and quote.get("net_change") is not None:
-                previous_close = price - float(quote["net_change"])
-            previous_close = float(previous_close)
-            if not (price > 0 and previous_close > 0):
-                raise ValueError("Invalid quote prices")
-            raw_time = quote.get("last_trade_time") or quote.get("timestamp")
-            if raw_time is None:
-                raise ValueError("Missing quote timestamp")
-            if isinstance(raw_time, (int, float)) or str(raw_time).isdigit():
-                timestamp = float(raw_time)
-                if timestamp > 100000000000:
-                    timestamp /= 1000.0
-                traded_at = datetime.fromtimestamp(timestamp, timezone.utc)
-            else:
-                traded_at = datetime.fromisoformat(str(raw_time).replace("Z", "+00:00"))
-                if traded_at.tzinfo is None:
-                    raise ValueError("Naive quote timestamp")
-                traded_at = traded_at.astimezone(timezone.utc)
-            age_seconds = (datetime.now(timezone.utc) - traded_at).total_seconds()
-            quote_time_ist = traded_at.astimezone(ZoneInfo("Asia/Kolkata")).isoformat()
-            freshness_limit = 900 if open_now else 36 * 60 * 60
-            if age_seconds < -120 or age_seconds > freshness_limit:
-                return {"daily_change_pct": None, "previous_close": previous_close,
-                        "quote_price": price, "quote_time_ist": quote_time_ist,
-                        "change_status": "STALE"}
-            status = "CURRENT" if open_now else "LAST_SESSION"
-            return {"daily_change_pct": (price - previous_close) / previous_close * 100,
-                    "previous_close": previous_close, "quote_price": price,
-                    "quote_time_ist": quote_time_ist, "change_status": status}
-        except (KeyError, TypeError, ValueError, OverflowError, OSError):
-            return {"daily_change_pct": None, "previous_close": None,
-                    "quote_price": None, "quote_time_ist": None,
-                    "change_status": "INVALID_QUOTE"}
+    from .nifty200_quotes import quote_change_fields
+    quote_now_utc = datetime.now(timezone.utc)
 
     stocks = []
     for symbol in sorted(NIFTY_200):
@@ -1251,7 +1200,7 @@ def nifty200_stock_board():
             "data_status": "LIVE_FRESH" if fresh else ("HISTORICAL" if row else "AWAITING_DATA"),
             "signal": row.get("signal") if fresh else None,
             "historical_signal": row.get("signal") if row and not fresh else None,
-            **quote_fields(symbol, NIFTY_200[symbol]),
+            **quote_change_fields(symbol, NIFTY_200[symbol], quotes, quote_error, open_now, now_utc=quote_now_utc),
         })
     return {"status": error or ("MARKET_OPEN" if open_now else "MARKET_CLOSED"),
             "as_of_ist": now_dt.isoformat(), "universe_size": len(stocks),
