@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 from v2.backend.experimental_15m_index_trend import (
-    INDEX_INSTRUMENTS, _parse_rows, evaluate_index, run,
+    INDEX_INSTRUMENTS, _paper_signal, _parse_rows, evaluate_index, run,
 )
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -45,6 +45,39 @@ class FakeApi:
 
 
 class ExperimentalIndexTrendTests(unittest.TestCase):
+    def test_standard_bullish_oversold_cross_returns_paper_buy(self):
+        signal = _paper_signal(
+            ema20=110, ema50=100, sma21=100,
+            k_previous=10, d_previous=15, k_current=18, d_current=16,
+            candle={"open": 105, "high": 110, "low": 104, "close": 109.8},
+            previous_bars=[{"high": 108, "low": 103},
+                           {"high": 109, "low": 104},
+                           {"high": 107, "low": 102}],
+        )
+        self.assertEqual(signal, "PAPER_BUY")
+
+    def test_standard_bearish_overbought_cross_returns_paper_sell(self):
+        signal = _paper_signal(
+            ema20=90, ema50=100, sma21=100,
+            k_previous=90, d_previous=85, k_current=82, d_current=84,
+            candle={"open": 105, "high": 106, "low": 100, "close": 100.1},
+            previous_bars=[{"high": 108, "low": 102},
+                           {"high": 109, "low": 101},
+                           {"high": 107, "low": 103}],
+        )
+        self.assertEqual(signal, "PAPER_SELL")
+
+    def test_cross_outside_standard_stoch_rsi_zone_waits(self):
+        signal = _paper_signal(
+            ema20=110, ema50=100, sma21=100,
+            k_previous=25, d_previous=30, k_current=35, d_current=32,
+            candle={"open": 105, "high": 110, "low": 104, "close": 109.8},
+            previous_bars=[{"high": 108, "low": 103},
+                           {"high": 109, "low": 104},
+                           {"high": 107, "low": 102}],
+        )
+        self.assertEqual(signal, "WAIT")
+
     def test_parse_rows_rejects_naive_and_invalid_ohlc(self):
         rows = [
             ["2026-10-22T09:15:00+05:30", 100, 101, 99, 100.5, 0],
@@ -99,6 +132,8 @@ class ExperimentalIndexTrendTests(unittest.TestCase):
         for symbol, key in INDEX_INSTRUMENTS.items():
             self.assertIn((key, "minutes", "15"), api.intraday_calls)
         self.assertTrue(all(row["signal"] in {"WAIT", "PAPER_BUY", "PAPER_SELL"}
+                            for row in result["indices"]))
+        self.assertTrue(all(row.get("sma21_session_close") is not None
                             for row in result["indices"]))
         self.assertFalse(any("order" in name.lower() for name in dir(api)))
 
