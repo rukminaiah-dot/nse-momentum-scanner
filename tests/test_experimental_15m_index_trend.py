@@ -20,7 +20,7 @@ def history(days=21):
         day += timedelta(days=1)
     for n, session in enumerate(sessions):
         for slot in range(4):
-            stamp = session.replace(hour=9, minute=15 + 15 * slot)
+            stamp = session.replace(hour=9, minute=15) + timedelta(minutes=15 * slot)
             close = 100 + n * 0.2 + slot * 0.03
             rows.append({"timestamp": stamp, "open": close - .05,
                          "high": close + .1, "low": close - .1,
