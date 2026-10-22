@@ -69,36 +69,31 @@ def get_experimental_15m_index_trends():
 
 
 @app.get("/api/v2/experimental/15m-stock-screen")
-def get_experimental_15m_stock_screen(limit: int = 5):
+def get_experimental_15m_stock_screen():
     """Return a read-only, paper-only NSE 200 15m volume screen."""
     import time
-    from fastapi import HTTPException
     from .experimental_15m_upstox_runner import run
 
-    if limit not in (5, 20, 50, 200):
-        raise HTTPException(status_code=400, detail="limit must be 5, 20, 50, or 200")
-    cache = getattr(get_experimental_15m_stock_screen, "_cache", {})
-    cache_times = getattr(get_experimental_15m_stock_screen, "_cache_times", {})
+    cache = getattr(get_experimental_15m_stock_screen, "_cache", None)
+    cached_at = getattr(get_experimental_15m_stock_screen, "_cache_at", 0.0)
     now = time.monotonic()
-    if limit in cache and now - cache_times.get(limit, 0.0) < 300:
-        return cache[limit]
+    if cache is not None and now - cached_at < 300:
+        return cache
     try:
-        result = run(limit=limit)
+        result = run(limit=200)
     except Exception as exc:
         result = {
             "mode": "PAPER",
             "source": "UPSTOX_HISTORY_V3",
             "status": "UNAVAILABLE",
             "reason": type(exc).__name__,
-            "requested_count": limit,
+            "requested_count": 200,
             "selected_count": 0,
             "selected": [],
             "fetch_errors": {},
         }
-    cache[limit] = result
-    cache_times[limit] = now
-    get_experimental_15m_stock_screen._cache = cache
-    get_experimental_15m_stock_screen._cache_times = cache_times
+    get_experimental_15m_stock_screen._cache = result
+    get_experimental_15m_stock_screen._cache_at = now
     return result
 
 
