@@ -42,7 +42,7 @@ class FivePageUiTests(unittest.TestCase):
         self.assertLess(self.html.index('id="board-mobile"'), self.html.index('id="favourites-list"'))
         self.assertLess(self.html.index('id="board-table"'), self.html.index('id="favourites-list"'))
         self.assertIn("$('filter').oninput=renderBoard", self.html)
-        self.assertIn('placeholder="Search NSE symbol (e.g. ICICIBANK)"', self.html)
+        self.assertIn('placeholder="Search symbol or company (e.g. ICICI Bank)"', self.html)
 
     def test_favourite_change_during_fetch_reloads_latest_selection(self):
         self.assertIn("favourite15mRequestedSymbols", self.html)
