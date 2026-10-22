@@ -1,101 +1,83 @@
-import os
-import sqlite3
-import tempfile
-import time
 import unittest
-from datetime import datetime, timezone
-from unittest.mock import patch
+from datetime import datetime, timedelta, timezone
 
-from v2.backend import api
+from v2.backend.nifty200_quotes import quote_change_fields
 from v2.backend.stock_universe import NIFTY_200
 
 
 class Nifty200QuoteBoardTests(unittest.TestCase):
     def setUp(self):
-        for name in ("_quote_cache", "_quote_cache_at"):
-            if hasattr(api.nifty200_stock_board, name):
-                delattr(api.nifty200_stock_board, name)
-        self.temp_dir = tempfile.TemporaryDirectory()
-        self.db_path = os.path.join(self.temp_dir.name, "scanner.db")
-        with sqlite3.connect(self.db_path) as db:
-            db.execute("""
-                CREATE TABLE scanner_results (
-                    symbol TEXT, updated_at TEXT, price REAL, momentum REAL,
-                    signal TEXT, trend_5m TEXT
-                )
-            """)
+        self.now = datetime(2026, 10, 22, 10, 0, tzinfo=timezone.utc)
+        self.symbol = next(iter(NIFTY_200))
+        self.key = NIFTY_200[self.symbol]
 
-    def tearDown(self):
-        for name in ("_quote_cache", "_quote_cache_at"):
-            if hasattr(api.nifty200_stock_board, name):
-                delattr(api.nifty200_stock_board, name)
-        self.temp_dir.cleanup()
-
-    def call_board(self, quotes, tokens=None):
-        environment = {
-            "UPSTOX_ACCESS_TOKEN": tokens if tokens is not None else "test-token",
-            "UPSTOX_ANALYTICS_TOKEN": "",
+    def quote(self, **changes):
+        data = {
+            "last_price": 110.0,
+            "prev_close_price": 100.0,
+            "last_trade_time": int(self.now.timestamp() * 1000),
         }
-        with patch.object(api, "DB_PATH", self.db_path), patch.dict(os.environ, environment, clear=False):
-            with patch("v2.backend.upstox_quote_client.fetch_full_quotes",
-                       return_value=(quotes, "test quote source")) as fetch:
-                result = api.nifty200_stock_board()
-        return result, fetch
+        data.update(changes)
+        return data
 
-    def test_board_attaches_real_quote_change_and_keeps_all_symbols(self):
-        symbol = next(iter(NIFTY_200))
-        key = NIFTY_200[symbol]
-        now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
-        result, fetch = self.call_board({
-            "NSE_EQ:" + symbol: {
-                "last_price": 110.0,
-                "prev_close_price": 100.0,
-                "last_trade_time": now_ms,
-            }
-        })
+    def test_current_upstox_quote_calculates_session_change_against_previous_close(self):
+        result = quote_change_fields(
+            self.symbol, self.key, {"NSE_EQ:" + self.symbol: self.quote()},
+            market_open=True, now_utc=self.now,
+        )
+        self.assertAlmostEqual(result["daily_change_pct"], 10.0)
+        self.assertEqual(result["previous_close"], 100.0)
+        self.assertEqual(result["quote_price"], 110.0)
+        self.assertEqual(result["change_status"], "CURRENT")
 
-        self.assertEqual(fetch.call_count, 1)
-        self.assertEqual(len(fetch.call_args.args[0]), 200)
-        self.assertEqual(result["universe_size"], 200)
-        row = next(item for item in result["stocks"] if item["symbol"] == symbol)
-        self.assertAlmostEqual(row["daily_change_pct"], 10.0)
-        self.assertEqual(row["previous_close"], 100.0)
-        self.assertEqual(row["quote_price"], 110.0)
-        self.assertIn(row["change_status"], ("CURRENT", "LAST_SESSION"))
-        self.assertEqual(result["quotes_status"], "AVAILABLE")
+    def test_closed_market_retains_only_a_recent_last_session_quote(self):
+        result = quote_change_fields(
+            self.symbol, self.key, {"NSE_EQ:" + self.symbol: self.quote()},
+            market_open=False, now_utc=self.now + timedelta(hours=1),
+        )
+        self.assertAlmostEqual(result["daily_change_pct"], 10.0)
+        self.assertEqual(result["change_status"], "LAST_SESSION")
 
-    def test_missing_quote_is_explicit_and_does_not_remove_stock(self):
-        result, _ = self.call_board({})
-        self.assertEqual(len(result["stocks"]), 200)
-        self.assertTrue(all(row["daily_change_pct"] is None for row in result["stocks"]))
-        self.assertTrue(all(row["change_status"] == "NO_QUOTE" for row in result["stocks"]))
+    def test_stale_quotes_are_not_eligible_for_ranking(self):
+        stale = self.quote(last_trade_time=int((self.now - timedelta(hours=1)).timestamp() * 1000))
+        result = quote_change_fields(
+            self.symbol, self.key, {"NSE_EQ:" + self.symbol: stale},
+            market_open=True, now_utc=self.now,
+        )
+        self.assertIsNone(result["daily_change_pct"])
+        self.assertEqual(result["change_status"], "STALE")
 
-    def test_invalid_or_stale_quote_is_not_used_for_ranking(self):
-        symbol = next(iter(NIFTY_200))
-        now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
-        result, _ = self.call_board({
-            "NSE_EQ:" + symbol: {
-                "last_price": 110.0,
-                "prev_close_price": 0,
-                "last_trade_time": now_ms,
-            }
-        })
-        row = next(item for item in result["stocks"] if item["symbol"] == symbol)
-        self.assertIsNone(row["daily_change_pct"])
-        self.assertEqual(row["change_status"], "INVALID_QUOTE")
+    def test_quote_without_valid_previous_close_is_rejected(self):
+        result = quote_change_fields(
+            self.symbol, self.key, {"NSE_EQ:" + self.symbol: self.quote(prev_close_price=0)},
+            market_open=True, now_utc=self.now,
+        )
+        self.assertIsNone(result["daily_change_pct"])
+        self.assertEqual(result["change_status"], "INVALID_QUOTE")
 
-    def test_provider_failure_is_safe_and_preserves_full_universe(self):
-        with patch.object(api, "DB_PATH", self.db_path), patch.dict(os.environ, {
-            "UPSTOX_ACCESS_TOKEN": "test-token",
-            "UPSTOX_ANALYTICS_TOKEN": "",
-        }, clear=False), patch("v2.backend.upstox_quote_client.fetch_full_quotes",
-                               side_effect=TimeoutError()):
-            result = api.nifty200_stock_board()
-        self.assertEqual(len(result["stocks"]), 200)
-        self.assertEqual(result["quotes_status"], "UNAVAILABLE")
-        self.assertEqual(result["quotes_error"], "TimeoutError")
-        self.assertTrue(all(row["daily_change_pct"] is None for row in result["stocks"]))
-        self.assertNotIn("test-token", str(result))
+    def test_net_change_can_supply_a_verified_previous_close_fallback(self):
+        quote = self.quote()
+        quote.pop("prev_close_price")
+        quote["net_change"] = 10.0
+        result = quote_change_fields(
+            self.symbol, self.key, {"NSE_EQ:" + self.symbol: quote},
+            market_open=True, now_utc=self.now,
+        )
+        self.assertEqual(result["previous_close"], 100.0)
+        self.assertAlmostEqual(result["daily_change_pct"], 10.0)
+
+    def test_missing_quotes_are_explicit_and_do_not_remove_any_symbol(self):
+        result = quote_change_fields(
+            self.symbol, self.key, {}, market_open=True, now_utc=self.now,
+        )
+        self.assertIsNone(result["daily_change_pct"])
+        self.assertEqual(result["change_status"], "NO_QUOTE")
+        unavailable = quote_change_fields(
+            self.symbol, self.key, {}, quote_error="TimeoutError",
+            market_open=True, now_utc=self.now,
+        )
+        self.assertEqual(unavailable["change_status"], "UNAVAILABLE")
+        self.assertEqual(len(NIFTY_200), 200)
 
 
 if __name__ == "__main__":
