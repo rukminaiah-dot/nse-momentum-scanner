@@ -54,6 +54,16 @@ class Test15mPaperPipeline(unittest.TestCase):
         self.assertEqual(result["excluded"]["A"],
                          "MISSING_VERIFIED_20_SESSION_VOLUME_BASELINE")
 
+    def test_1_5x_qualifies_and_2x_is_strong_boundary(self):
+        for volume, tier in ((150, "QUALIFIED"), (200, "STRONG")):
+            with self.subTest(volume=volume):
+                bars = [dict(x) for x in self.bars]
+                bars[-1]["volume"] = volume
+                result = screen_universe({"A": bars}, {"A": self.history}, now=self.now)
+                self.assertEqual(result["selected_count"], 1)
+                self.assertEqual(result["selected"][0]["volume_tier"], tier)
+                self.assertEqual(result["strong_volume_count"], int(tier == "STRONG"))
+
     def test_rank_highest_volume_first(self):
         high = [dict(x) for x in self.bars]
         high[-1]["volume"] = 260
