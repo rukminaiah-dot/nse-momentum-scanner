@@ -3,6 +3,7 @@ import unittest
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 from v2.backend.experimental_15m_upstox_runner import (fetch_symbol, run, previous_session_close, _call_with_retry, _safe_error_label)
+from v2.backend.stock_universe import NIFTY_200
 
 
 class FakeApi:
@@ -115,6 +116,33 @@ class TestUpstoxPaperRunner(unittest.TestCase):
         self.assertEqual(quality["open_slot_sessions"], 20)
         self.assertTrue(quality["open_slot_baseline_verified"])
         self.assertEqual(quality["completed_intraday_candles"], 1)
+
+    def test_run_can_fetch_only_validated_favourite_symbols(self):
+        now = datetime(2026, 10, 21, 10, 8)
+        historical = []
+        day = now.date() - timedelta(days=30)
+        while len(historical) < 20:
+            if day.weekday() < 5:
+                historical.append(row(datetime.combine(day, datetime.min.time())
+                                      + timedelta(hours=9, minutes=45)))
+            day += timedelta(days=1)
+        api = FakeApi(historical, [
+            row(datetime(2026, 10, 21, 9, 30)),
+            row(datetime(2026, 10, 21, 9, 45)),
+        ])
+        result = run(limit=200, symbols=["RELIANCE"], now=now, api=api)
+        self.assertEqual(result["requested_count"], 1)
+        self.assertEqual(api.calls[0][1][0], NIFTY_200["RELIANCE"])
+        self.assertEqual([x["symbol"] for x in result["favorite_analysis"]], ["RELIANCE"])
+        self.assertEqual(result["favorite_analysis"][0]["status"], "LIVE_FRESH")
+        self.assertEqual(result["favorite_analysis"][0]["signal"], "WAIT")
+        self.assertEqual(result["favorite_analysis"][0]["reason"],
+                         "VOLUME_BELOW_THRESHOLD")
+
+    def test_run_rejects_unknown_favourite_symbol(self):
+        with self.assertRaises(ValueError):
+            run(symbols=["NOTANSESTOCK"], now=datetime(2026, 10, 21, 10, 8),
+                api=FakeApi([], []))
 
     def test_run_does_not_need_live_broker(self):
         now = datetime(2026, 10, 21, 10, 8)
