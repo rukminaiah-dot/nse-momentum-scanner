@@ -2,7 +2,7 @@
 import unittest
 from datetime import datetime, timedelta
 from types import SimpleNamespace
-from v2.backend.experimental_15m_upstox_runner import fetch_symbol, run, previous_session_close
+from v2.backend.experimental_15m_upstox_runner import (fetch_symbol, run, previous_session_close, _call_with_retry)
 
 
 class FakeApi:
@@ -36,8 +36,39 @@ class TestUpstoxPaperRunner(unittest.TestCase):
         self.assertEqual(bars[-1]["timestamp"].minute, 45)
         self.assertEqual(api.calls[0][1][1:3], ("minutes", "15"))
         self.assertEqual(api.calls[0][1][3], "2026-10-20")
-        self.assertEqual(api.calls[0][1][4], "2026-09-20")
+        self.assertEqual(api.calls[0][1][4], "2026-09-05")
         self.assertEqual(api.calls[1][1][1:3], ("minutes", "15"))
+
+    def test_retries_rate_limit_with_bounded_backoff_and_throttle(self):
+        class RateLimit(Exception):
+            status = 429
+
+        attempts, delays = [], []
+
+        def request():
+            attempts.append(1)
+            if len(attempts) == 1:
+                raise RateLimit()
+            return "ok"
+
+        self.assertEqual(_call_with_retry(request, sleep_fn=delays.append), "ok")
+        self.assertEqual(len(attempts), 2)
+        self.assertEqual(delays, [0.5, 0.12])
+
+    def test_does_not_retry_authentication_errors(self):
+        class Unauthorized(Exception):
+            status = 401
+
+        attempts, delays = [], []
+
+        def request():
+            attempts.append(1)
+            raise Unauthorized()
+
+        with self.assertRaises(Unauthorized):
+            _call_with_retry(request, sleep_fn=delays.append)
+        self.assertEqual(len(attempts), 1)
+        self.assertEqual(delays, [])
 
     def test_previous_close_uses_verified_final_15m_bar(self):
         history = [
