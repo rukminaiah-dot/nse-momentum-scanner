@@ -244,7 +244,8 @@ def _upstox_error_metadata(exc):
     payload = {}
     try:
         body = getattr(exc, "body", None)
-        payload = json.loads(body) if isinstance(body, str) else {}
+        body_text = body.decode("utf-8", "replace") if isinstance(body, bytes) else body
+        payload = json.loads(body_text) if isinstance(body_text, str) else {}
     except (TypeError, ValueError):
         payload = {}
     errors = payload.get("errors", []) if isinstance(payload, dict) else []
@@ -254,6 +255,8 @@ def _upstox_error_metadata(exc):
     message = first.get("message")
     if not message and isinstance(payload, dict):
         message = payload.get("message")
+    if not message:
+        message = body_text if isinstance(body_text, str) else None
     message = str(message or getattr(exc, "reason", "") or "").replace("\r", " ").replace("\n", " ")[:240]
     message = re.sub(r"(?i)bearer\s+\S+", "Bearer [redacted]", message)
     message = re.sub(r"(?i)(access[_ -]?token|authorization)\s*[:=]\s*[^,;\s]+", r"\1=[redacted]", message)
@@ -275,10 +278,12 @@ def run(*, now=None, api=None, lookback_days=90):
     from_date = (now.date() - timedelta(days=lookback_days + 1)).isoformat()
     results, errors = [], {}
     for symbol, key in INDEX_INSTRUMENTS.items():
+        stage = "historical"
         try:
             history = _historical_candles_in_bounded_windows(
                 api, key, from_date=datetime.fromisoformat(from_date),
                 to_date=datetime.fromisoformat(to_date))
+            stage = "intraday"
             intraday = api.get_intra_day_candle_data(key, "minutes", 15)
             current = _parse_rows(intraday.data.candles or [])
             complete = [bar for bar in current
@@ -288,8 +293,8 @@ def run(*, now=None, api=None, lookback_days=90):
         except Exception as exc:
             status, code, message = _upstox_error_metadata(exc)
             logger.warning(
-                "Upstox 15m index request failed symbol=%s type=%s status=%s code=%s message=%s",
-                symbol, type(exc).__name__, status, code, message,
+                "Upstox 15m index request failed symbol=%s stage=%s lookback_days=%s type=%s status=%s code=%s message=%s",
+                symbol, stage, lookback_days, type(exc).__name__, status, code, message,
             )
             errors[symbol] = type(exc).__name__
             results.append({"symbol": symbol, "mode": "PAPER", "signal": "WAIT",
