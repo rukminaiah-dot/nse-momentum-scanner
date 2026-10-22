@@ -15,6 +15,8 @@ class Settings:
     stoch_period: int = 14
     k_smooth: int = 3
     d_smooth: int = 3
+    oversold: float = 20.0
+    overbought: float = 80.0
     ema_fast: int = 20
     ema_slow: int = 50
     min_rvol: float = 1.5
@@ -119,8 +121,10 @@ def evaluate(bars, *, now, same_slot_average_volume, settings=Settings()):
         return wait("INSUFFICIENT_STOCH_RSI_HISTORY")
     # k and d arrays have different starting offsets, but their last two
     # observations refer to the same two most recent completed candles.
-    bullish_cross = k[-2] <= d[-2] and k[-1] > d[-1]
-    bearish_cross = k[-2] >= d[-2] and k[-1] < d[-1]
+    bullish_cross = (k[-2] <= d[-2] and k[-1] > d[-1]
+                     and k[-1] <= settings.oversold)
+    bearish_cross = (k[-2] >= d[-2] and k[-1] < d[-1]
+                     and k[-1] >= settings.overbought)
     prior = recent[-settings.breakout_bars - 1:-1]
     buy = (fast[-1] > slow[-1] and close > opn and
            close >= high - settings.close_edge_fraction * (high - low) and
