@@ -25,6 +25,13 @@ class Test15mPaperPipeline(unittest.TestCase):
         self.assertEqual(result["selected"][0]["relative_volume"], 1.8)
         self.assertEqual(result["selected"][0]["candle_time"], self.bars[-1]["timestamp"].isoformat())
 
+    def test_duplicate_candle_excluded(self):
+        bars = [dict(x) for x in self.bars]
+        bars.append(dict(bars[-1]))
+        result = screen_universe({"A": bars}, {"A": self.history}, now=self.now)
+        self.assertEqual(result["selected_count"], 0)
+        self.assertEqual(result["excluded"]["A"], "DUPLICATE_15M_CANDLE")
+
     def test_low_volume_excluded(self):
         bars = [dict(x) for x in self.bars]
         bars[-1]["volume"] = 120
