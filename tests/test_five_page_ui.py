@@ -19,10 +19,10 @@ class FivePageUiTests(unittest.TestCase):
         load = re.search(r"async function load\(\)\s*\{(.*?)\n\}", self.html, re.S)
         self.assertIsNotNone(load)
         self.assertRegex(load.group(1), r"const boardPromise=get\(corePaths\[1\]\)")
-        self.assertRegex(
-            load.group(1),
+        self.assertIsNotNone(re.search(
             r"boardPromise\.then\(value=>\{.*?state\.board=.*?renderBoard\(\);",
-        )
+            load.group(1), re.S,
+        ))
         self.assertIn(
             "Promise.all([boardPromise,Promise.allSettled(otherPaths.map(get))])",
             load.group(1),
@@ -241,8 +241,8 @@ class FivePageUiTests(unittest.TestCase):
             "'5m Score / last'",
             "'EMA20 / EMA50 · trend'",
             "'Stoch RSI K / D'",
-            "details.stoch_k",
-            "details.stoch_d",
+            "indicator.stoch_k",
+            "indicator.stoch_d",
             "HISTORICAL · ",
             "No live signal is assigned",
         ):
@@ -761,7 +761,9 @@ class FivePageUiTests(unittest.TestCase):
 
     def test_api_requests_time_out_instead_of_staying_on_loading_state(self):
         self.assertIn("new AbortController()", self.html)
-        self.assertIn("setTimeout(()=>controller.abort(),12000)", self.html)
+        self.assertIn("async function get(path,timeoutMs=12000)", self.html)
+        self.assertIn("setTimeout(()=>controller.abort(),timeoutMs)", self.html)
+        self.assertIn("get(path,30000)", self.html)
         self.assertIn("finally{clearTimeout(timer)}", self.html)
 
     def test_reversal_context_refresh_updates_the_dedicated_flow_card(self):
