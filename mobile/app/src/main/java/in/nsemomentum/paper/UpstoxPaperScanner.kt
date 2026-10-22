@@ -83,7 +83,7 @@ class UpstoxPaperScanner(private val database: CandleDatabase) {
         database.save(symbol, complete)
         val allBars = database.bars(symbol)
         val latest = allBars.lastOrNull() ?: return ScanRow(symbol, reason = "NO_CANDLES")
-        val age = java.time.Duration.between(latest.timestamp.plusSeconds(15 * 60), now).toMinutes()
+        val age = java.time.Duration.between(latest.timestamp.plusSeconds(15 * 60), now).seconds / 60.0
         if (age < 0 || age > 18) {
             return ScanRow(symbol, latest.timestamp.toString(), reason = "STALE_OR_INCOMPLETE_15M_CANDLE")
         }
