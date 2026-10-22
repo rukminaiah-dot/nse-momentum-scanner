@@ -61,7 +61,11 @@ jobs:
           errors = data.get("fetch_errors", {})
           print("Paper-only 15m data check")
           print("Requested:", requested, "Fetched:", fetched, "Fetch failures:", len(errors))
+          quality = data.get("data_quality", {})
           print("Selected:", data.get("selected_count", 0))
+          print("Historical candles:", sum(row.get("historical_candles", 0) for row in quality.values()))
+          print("Verified 20-session 09:15 baselines:", sum(row.get("open_slot_baseline_verified", False) for row in quality.values()))
+          print("Completed intraday candles:", sum(row.get("completed_intraday_candles", 0) for row in quality.values()))
           print("Exclusions:", dict(Counter(data.get("excluded", {}).values())))
           print("Fetch failure types:", dict(Counter(errors.values())))
           if fetched == 0:
