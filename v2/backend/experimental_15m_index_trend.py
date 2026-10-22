@@ -228,7 +228,7 @@ def _historical_candles_in_bounded_windows(api, key, *, from_date, to_date):
     while cursor <= to_date:
         window_end = min(to_date, cursor + timedelta(days=HISTORICAL_WINDOW_DAYS - 1))
         response = api.get_historical_candle_data1(
-            key, "minutes", "15", window_end.isoformat(), cursor.isoformat())
+            key, "minutes", 15, window_end.isoformat(), cursor.isoformat())
         rows.extend(response.data.candles or [])
         cursor = window_end + timedelta(days=1)
     return _parse_rows(rows)
@@ -253,7 +253,7 @@ def run(*, now=None, api=None, lookback_days=90):
             history = _historical_candles_in_bounded_windows(
                 api, key, from_date=datetime.fromisoformat(from_date),
                 to_date=datetime.fromisoformat(to_date))
-            intraday = api.get_intra_day_candle_data(key, "minutes", "15")
+            intraday = api.get_intra_day_candle_data(key, "minutes", 15)
             current = _parse_rows(intraday.data.candles or [])
             complete = [bar for bar in current
                         if bar["timestamp"].date() == now.date()
