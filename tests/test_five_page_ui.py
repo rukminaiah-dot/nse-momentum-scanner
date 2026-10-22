@@ -23,6 +23,12 @@ class FivePageUiTests(unittest.TestCase):
             r"updateSourceStatus\(\);\s*renderBoard\(\);\s*renderPre\(\);",
         )
 
+    def test_saved_favourites_have_separate_15m_readout(self):
+        self.assertIn("function refreshFavourite15m", self.html)
+        self.assertIn("favorite_analysis", self.html)
+        self.assertIn("Stoch RSI K / D", self.html)
+        self.assertIn("symbols='+encodeURIComponent(symbols.join(','))", self.html)
+
     def test_embedded_javascript_parses(self):
         node = shutil.which("node")
         self.assertIsNotNone(node, "Node.js is required for UI syntax validation")
