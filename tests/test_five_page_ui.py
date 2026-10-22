@@ -210,9 +210,10 @@ class FivePageUiTests(unittest.TestCase):
     def test_favourites_show_separate_15m_paper_indicators(self):
         for required in (
             'id="favourites-15m"',
+            '15m candle · O/H/L/C (IST)',
             '15-minute Favourite Signals',
             "'5m Score / last'",
-            "'15m EMA trend'",
+            "'EMA20 / EMA50 · trend'",
             "'Stoch RSI K / D'",
             "details.stoch_k",
             "details.stoch_d",
