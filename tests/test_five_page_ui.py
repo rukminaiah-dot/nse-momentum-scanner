@@ -201,9 +201,9 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn('id="board-search-status"', self.html)
         self.assertIn("symbol.includes(q)||q.includes(symbol)", self.html)
         self.assertIn("aria-pressed=\"'+String(fav.includes(x.symbol))+'\"", self.html)
-        helper = re.search(r"function normalizeBoardSearch\\(value\\)\\{[^}]+\\}", self.html)
+        helper = re.search(r"function normalizeBoardSearch\(value\)\{[^}]+\}", self.html)
         self.assertIsNotNone(helper, "Search text normalization helper is missing")
-        script = helper.group(0) + "\\nif(normalizeBoardSearch('Icici bank')!=='ICICIBANK') process.exit(1);"
+        script = helper.group(0) + "\nif(normalizeBoardSearch('Icici bank')!=='ICICIBANK') process.exit(1);"
         result = subprocess.run(["node", "-e", script], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
