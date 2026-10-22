@@ -38,6 +38,16 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("15-minute candle · '+candleTime", self.html)
         self.assertIn("symbols='+encodeURIComponent(symbols.join(','))", self.html)
 
+    def test_nse200_search_results_appear_before_favourites(self):
+        self.assertLess(self.html.index('id="board-mobile"'), self.html.index('id="favourites-list"'))
+        self.assertLess(self.html.index('id="board-table"'), self.html.index('id="favourites-list"'))
+        self.assertIn("$('filter').oninput=renderBoard", self.html)
+        self.assertIn('placeholder="Search NSE symbol (e.g. ICICIBANK)"', self.html)
+
+    def test_favourite_change_during_fetch_reloads_latest_selection(self):
+        self.assertIn("favourite15mRequestedSymbols", self.html)
+        self.assertIn("state.favourite15mRequestedSymbols!==getFavourites().join(',')", self.html)
+
     def test_embedded_javascript_parses(self):
         node = shutil.which("node")
         self.assertIsNotNone(node, "Node.js is required for UI syntax validation")
