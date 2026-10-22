@@ -36,7 +36,7 @@ class TestUpstoxPaperRunner(unittest.TestCase):
         self.assertEqual(bars[-1]["timestamp"].minute, 45)
         self.assertEqual(api.calls[0][1][1:3], ("minutes", "15"))
         self.assertEqual(api.calls[0][1][3], "2026-10-20")
-        self.assertEqual(api.calls[0][1][4], "2026-09-05")
+        self.assertEqual(api.calls[0][1][4], "2026-09-20")
         self.assertEqual(api.calls[1][1][1:3], ("minutes", "15"))
 
     def test_retries_rate_limit_with_bounded_backoff_and_throttle(self):
