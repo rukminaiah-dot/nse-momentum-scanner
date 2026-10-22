@@ -19,7 +19,7 @@ def history(days=21):
             sessions.append(day)
         day += timedelta(days=1)
     for n, session in enumerate(sessions):
-        for slot in range(4):
+        for slot in range(25):
             stamp = session.replace(hour=9, minute=15) + timedelta(minutes=15 * slot)
             close = 100 + n * 0.2 + slot * 0.03
             rows.append({"timestamp": stamp, "open": close - .05,
@@ -61,6 +61,14 @@ class ExperimentalIndexTrendTests(unittest.TestCase):
         result = evaluate_index("NIFTY 50", bars, now=now)
         self.assertEqual(result["signal"], "WAIT")
         self.assertEqual(result["reason"], "INSUFFICIENT_21_PRIOR_SESSIONS")
+
+    def test_partial_prior_session_does_not_count_toward_history(self):
+        bars = history(21)
+        bars.pop(0)
+        now = datetime(2026, 10, 22, 10, 15, tzinfo=IST)
+        result = evaluate_index("NIFTY 50", bars, now=now)
+        self.assertEqual(result["reason"], "INSUFFICIENT_21_PRIOR_SESSIONS")
+        self.assertEqual(result["prior_session_count"], 20)
 
     def test_requires_completed_current_session_candle(self):
         bars = history(21)
