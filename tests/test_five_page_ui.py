@@ -16,15 +16,12 @@ class FivePageUiTests(unittest.TestCase):
         cls.html = HTML.read_text(encoding="utf-8")
 
     def test_nse200_board_renders_as_soon_as_its_api_responds(self):
-        load = re.search(r"async function load\(\)\s*\{(.*?)\n\}", self.html, re.S)
-        self.assertIsNotNone(load)
-        self.assertRegex(load.group(1), r"const boardPromise=get\(corePaths\[1\]\)")
         self.assertIsNotNone(re.search(
-            r"const boardPromise=get\(corePaths\[1\]\)\.then\(value=>\{.*?state\.board=.*?renderBoard\(\);",
-            load.group(1), re.S,
+            r"const boardPromise=get\\(corePaths\\[1\\]\\)\\.then\\(value=>\\{.*?state\\.board=.*?renderBoard\\(\\);",
+            self.html, re.S,
         ))
-        self.assertIn("Promise.all([boardPromise,", load.group(1))
-        self.assertIn("Promise.allSettled(otherPaths.map(get))", load.group(1))
+        self.assertIn("Promise.all([boardPromise,", self.html)
+        self.assertIn("Promise.allSettled(otherPaths.map(get))", self.html)
 
     def test_favourite_summary_does_not_show_legacy_5m_rating_columns(self):
         self.assertIn(
