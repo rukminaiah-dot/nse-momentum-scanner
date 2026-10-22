@@ -45,6 +45,31 @@ class FakeApi:
 
 
 class ExperimentalIndexTrendTests(unittest.TestCase):
+
+    def test_upstox_error_metadata_logs_safe_provider_diagnostics(self):
+        from v2.backend.experimental_15m_index_trend import _upstox_error_metadata
+
+        class ApiException(Exception):
+            status = 400
+            body = '{"errors":[{"errorCode":"UDAPI100050","message":"invalid interval"}]}'
+
+        status, code, message = _upstox_error_metadata(ApiException())
+        self.assertEqual(status, 400)
+        self.assertEqual(code, "UDAPI100050")
+        self.assertEqual(message, "invalid interval")
+
+    def test_upstox_error_metadata_redacts_tokens(self):
+        from v2.backend.experimental_15m_index_trend import _upstox_error_metadata
+
+        class ApiException(Exception):
+            status = 401
+            body = '{"message":"Bearer secretvalue invalid"}'
+
+        status, code, message = _upstox_error_metadata(ApiException())
+        self.assertEqual(status, 401)
+        self.assertIsNone(code)
+        self.assertNotIn("secretvalue", message)
+
     def test_standard_bullish_oversold_cross_returns_paper_buy(self):
         signal = _paper_signal(
             ema20=110, ema50=100, sma21=100,
