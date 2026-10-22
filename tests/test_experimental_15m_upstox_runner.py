@@ -2,7 +2,7 @@
 import unittest
 from datetime import datetime, timedelta
 from types import SimpleNamespace
-from v2.backend.experimental_15m_upstox_runner import fetch_symbol, run
+from v2.backend.experimental_15m_upstox_runner import fetch_symbol, run, previous_session_close
 
 
 class FakeApi:
@@ -38,6 +38,15 @@ class TestUpstoxPaperRunner(unittest.TestCase):
         self.assertEqual(api.calls[0][1][3], "2026-10-20")
         self.assertEqual(api.calls[0][1][4], "2026-09-20")
         self.assertEqual(api.calls[1][1][1:3], ("minutes", "15"))
+
+    def test_previous_close_uses_verified_final_15m_bar(self):
+        history = [
+            {"timestamp": datetime(2026, 10, 20, 15, 0), "close": 100},
+            {"timestamp": datetime(2026, 10, 20, 15, 15), "close": 102},
+            {"timestamp": datetime(2026, 10, 21, 9, 15), "close": 103},
+        ]
+        self.assertEqual(previous_session_close(history, datetime(2026, 10, 21).date()), 102)
+        self.assertIsNone(previous_session_close(history[:1], datetime(2026, 10, 21).date()))
 
     def test_historical_candles_are_cached_within_scan_day(self):
         now = datetime(2026, 10, 21, 10, 8)
