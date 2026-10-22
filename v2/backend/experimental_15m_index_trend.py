@@ -218,6 +218,22 @@ def evaluate_index(symbol, bars, *, now, min_prior_sessions=REQUIRED_PRIOR_SESSI
     }
 
 
+HISTORICAL_WINDOW_DAYS = 28
+
+
+def _historical_candles_in_bounded_windows(api, key, *, from_date, to_date):
+    """Fetch V3 1–15m history in disjoint windows within its one-month limit."""
+    rows = []
+    cursor = from_date
+    while cursor <= to_date:
+        window_end = min(to_date, cursor + timedelta(days=HISTORICAL_WINDOW_DAYS - 1))
+        response = api.get_historical_candle_data1(
+            key, "minutes", "15", window_end.isoformat(), cursor.isoformat())
+        rows.extend(response.data.candles or [])
+        cursor = window_end + timedelta(days=1)
+    return _parse_rows(rows)
+
+
 def run(*, now=None, api=None, lookback_days=90):
     """Fetch read-only 15m index history and intraday data from Upstox V3."""
     now = now or datetime.now(IST)
@@ -234,9 +250,9 @@ def run(*, now=None, api=None, lookback_days=90):
     results, errors = [], {}
     for symbol, key in INDEX_INSTRUMENTS.items():
         try:
-            historical = api.get_historical_candle_data1(
-                key, "minutes", "15", to_date, from_date)
-            history = _parse_rows(historical.data.candles or [])
+            history = _historical_candles_in_bounded_windows(
+                api, key, from_date=datetime.fromisoformat(from_date),
+                to_date=datetime.fromisoformat(to_date))
             intraday = api.get_intra_day_candle_data(key, "minutes", "15")
             current = _parse_rows(intraday.data.candles or [])
             complete = [bar for bar in current
