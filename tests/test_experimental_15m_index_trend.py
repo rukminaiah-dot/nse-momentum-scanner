@@ -58,7 +58,7 @@ class ExperimentalIndexTrendTests(unittest.TestCase):
 
     def test_standard_bearish_overbought_cross_returns_paper_sell(self):
         signal = _paper_signal(
-            ema20=90, ema50=100, sma21=100,
+            ema20=90, ema50=100, sma21=101,
             k_previous=90, d_previous=85, k_current=82, d_current=84,
             candle={"open": 105, "high": 106, "low": 100, "close": 100.1},
             previous_bars=[{"high": 108, "low": 102},
