@@ -207,6 +207,21 @@ class FivePageUiTests(unittest.TestCase):
         result = subprocess.run(["node", "-e", script], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_favourites_show_separate_15m_paper_indicators(self):
+        for required in (
+            'id="favourites-15m"',
+            '15m candle · O/H/L/C (IST)',
+            '15-minute Favourite Signals',
+            "'5m Score / last'",
+            "'EMA20 / EMA50 · trend'",
+            "'Stoch RSI K / D'",
+            "details.stoch_k",
+            "details.stoch_d",
+            "HISTORICAL · ",
+            "No live signal is assigned",
+        ):
+            self.assertIn(required, self.html)
+
     def test_mobile_favourites_and_limit(self):
         for required in ("board-mobile", "favourites-list", "fav-count",
                          "fav.length<20", "localStorage.setItem('nse-favourites-v1'"):

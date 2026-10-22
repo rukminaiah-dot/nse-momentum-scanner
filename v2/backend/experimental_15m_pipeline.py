@@ -59,7 +59,17 @@ def screen_universe(stock_bars, historical_volume_bars, *, now,
     for symbol, rvol, baseline, bars in selected:
         result = evaluate(bars, now=now,
                           same_slot_average_volume=baseline, settings=settings)
-        analyzed.append({"symbol": symbol, "candle_time": bars[-1]["timestamp"].isoformat(),
+        latest = bars[-1]
+        candle = {}
+        for field in ("open", "high", "low", "close", "volume"):
+            try:
+                value = float(latest[field])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if isfinite(value):
+                candle[field] = round(value, 4)
+        analyzed.append({"symbol": symbol, "candle_time": latest["timestamp"].isoformat(),
+                         "candle": candle,
                          "relative_volume": round(rvol, 3),
                          "volume_tier": "STRONG" if rvol >= 2.0 else "QUALIFIED",
                          "signal": result["signal"], "reason": result["reason"],
