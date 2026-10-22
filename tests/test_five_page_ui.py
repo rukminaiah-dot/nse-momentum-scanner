@@ -649,6 +649,14 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("broker orders disabled.", self.html)
         self.assertIn("300 points is an example, not a fixed threshold", self.html)
 
+    def test_premarket_distinguishes_live_index_bias_from_partial_reversal_check(self):
+        self.assertIn('id="pm-page-title">Market Context &amp; Direction</h1>', self.html)
+        self.assertIn("live index bias uses index EMA and momentum only", self.html)
+        self.assertIn("separate from the Trend Reversal rules check below", self.html)
+        self.assertIn("LIVE INDEX BIAS", self.html)
+        self.assertIn("unavailable?'NO DATA'", self.html)
+        self.assertIn("No live signal is assigned", self.html)
+
     def test_experimental_prediction_uses_only_fresh_aligned_index_evidence(self):
         self.assertIn('id="ai-prediction-panel"', self.html)
         self.assertIn('id="ai-prediction-status"', self.html)
