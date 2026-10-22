@@ -16,7 +16,7 @@ class FivePageUiTests(unittest.TestCase):
         cls.html = HTML.read_text(encoding="utf-8")
 
     def test_nse200_board_renders_before_auxiliary_panels(self):
-        load = re.search(r"async function load\(\) \{(.*?)\n\}", self.html, re.S)
+        load = re.search(r"async function load\(\)\s*\{(.*?)\n\}", self.html, re.S)
         self.assertIsNotNone(load)
         self.assertRegex(
             load.group(1),
