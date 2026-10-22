@@ -10,6 +10,10 @@
       "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/experimental/15m-stock-screen"
     },
     {
+      "source": "/api/v2/experimental/15m-index-trends",
+      "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/experimental/15m-index-trends"
+    },
+    {
       "source": "/api/v2/nifty200-feed-health",
       "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/nifty200-feed-health"
     },
