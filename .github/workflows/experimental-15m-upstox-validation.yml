@@ -1,0 +1,64 @@
+name: Experimental 15m Read-Only Upstox Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: 'Number of NSE symbols (1-200); start with 5'
+        required: true
+        default: '5'
+        type: choice
+        options: ['5', '20', '50', '200']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: experimental-15m-upstox-validation
+  cancel-in-progress: false
+
+jobs:
+  paper-market-data-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      UPSTOX_ACCESS_TOKEN: ${{ secrets.UPSTOX_ACCESS_TOKEN }}
+      SYMBOL_LIMIT: ${{ inputs.limit }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install read-only data dependency
+        run: pip install upstox-python-sdk
+      - name: Require configured secret
+        run: |
+          if [ -z "$UPSTOX_ACCESS_TOKEN" ]; then
+            echo "::error::UPSTOX_ACCESS_TOKEN secret not available to this workflow"
+            exit 1
+          fi
+      - name: Validate Upstox 15m data without orders
+        shell: bash
+        run: |
+          python -m v2.backend.experimental_15m_upstox_runner --limit "$SYMBOL_LIMIT" > /tmp/15m-paper-results.json
+          python - <<'PY'
+          import json
+          from collections import Counter
+          with open("/tmp/15m-paper-results.json") as handle:
+              data = json.load(handle)
+          if data.get("mode") != "PAPER":
+              raise SystemExit("Unexpected execution mode")
+          requested = data.get("requested_count", 0)
+          fetched = data.get("universe_count", 0)
+          errors = data.get("fetch_errors", {})
+          print("Paper-only 15m data check")
+          print("Requested:", requested, "Fetched:", fetched, "Fetch failures:", len(errors))
+          print("Selected:", data.get("selected_count", 0))
+          print("Exclusions:", dict(Counter(data.get("excluded", {}).values())))
+          print("Fetch failure types:", dict(Counter(errors.values())))
+          if fetched == 0:
+              raise SystemExit("No authenticated 15m market data retrieved")
+          if errors:
+              raise SystemExit("Some symbol fetches failed; review API limits/data availability")
+          PY
+          rm -f /tmp/15m-paper-results.json
