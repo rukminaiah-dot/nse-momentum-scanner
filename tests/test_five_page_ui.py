@@ -15,6 +15,14 @@ class FivePageUiTests(unittest.TestCase):
     def setUpClass(cls):
         cls.html = HTML.read_text(encoding="utf-8")
 
+    def test_nse200_board_renders_before_auxiliary_panels(self):
+        load = re.search(r"async function load\(\) \{(.*?)\n\}", self.html, re.S)
+        self.assertIsNotNone(load)
+        self.assertRegex(
+            load.group(1),
+            r"updateSourceStatus\(\);\s*renderBoard\(\);\s*renderPre\(\);",
+        )
+
     def test_embedded_javascript_parses(self):
         node = shutil.which("node")
         self.assertIsNotNone(node, "Node.js is required for UI syntax validation")
