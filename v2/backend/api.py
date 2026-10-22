@@ -68,6 +68,40 @@ def get_experimental_15m_index_trends():
     return result
 
 
+@app.get("/api/v2/experimental/15m-stock-screen")
+def get_experimental_15m_stock_screen(limit: int = 5):
+    """Return a read-only, paper-only NSE 200 15m volume screen."""
+    import time
+    from fastapi import HTTPException
+    from .experimental_15m_upstox_runner import run
+
+    if limit not in (5, 20, 50, 200):
+        raise HTTPException(status_code=400, detail="limit must be 5, 20, 50, or 200")
+    cache = getattr(get_experimental_15m_stock_screen, "_cache", {})
+    cache_times = getattr(get_experimental_15m_stock_screen, "_cache_times", {})
+    now = time.monotonic()
+    if limit in cache and now - cache_times.get(limit, 0.0) < 300:
+        return cache[limit]
+    try:
+        result = run(limit=limit)
+    except Exception as exc:
+        result = {
+            "mode": "PAPER",
+            "source": "UPSTOX_HISTORY_V3",
+            "status": "UNAVAILABLE",
+            "reason": type(exc).__name__,
+            "requested_count": limit,
+            "selected_count": 0,
+            "selected": [],
+            "fetch_errors": {},
+        }
+    cache[limit] = result
+    cache_times[limit] = now
+    get_experimental_15m_stock_screen._cache = cache
+    get_experimental_15m_stock_screen._cache_times = cache_times
+    return result
+
+
 @app.get("/api/v2/premarket-data")
 def get_premarket_data():
     """Read timestamped pre-market context; never emit execution signals."""
