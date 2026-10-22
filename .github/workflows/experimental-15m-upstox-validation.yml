@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      SYMBOL_LIMIT: ${{ inputs.limit || '20' }}
+      SYMBOL_LIMIT: ${{ inputs.limit || '50' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
