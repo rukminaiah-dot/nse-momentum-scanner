@@ -1,9 +1,9 @@
 name: Experimental 15m Read-Only Upstox Check
 
 on:
-  push:
+  pull_request:
     branches:
-      - experiment/15m-stoch-rsi-paper-signals
+      - main
     paths:
       - .github/workflows/experimental-15m-upstox-validation.yml
   workflow_dispatch:
@@ -27,7 +27,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      UPSTOX_ACCESS_TOKEN: ${{ secrets.UPSTOX_ACCESS_TOKEN }}
       SYMBOL_LIMIT: ${{ inputs.limit || '5' }}
     steps:
       - uses: actions/checkout@v4
@@ -37,6 +36,8 @@ jobs:
       - name: Install read-only data dependency
         run: pip install upstox-python-sdk
       - name: Require configured secret
+        env:
+          UPSTOX_ACCESS_TOKEN: ${{ secrets.UPSTOX_ACCESS_TOKEN }}
         run: |
           if [ -z "$UPSTOX_ACCESS_TOKEN" ]; then
             echo "::error::UPSTOX_ACCESS_TOKEN secret not available to this workflow"
@@ -44,6 +45,8 @@ jobs:
           fi
       - name: Validate Upstox 15m data without orders
         shell: bash
+        env:
+          UPSTOX_ACCESS_TOKEN: ${{ secrets.UPSTOX_ACCESS_TOKEN }}
         run: |
           python -m v2.backend.experimental_15m_upstox_runner --limit "$SYMBOL_LIMIT" > /tmp/15m-paper-results.json
           python - <<'PY'
