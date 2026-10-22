@@ -23,6 +23,9 @@ class Test15mPaperPipeline(unittest.TestCase):
         self.assertEqual(result["selected_count"], 1)
         self.assertEqual(result["selected"][0]["reason"], "INSUFFICIENT_15M_HISTORY")
         self.assertEqual(result["selected"][0]["relative_volume"], 1.8)
+        self.assertEqual(result["selected"][0]["candle"],
+                         {"open": 100.0, "high": 102.0, "low": 99.0,
+                          "close": 101.0, "volume": 180.0})
         self.assertEqual(result["selected"][0]["volume_tier"], "QUALIFIED")
         self.assertEqual(result["selected"][0]["candle_time"], self.bars[-1]["timestamp"].isoformat())
 
