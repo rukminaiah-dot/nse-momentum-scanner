@@ -1,4 +1,4 @@
-package in.nsemomentum.paper
+package com.nsemomentum.paper
 
 import java.time.Instant
 import java.time.ZoneId
