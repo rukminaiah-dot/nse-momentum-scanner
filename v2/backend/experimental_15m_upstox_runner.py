@@ -15,6 +15,7 @@ from math import isfinite
 from zoneinfo import ZoneInfo
 
 from .experimental_15m_pipeline import screen_universe
+from .experimental_15m_volume import verified_15m_same_slot_average
 from .stock_universe import NIFTY_200
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -152,7 +153,7 @@ def run(*, limit=5, now=None, api=None):
     if _HISTORICAL_CACHE_DATE != now.date():
         _HISTORICAL_CACHE_DATE = now.date()
         _HISTORICAL_CACHE = {}
-    stock_bars, historical_bars, errors, stock_context = {}, {}, {}, {}
+    stock_bars, historical_bars, errors, stock_context, data_quality = {}, {}, {}, {}, {}
     for symbol, key in list(NIFTY_200.items())[:limit]:
         try:
             stock_bars[symbol], historical_bars[symbol] = fetch_symbol(
@@ -174,15 +175,37 @@ def run(*, limit=5, now=None, api=None):
                 if daily_change_pct is not None and isfinite(daily_change_pct) else None,
                 "candle_time": latest["timestamp"].isoformat() if latest else None,
             }
+            history = historical_bars[symbol]
+            open_slot = datetime.combine(now.date(), datetime.min.time()) + timedelta(minutes=555)
+            open_slot_count = len({
+                bar["timestamp"].date() for bar in history
+                if bar["timestamp"].hour * 60 + bar["timestamp"].minute == 555
+                and bar["timestamp"].date() < now.date()
+            })
+            open_slot_baseline = verified_15m_same_slot_average(
+                {"timestamp": open_slot, "volume": 0}, history)
+            data_quality[symbol] = {
+                "historical_candles": len(history),
+                "historical_sessions": len({bar["timestamp"].date() for bar in history}),
+                "open_slot_sessions": open_slot_count,
+                "open_slot_baseline_verified": open_slot_baseline is not None,
+                "completed_intraday_candles": len(completed_today),
+            }
         except Exception as exc:
             errors[symbol] = _safe_error_label(exc)
             stock_context[symbol] = {
                 "symbol": symbol, "last_price": None, "previous_close": None,
                 "daily_change_pct": None, "candle_time": None,
             }
+            data_quality[symbol] = {
+                "historical_candles": 0, "historical_sessions": 0,
+                "open_slot_sessions": 0, "open_slot_baseline_verified": False,
+                "completed_intraday_candles": 0,
+            }
     result = screen_universe(stock_bars, historical_bars, now=now)
     result["fetch_errors"] = errors
     result["stock_context"] = stock_context
+    result["data_quality"] = data_quality
     result["requested_count"] = limit
     return result
 
