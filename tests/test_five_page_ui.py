@@ -15,13 +15,25 @@ class FivePageUiTests(unittest.TestCase):
     def setUpClass(cls):
         cls.html = HTML.read_text(encoding="utf-8")
 
-    def test_nse200_board_renders_before_auxiliary_panels(self):
+    def test_nse200_board_renders_as_soon_as_its_api_responds(self):
         load = re.search(r"async function load\(\)\s*\{(.*?)\n\}", self.html, re.S)
         self.assertIsNotNone(load)
+        self.assertRegex(load.group(1), r"const boardPromise=get\(corePaths\[1\]\)")
         self.assertRegex(
             load.group(1),
-            r"updateSourceStatus\(\);\s*renderBoard\(\);\s*renderPre\(\);",
+            r"boardPromise\.then\(value=>\{.*?state\.board=.*?renderBoard\(\);",
         )
+        self.assertIn(
+            "Promise.all([boardPromise,Promise.allSettled(otherPaths.map(get))])",
+            load.group(1),
+        )
+
+    def test_favourite_summary_does_not_show_legacy_5m_rating_columns(self):
+        self.assertIn(
+            "const favouriteHeaders=['Rank','Favourite','Stock','Session change %','Last price','Quote']",
+            self.html,
+        )
+        self.assertIn("15-minute candle, RVOL, EMA and Stoch RSI appear in the paper readout below.", self.html)
 
     def test_saved_favourites_have_separate_15m_readout(self):
         self.assertIn("function refreshFavourite15m", self.html)
