@@ -126,12 +126,14 @@ class ExperimentalIndexTrendTests(unittest.TestCase):
         api = FakeApi(historical_rows, current_rows)
         result = run(now=now, api=api, lookback_days=27)
         self.assertEqual(result["mode"], "PAPER")
+        self.assertTrue(all(call[2] == 15 and isinstance(call[2], int) for call in api.intraday_calls))
+        self.assertTrue(all(call[2] == 15 and isinstance(call[2], int) for call in api.historical_calls))
         self.assertEqual(len(result["indices"]), 3)
         self.assertEqual(len(api.historical_calls), 3)
         self.assertEqual(len(api.intraday_calls), 3)
         self.assertTrue(all((datetime.fromisoformat(call[3]) - datetime.fromisoformat(call[4])).days < 28 for call in api.historical_calls))
         for symbol, key in INDEX_INSTRUMENTS.items():
-            self.assertIn((key, "minutes", "15"), api.intraday_calls)
+            self.assertIn((key, "minutes", 15), api.intraday_calls)
         self.assertTrue(all(row["signal"] in {"WAIT", "PAPER_BUY", "PAPER_SELL"}
                             for row in result["indices"]))
         self.assertTrue(all(row.get("sma21_session_close") is not None
