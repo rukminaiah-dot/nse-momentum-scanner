@@ -139,6 +139,17 @@ def evaluate_index(symbol, bars, *, now, min_prior_sessions=REQUIRED_PRIOR_SESSI
         return wait("INSUFFICIENT_21_PRIOR_SESSIONS",
                     prior_session_count=len(prior_sessions),
                     required_prior_sessions=min_prior_sessions)
+    daily_closes = {}
+    for bar in ordered:
+        stamp = bar["timestamp"]
+        minute = stamp.hour * 60 + stamp.minute
+        if stamp.date() in prior_sessions and minute == 915:
+            daily_closes[stamp.date()] = bar["close"]
+    if len(daily_closes) < min_prior_sessions:
+        return wait("INSUFFICIENT_21_SESSION_CLOSES",
+                    prior_session_count=len(daily_closes),
+                    required_prior_sessions=min_prior_sessions)
+    sma21 = sum(daily_closes[day] for day in sorted(daily_closes)[-min_prior_sessions:]) / min_prior_sessions
     session = [bar for bar in ordered
                if bar["timestamp"].date() == today
                and 9 * 60 + 15 <= bar["timestamp"].hour * 60 + bar["timestamp"].minute <= 15 * 60 + 15
@@ -174,18 +185,18 @@ def evaluate_index(symbol, bars, *, now, min_prior_sessions=REQUIRED_PRIOR_SESSI
     bullish_cross = k[-2] <= d[-2] and k[-1] > d[-1] and k[-1] <= 20
     bearish_cross = k[-2] >= d[-2] and k[-1] < d[-1] and k[-1] >= 80
     prior = recent[-4:-1]
-    buy = (fast[-1] > slow[-1] and bullish_cross and close > opn
+    buy = (fast[-1] > slow[-1] and close > sma21 and bullish_cross and close > opn
            and body >= 0.5 and close >= high - 0.25 * (high - low)
            and close > max(bar["high"] for bar in prior))
-    sell = (fast[-1] < slow[-1] and bearish_cross and close < opn
+    sell = (fast[-1] < slow[-1] and close < sma21 and bearish_cross and close < opn
             and body >= 0.5 and close <= low + 0.25 * (high - low)
             and close < min(bar["low"] for bar in prior))
     signal = "PAPER_BUY" if buy else "PAPER_SELL" if sell else "WAIT"
     return {
         "symbol": symbol, "mode": "PAPER", "signal": signal,
         "data_status": "LIVE_FRESH", "last_candle_ist": latest["timestamp"].isoformat(),
-        "prior_session_count": len(prior_sessions), "ema20": round(fast[-1], 2),
-        "ema50": round(slow[-1], 2), "stoch_k": round(k[-1], 2),
+        "prior_session_count": len(prior_sessions), "sma21_session_close": round(sma21, 2),
+        "ema20": round(fast[-1], 2), "ema50": round(slow[-1], 2), "stoch_k": round(k[-1], 2),
         "stoch_d": round(d[-1], 2), "rvol": None,
         "reason": "STOCH_RSI_CROSS_AND_TREND_FILTERS_PASSED" if signal != "WAIT"
                   else "NO_QUALIFYING_15M_SHIFT",
