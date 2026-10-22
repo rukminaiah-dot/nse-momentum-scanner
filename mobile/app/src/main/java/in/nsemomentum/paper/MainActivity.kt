@@ -105,8 +105,12 @@ private fun PaperScannerApp() {
                     }
                     report = result
                     scanStatus = "Scan completed at ${result.scanTime} · ${result.failedRequests} feed errors"
-                } catch (_: Exception) {
-                    scanStatus = "Scan failed. Check internet, token, and Data health."
+                } catch (error: Exception) {
+                    scanStatus = when (error.message) {
+                        "UPSTOX_AUTH_REQUIRED" -> "Upstox rejected the token. Generate a fresh token and save it in Settings."
+                        "RATE_LIMITED" -> "Upstox rate limit reached. Wait before scanning again."
+                        else -> "Scan failed. Check internet and Data health; no signal is assigned."
+                    }
                 } finally {
                     scanning = false
                 }
