@@ -133,7 +133,10 @@ def evaluate(bars, *, now, same_slot_average_volume, settings=Settings()):
             close <= low + settings.close_edge_fraction * (high - low) and
             close < min(bar["low"] for bar in prior) and bearish_cross)
     signal = "PAPER_BUY" if buy else "PAPER_SELL" if sell else "WAIT"
+    ema20, ema50 = fast[-1], slow[-1]
+    trend = "BULLISH" if ema20 > ema50 else "BEARISH" if ema20 < ema50 else "NEUTRAL"
     return {"signal": signal, "mode": "PAPER", "rvol": round(rvol, 3),
             "stoch_k": round(k[-1], 2), "stoch_d": round(d[-1], 2),
+            "ema20": round(ema20, 4), "ema50": round(ema50, 4), "trend": trend,
             "targets_pct": [0.3, 0.5, 0.75, 1.0] if buy or sell else [],
             "reason": "15M_FILTERS_PASSED" if buy or sell else "NO_QUALIFYING_SETUP"}
