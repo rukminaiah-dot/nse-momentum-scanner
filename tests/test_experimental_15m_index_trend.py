@@ -58,6 +58,18 @@ class ExperimentalIndexTrendTests(unittest.TestCase):
         self.assertEqual(code, "UDAPI100050")
         self.assertEqual(message, "invalid interval")
 
+    def test_upstox_error_metadata_reads_byte_response_body(self):
+        from v2.backend.experimental_15m_index_trend import _upstox_error_metadata
+
+        class ApiException(Exception):
+            status = 400
+            body = b'{"errors":[{"errorCode":"UDAPI100050","message":"invalid interval"}]}'
+
+        status, code, message = _upstox_error_metadata(ApiException())
+        self.assertEqual(status, 400)
+        self.assertEqual(code, "UDAPI100050")
+        self.assertEqual(message, "invalid interval")
+
     def test_upstox_error_metadata_redacts_tokens(self):
         from v2.backend.experimental_15m_index_trend import _upstox_error_metadata
 
