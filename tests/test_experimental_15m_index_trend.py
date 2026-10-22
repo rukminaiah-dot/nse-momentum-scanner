@@ -129,7 +129,7 @@ class ExperimentalIndexTrendTests(unittest.TestCase):
         self.assertEqual(len(result["indices"]), 3)
         self.assertEqual(len(api.historical_calls), 3)
         self.assertEqual(len(api.intraday_calls), 3)
-        self.assertTrue(all((datetime.fromisoformat(call[3]) - datetime.fromisoformat(call[4])).days < 28\n                            for call in api.historical_calls))
+        self.assertTrue(all((datetime.fromisoformat(call[3]) - datetime.fromisoformat(call[4])).days < 28 for call in api.historical_calls))
         for symbol, key in INDEX_INSTRUMENTS.items():
             self.assertIn((key, "minutes", "15"), api.intraday_calls)
         self.assertTrue(all(row["signal"] in {"WAIT", "PAPER_BUY", "PAPER_SELL"}
