@@ -723,6 +723,43 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn('media_type="application/javascript"', api_source)
 
 
+    def test_nse200_board_explains_verified_session_change_and_keeps_all_stocks(self):
+        for required in (
+            'id="board-change-status"',
+            "Ranked high to low by verified Upstox session change",
+            "All 200 configured stocks remain listed",
+            "change_status",
+            "CURRENT','LAST_SESSION",
+            "rows.sort(dailyChangeSort)",
+            "All '+state.board.length+' stocks remain listed",
+        ):
+            self.assertIn(required, self.html)
+
+    def test_nse200_mobile_rows_show_rank_change_price_and_quote_status(self):
+        for required in (
+            "stock-change-row",
+            "Session change",
+            "Previous close:",
+            "Quote time unavailable",
+            "const headers=['Rank','Favourite','Stock','Session change %'",
+            "const changeCount=state.board.filter(hasVerifiedDailyChange).length",
+        ):
+            self.assertIn(required, self.html)
+
+    def test_board_api_uses_read_only_upstox_quotes_for_change_percent(self):
+        api = (HTML.parents[1] / "backend" / "api.py").read_text(encoding="utf-8")
+        board = api[api.index('@app.get("/api/v2/nifty200-stock-board")'):api.index("\n\n@app.get(', api.index('@app.get("/api/v2/nifty200-stock-board")'))]
+        for required in (
+            "fetch_full_quotes(list(NIFTY_200.values()), tokens)",
+            '"prev_close_price"',
+            '"daily_change_pct": (price - previous_close) / previous_close * 100',
+            '"stocks_with_change_data"',
+            '"order_execution_enabled": False',
+            "change_status",
+        ):
+            self.assertIn(required, board)
+
+
 if __name__ == "__main__":
     unittest.main()
 
