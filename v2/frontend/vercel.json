@@ -2,8 +2,36 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
+      "source": "/api/v2/decision-learning",
+      "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/decision-learning"
+    },
+    {
+      "source": "/api/v2/experimental/15m-stock-screen",
+      "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/experimental/15m-stock-screen"
+    },
+    {
+      "source": "/api/v2/nifty200-feed-health",
+      "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/nifty200-feed-health"
+    },
+    {
+      "source": "/api/v2/nifty200-stock-board",
+      "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/nifty200-stock-board"
+    },
+    {
+      "source": "/api/v2/pnl-history",
+      "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/pnl-history"
+    },
+    {
       "source": "/api/v2/premarket-data",
       "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/premarket-data"
+    },
+    {
+      "source": "/api/v2/preview-status",
+      "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/nifty200-feed-health"
+    },
+    {
+      "source": "/api/v2/quality-ratings",
+      "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/quality-ratings"
     },
     {
       "source": "/api/v2/reversal-context",
@@ -14,6 +42,18 @@
       "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/scanner"
     },
     {
+      "source": "/api/v2/signal-activity",
+      "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/signal-activity"
+    },
+    {
+      "source": "/api/v2/stock-setup-backtest",
+      "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/stock-setup-backtest"
+    },
+    {
+      "source": "/api/v2/stock-setups",
+      "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/stock-setups"
+    },
+    {
       "source": "/api/v2/top-momentum-setups",
       "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/top-momentum-setups"
     },
@@ -22,44 +62,8 @@
       "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/top-volume-surge"
     },
     {
-      "source": "/api/v2/stock-setups",
-      "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/stock-setups"
-    },
-    {
-      "source": "/api/v2/stock-setup-backtest",
-      "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/stock-setup-backtest"
-    },
-    {
-      "source": "/api/v2/quality-ratings",
-      "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/quality-ratings"
-    },
-    {
-      "source": "/api/v2/nifty200-stock-board",
-      "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/nifty200-stock-board"
-    },
-    {
-      "source": "/api/v2/nifty200-feed-health",
-      "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/nifty200-feed-health"
-    },
-    {
       "source": "/api/v2/trades",
       "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/trades"
-    },
-    {
-      "source": "/api/v2/preview-status",
-      "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/nifty200-feed-health"
-    },
-    {
-      "source": "/api/v2/decision-learning",
-      "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/decision-learning"
-    },
-    {
-      "source": "/api/v2/pnl-history",
-      "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/pnl-history"
-    },
-    {
-      "source": "/api/v2/signal-activity",
-      "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/signal-activity"
     }
   ]
 }
