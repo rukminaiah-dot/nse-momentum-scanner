@@ -1,6 +1,11 @@
 name: Experimental 15m Read-Only Upstox Check
 
 on:
+  push:
+    branches:
+      - experiment/15m-stoch-rsi-paper-signals
+    paths:
+      - .github/workflows/experimental-15m-upstox-validation.yml
   workflow_dispatch:
     inputs:
       limit:
@@ -23,7 +28,7 @@ jobs:
     timeout-minutes: 25
     env:
       UPSTOX_ACCESS_TOKEN: ${{ secrets.UPSTOX_ACCESS_TOKEN }}
-      SYMBOL_LIMIT: ${{ inputs.limit }}
+      SYMBOL_LIMIT: ${{ inputs.limit || '5' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
