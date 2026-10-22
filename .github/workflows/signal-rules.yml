@@ -20,6 +20,7 @@ on:
       - 'tests/test_scanner_decision_safety_contract.py'
       - 'tests/test_stock_setup_rules.py'
       - 'tests/test_five_page_ui.py'
+      - 'tests/test_nifty200_quote_board.py'
       - '.github/workflows/signal-rules.yml'
   push:
     branches:
@@ -42,3 +43,4 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_scanner_decision_safety_contract.py' -v
       - run: python -m unittest discover -s tests -p 'test_stock_setup_rules.py' -v
       - run: python -m unittest discover -s tests -p 'test_five_page_ui.py' -v
+      - run: python -m unittest discover -s tests -p 'test_nifty200_quote_board.py' -v
