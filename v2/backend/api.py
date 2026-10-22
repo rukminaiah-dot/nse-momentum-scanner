@@ -110,6 +110,9 @@ def get_experimental_15m_stock_screen(symbols: str | None = None):
         }
     if requested:
         cache[cache_key] = (now, result)
+        while len(cache) > 32:
+            oldest_key = min(cache, key=lambda key: cache[key][0])
+            del cache[oldest_key]
         get_experimental_15m_stock_screen._favourite_cache = cache
     else:
         get_experimental_15m_stock_screen._cache = result
