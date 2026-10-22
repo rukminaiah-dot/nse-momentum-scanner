@@ -28,6 +28,10 @@ def screen_universe(stock_bars, historical_volume_bars, *, now,
             continue
         latest = bars[-1]
         try:
+            stamps = [bar["timestamp"] for bar in bars]
+            if len(set(stamps)) != len(stamps):
+                excluded[symbol] = "DUPLICATE_15M_CANDLE"
+                continue
             close_time = latest["timestamp"]
             age = (now - close_time).total_seconds() / 60 - 15
             if age < 0 or age > settings.max_age_minutes:
@@ -55,7 +59,7 @@ def screen_universe(stock_bars, historical_volume_bars, *, now,
     for symbol, rvol, baseline, bars in selected:
         result = evaluate(bars, now=now,
                           same_slot_average_volume=baseline, settings=settings)
-        analyzed.append({"symbol": symbol, "candle_time": latest["timestamp"].isoformat(),
+        analyzed.append({"symbol": symbol, "candle_time": bars[-1]["timestamp"].isoformat(),
                          "relative_volume": round(rvol, 3),
                          "signal": result["signal"], "reason": result["reason"],
                          "details": result})
