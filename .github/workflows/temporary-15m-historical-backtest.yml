@@ -1,0 +1,245 @@
+name: Temporary 15m NSE 200 Historical Walk-Forward
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/temporary-15m-historical-backtest.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: temporary-15m-historical-backtest
+  cancel-in-progress: false
+
+jobs:
+  historical-paper-backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install read-only data dependency
+        run: pip install upstox-python-sdk
+      - name: Require configured secret
+        env:
+          UPSTOX_ACCESS_TOKEN: ${{ secrets.UPSTOX_ACCESS_TOKEN }}
+        run: |
+          if [ -z "$UPSTOX_ACCESS_TOKEN" ]; then
+            echo "::error::UPSTOX_ACCESS_TOKEN secret not available"
+            exit 1
+          fi
+      - name: Fetch genuine candles and run walk-forward backtest
+        env:
+          UPSTOX_ACCESS_TOKEN: ${{ secrets.UPSTOX_ACCESS_TOKEN }}
+        run: |
+          python - <<'PY'
+          import csv, json, os, time
+          from collections import Counter
+          from datetime import date, datetime, timedelta
+          from math import isfinite
+          from zoneinfo import ZoneInfo
+
+          import upstox_client
+          from v2.backend.stock_universe import NIFTY_200
+          from v2.backend.experimental_15m_replay import replay_symbol
+          from v2.backend.experimental_15m_csv_backtest import aggregate_results
+          from v2.backend.experimental_15m_backtest import TARGETS
+
+          IST = ZoneInfo("Asia/Kolkata")
+          END = date.today() - timedelta(days=1)
+          START = END - timedelta(days=92)
+          CHUNK_DAYS = 28
+          NOTIONAL = 50000.0
+          SLIPPAGE_PCT = 0.05
+          brokerage = 2 * min(20.0, NOTIONAL * 0.001)
+          stt = NOTIONAL * 0.00025
+          exchange = 2 * NOTIONAL * 0.0000345
+          sebi = 2 * NOTIONAL * 0.000001
+          stamp = NOTIONAL * 0.00003
+          gst = 0.18 * (brokerage + exchange + sebi)
+          fee_pct = (brokerage + stt + exchange + sebi + stamp + gst) / NOTIONAL * 100
+          COST_PCT = round(fee_pct + SLIPPAGE_PCT, 4)
+
+          config = upstox_client.Configuration()
+          config.access_token = os.environ["UPSTOX_ACCESS_TOKEN"]
+          api = upstox_client.HistoryV3Api(upstox_client.ApiClient(config))
+
+          def fetch_chunk(key, to_day, from_day):
+              last_error = None
+              for attempt in range(3):
+                  try:
+                      response = api.get_historical_candle_data1(
+                          key, "minutes", "15", to_day.isoformat(), from_day.isoformat())
+                      time.sleep(0.12)
+                      return response.data.candles or []
+                  except Exception as exc:
+                      last_error = exc
+                      status = getattr(exc, "status", getattr(exc, "status_code", None))
+                      try:
+                          status = int(status)
+                      except (TypeError, ValueError):
+                          status = None
+                      retryable = status == 429 or (status is not None and status >= 500) or type(exc).__name__ in {
+                          "TimeoutError", "ConnectionError", "ReadTimeoutError",
+                          "ConnectTimeoutError", "ProtocolError", "MaxRetryError"}
+                      if not retryable or attempt == 2:
+                          break
+                      time.sleep(0.5 * (2 ** attempt))
+              label = type(last_error).__name__ if last_error is not None else "UnknownError"
+              status = getattr(last_error, "status", getattr(last_error, "status_code", None)) if last_error else None
+              return ("ERROR", label + (":" + str(status) if str(status).isdigit() else ""))
+
+          fetched = {}
+          fetch_errors = {}
+          invalid = Counter()
+          symbols = list(NIFTY_200.items())
+          for n, (symbol, key) in enumerate(symbols, 1):
+              by_stamp = {}
+              cursor = START
+              try:
+                  while cursor <= END:
+                      to_day = min(cursor + timedelta(days=CHUNK_DAYS - 1), END)
+                      rows = fetch_chunk(key, to_day, cursor)
+                      if isinstance(rows, tuple) and rows and rows[0] == "ERROR":
+                          raise RuntimeError(rows[1])
+                      for row in rows:
+                          try:
+                              stamp_value = datetime.fromisoformat(str(row[0]).replace("Z", "+00:00"))
+                              if stamp_value.tzinfo is None:
+                                  raise ValueError("naive timestamp")
+                              local = stamp_value.astimezone(IST).replace(tzinfo=None)
+                              if not (START <= local.date() <= END):
+                                  continue
+                              minute = local.hour * 60 + local.minute
+                              if not (555 <= minute < 930 and (minute - 555) % 15 == 0):
+                                  continue
+                              bar = {"timestamp": local, "open": float(row[1]), "high": float(row[2]),
+                                     "low": float(row[3]), "close": float(row[4]), "volume": float(row[5])}
+                              vals = [bar[k] for k in ("open", "high", "low", "close", "volume")]
+                              if not all(isfinite(v) for v in vals) or not (
+                                  bar["volume"] >= 0 and bar["low"] > 0 and
+                                  bar["low"] <= min(bar["open"], bar["close"]) <=
+                                  max(bar["open"], bar["close"]) <= bar["high"]):
+                                  invalid["INVALID_OHLCV"] += 1
+                                  continue
+                              if local in by_stamp:
+                                  raise ValueError("duplicate timestamp")
+                              by_stamp[local] = bar
+                          except (IndexError, TypeError, ValueError, AttributeError, OverflowError):
+                              invalid["INVALID_ROW"] += 1
+                      cursor = to_day + timedelta(days=1)
+                  if not by_stamp:
+                      raise ValueError("no candles")
+                  fetched[symbol] = sorted(by_stamp.values(), key=lambda x: x["timestamp"])
+              except Exception as exc:
+                  # Store only safe exception class text; never API response headers/body.
+                  label = str(exc) if type(exc) is RuntimeError else type(exc).__name__
+                  fetch_errors[symbol] = label[:80]
+              if n % 10 == 0:
+                  print("Fetched symbols:", n, "of", len(symbols),
+                        "| complete:", len(fetched), "| errors:", len(fetch_errors), flush=True)
+
+          session_presence = Counter()
+          per_symbol_sessions = {}
+          for symbol, bars in fetched.items():
+              counts = Counter(bar["timestamp"].date() for bar in bars)
+              per_symbol_sessions[symbol] = counts
+              session_presence.update(counts.keys())
+          expected_sessions = {
+              day for day, count in session_presence.items()
+              if count >= max(1, int(len(fetched) * 0.95))
+          }
+          if len(expected_sessions) < 40:
+              raise SystemExit("Insufficient multi-month session coverage")
+
+          complete = {}
+          coverage_exclusions = Counter()
+          for symbol, bars in fetched.items():
+              counts = per_symbol_sessions[symbol]
+              if set(counts) != expected_sessions:
+                  coverage_exclusions["SESSION_SET_MISMATCH"] += 1
+                  continue
+              if any(counts[day] != 25 for day in expected_sessions):
+                  coverage_exclusions["INCOMPLETE_SESSION"] += 1
+                  continue
+              complete[symbol] = bars
+
+          with open("/tmp/nse200_15m_3month.csv", "w", newline="", encoding="utf-8") as handle:
+              writer = csv.writer(handle)
+              writer.writerow(["symbol", "timestamp", "open", "high", "low", "close", "volume"])
+              for symbol in sorted(complete):
+                  for bar in complete[symbol]:
+                      writer.writerow([symbol, bar["timestamp"].replace(tzinfo=IST).isoformat(),
+                                       bar["open"], bar["high"], bar["low"], bar["close"], bar["volume"]])
+
+          results = []
+          per_stock = {}
+          replay_errors = Counter()
+          for n, symbol in enumerate(sorted(complete), 1):
+              try:
+                  result = replay_symbol(symbol, complete[symbol], cost_pct=COST_PCT,
+                                         stop_pct=0.5, max_holding_bars=8)
+                  results.append(result)
+                  per_stock[symbol] = result["summary"]
+              except Exception as exc:
+                  replay_errors[type(exc).__name__] += 1
+              if n % 10 == 0:
+                  print("Backtested symbols:", n, "of", len(complete), flush=True)
+
+          aggregate = aggregate_results(results)
+          output = {
+              "mode": "PAPER",
+              "source": "Upstox Historical Candle Data V3",
+              "start_date": START.isoformat(),
+              "end_date": END.isoformat(),
+              "expected_complete_sessions": len(expected_sessions),
+              "symbols_requested": len(symbols),
+              "symbols_fetched": len(fetched),
+              "symbols_complete": len(complete),
+              "symbols_backtested": len(results),
+              "fetch_errors": fetch_errors,
+              "coverage_exclusions": dict(coverage_exclusions),
+              "invalid_rows": dict(invalid),
+              "replay_errors": dict(replay_errors),
+              "assumptions": {
+                  "position_notional_inr": NOTIONAL,
+                  "estimated_round_trip_fees_pct": round(fee_pct, 4),
+                  "slippage_pct": SLIPPAGE_PCT,
+                  "total_cost_pct": COST_PCT,
+                  "stop_loss_pct": 0.5,
+                  "max_holding_bars": 8,
+                  "entry": "next 15-minute candle open",
+                  "ambiguous_intrabar": "stop first",
+                  "universe_weighting": "equal trade return",
+                  "data_note": "Bars fetched in 28-day chunks within Upstox V3's one-month 1-15m query limit; only 25-candle sessions retained."
+              },
+              "aggregate": aggregate,
+              "per_stock": per_stock
+          }
+          with open("/tmp/nse200_15m_backtest_summary.json", "w") as handle:
+              json.dump(output, handle, sort_keys=True)
+          print("BACKTEST SUMMARY")
+          print(json.dumps({k: output[k] for k in (
+              "start_date", "end_date", "expected_complete_sessions",
+              "symbols_requested", "symbols_fetched", "symbols_complete",
+              "symbols_backtested", "fetch_errors", "coverage_exclusions",
+              "invalid_rows", "replay_errors", "assumptions", "aggregate"
+          )}, sort_keys=True))
+          if len(results) != len(symbols):
+              raise SystemExit("NSE 200 full-coverage gate failed; see coverage/error summary")
+          PY
+      - name: Save raw candles and backtest summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nse200-15m-3month-paper-backtest
+          path: |
+            /tmp/nse200_15m_3month.csv
+            /tmp/nse200_15m_backtest_summary.json
+          if-no-files-found: warn
