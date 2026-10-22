@@ -1,7 +1,7 @@
 name: Experimental 15m Read-Only Upstox Check
 
 # Path-filtered PR runs keep this branch-only check runnable without merging it.
-# The fallback is intentionally 50 symbols for this staged live validation.
+# The fallback is intentionally 200 symbols for this staged live validation.
 # Re-trigger this path after the first 15-minute candle closes for live-data smoke checks.
 # Live signal checks must stay paper-only while the same-session breakout bars form.
 # Temporary live-market validation trigger; this branch is not intended to merge.
@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      SYMBOL_LIMIT: ${{ inputs.limit || '50' }}
+      SYMBOL_LIMIT: ${{ inputs.limit || '200' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
