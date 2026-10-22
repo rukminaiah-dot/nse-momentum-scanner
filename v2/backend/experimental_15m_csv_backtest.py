@@ -15,6 +15,7 @@ from math import isfinite
 from zoneinfo import ZoneInfo
 
 from .experimental_15m_replay import replay_symbol
+from .experimental_15m_backtest import TARGETS
 
 IST = ZoneInfo("Asia/Kolkata")
 
@@ -46,6 +47,27 @@ def read_bars(path):
     return groups
 
 
+def aggregate_results(results):
+    """Equal-weight per-trade paper statistics, with empty samples explicit."""
+    aggregate = {}
+    for target in TARGETS:
+        key = str(target)
+        returns = [trade["outcomes"][key]["net_pct"]
+                   for result in results for trade in result["trades"]]
+        wins = sum(value > 0 for value in returns)
+        aggregate[key] = {
+            "trades": len(returns),
+            "symbols_with_trades": sum(
+                any(key in trade["outcomes"] for trade in result["trades"])
+                for result in results),
+            "net_wins": wins,
+            "win_rate_pct": round(100 * wins / len(returns), 2) if returns else None,
+            "average_net_pct": round(sum(returns) / len(returns), 4) if returns else None,
+            "total_net_pct_points": round(sum(returns), 4) if returns else None,
+        }
+    return aggregate
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("csv_path")
@@ -53,11 +75,16 @@ def main():
                         help="Round-trip brokerage, fees, taxes and slippage in percent")
     parser.add_argument("--stop-pct", type=float, default=0.5)
     args = parser.parse_args()
+    if not isfinite(args.cost_pct) or args.cost_pct < 0:
+        parser.error('--cost-pct must be finite and nonnegative')
+    if not isfinite(args.stop_pct) or args.stop_pct <= 0:
+        parser.error('--stop-pct must be finite and positive')
     results = [replay_symbol(symbol, bars, cost_pct=args.cost_pct,
                              stop_pct=args.stop_pct)
                for symbol, bars in sorted(read_bars(args.csv_path).items())]
     print(json.dumps({"mode": "PAPER", "symbols": len(results),
-                      "cost_pct": args.cost_pct, "results": results}, sort_keys=True))
+                      "cost_pct": args.cost_pct, "aggregate": aggregate_results(results),
+                      "results": results}, sort_keys=True))
 
 
 if __name__ == "__main__":
