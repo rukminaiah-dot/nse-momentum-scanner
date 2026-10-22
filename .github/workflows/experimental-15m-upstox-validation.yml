@@ -71,6 +71,9 @@ jobs:
           print("Completed intraday candles:", sum(row.get("completed_intraday_candles", 0) for row in quality.values()))
           print("Exclusions:", dict(Counter(data.get("excluded", {}).values())))
           print("Fetch failure types:", dict(Counter(errors.values())))
+          for row in data.get("selected", []):
+              details = row.get("details", {})
+              print("Paper candidate:", row.get("symbol"), "| candle:", row.get("candle_time"), "| RVOL:", row.get("relative_volume"), "| signal:", row.get("signal"), "| K/D:", details.get("stoch_k"), "/", details.get("stoch_d"), "| technical:", details.get("reason", row.get("reason")))
           if fetched == 0:
               raise SystemExit("No authenticated 15m market data retrieved")
           if errors:
