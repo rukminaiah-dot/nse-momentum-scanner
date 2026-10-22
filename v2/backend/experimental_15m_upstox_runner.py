@@ -9,6 +9,7 @@ never touches production scanner state, and is not invoked by start_v2.sh.
 import argparse
 import json
 import os
+import time
 from datetime import datetime, timedelta
 from math import isfinite
 from zoneinfo import ZoneInfo
@@ -19,6 +20,36 @@ from .stock_universe import NIFTY_200
 IST = ZoneInfo("Asia/Kolkata")
 _HISTORICAL_CACHE_DATE = None
 _HISTORICAL_CACHE = {}
+_REQUEST_PAUSE_SECONDS = 0.12
+_MAX_REQUEST_ATTEMPTS = 3
+
+
+def _is_retryable_api_error(exc):
+    status = getattr(exc, "status", getattr(exc, "status_code", None))
+    try:
+        status = int(status)
+    except (TypeError, ValueError):
+        status = None
+    if status == 429 or (status is not None and 500 <= status < 600):
+        return True
+    return type(exc).__name__ in {
+        "TimeoutError", "ConnectionError", "ReadTimeoutError",
+        "ConnectTimeoutError", "ProtocolError", "MaxRetryError",
+    }
+
+
+def _call_with_retry(call, *, sleep_fn=None):
+    """Throttle requests and retry only transient Upstox/network failures."""
+    sleep_fn = sleep_fn or time.sleep
+    for attempt in range(_MAX_REQUEST_ATTEMPTS):
+        try:
+            result = call()
+            sleep_fn(_REQUEST_PAUSE_SECONDS)
+            return result
+        except Exception as exc:
+            if not _is_retryable_api_error(exc) or attempt + 1 >= _MAX_REQUEST_ATTEMPTS:
+                raise
+            sleep_fn(min(0.5 * (2 ** attempt), 2.0))
 
 
 def _parse_rows(rows):
@@ -60,7 +91,7 @@ def previous_session_close(historical_bars, before_date):
         return None
 
 
-def fetch_symbol(api, key, *, now, lookback_days=30, historical_cache=None):
+def fetch_symbol(api, key, *, now, lookback_days=45, historical_cache=None, sleep_fn=None):
     """Fetch 15m historical + current intraday bars for one instrument."""
     today = now.date()
     yesterday = today - timedelta(days=1)
@@ -68,13 +99,17 @@ def fetch_symbol(api, key, *, now, lookback_days=30, historical_cache=None):
     if historical_cache is not None and key in historical_cache:
         history = historical_cache[key]
     else:
-        historical = api.get_historical_candle_data1(
-            key, "minutes", "15", str(yesterday), str(since))
+        historical = _call_with_retry(
+            lambda: api.get_historical_candle_data1(
+                key, "minutes", "15", str(yesterday), str(since)),
+            sleep_fn=sleep_fn)
         history = _parse_rows(historical.data.candles or [])
         del historical
         if historical_cache is not None and history:
             historical_cache[key] = history
-    intraday = api.get_intra_day_candle_data(key, "minutes", "15")
+    intraday = _call_with_retry(
+        lambda: api.get_intra_day_candle_data(key, "minutes", "15"),
+        sleep_fn=sleep_fn)
     current = _parse_rows(intraday.data.candles or [])
     del intraday
     # Keep historical candles only for indicators, current-session candles
