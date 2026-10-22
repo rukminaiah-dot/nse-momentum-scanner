@@ -10,6 +10,7 @@ import argparse
 import json
 import os
 from datetime import datetime, timedelta
+from math import isfinite
 from zoneinfo import ZoneInfo
 
 from .experimental_15m_pipeline import screen_universe
@@ -37,6 +38,26 @@ def _parse_rows(rows):
     # Duplicated timestamps are unsafe; preserve duplicates for rejection
     # by the continuity / baseline checks rather than silently deduplicating.
     return sorted(bars, key=lambda bar: bar["timestamp"])
+
+
+def previous_session_close(historical_bars, before_date):
+    """Return the prior session's verified final 15m close, or None."""
+    try:
+        prior = [bar for bar in historical_bars
+                 if bar["timestamp"].date() < before_date]
+        if not prior:
+            return None
+        last_day = max(bar["timestamp"].date() for bar in prior)
+        final_bars = [bar for bar in prior
+                      if bar["timestamp"].date() == last_day]
+        final_bar = max(final_bars, key=lambda bar: bar["timestamp"])
+        stamp = final_bar["timestamp"]
+        if (stamp.hour * 60 + stamp.minute) != 15 * 60 + 15:
+            return None
+        close = float(final_bar["close"])
+        return close if isfinite(close) and close > 0 else None
+    except (KeyError, TypeError, ValueError, AttributeError, OverflowError):
+        return None
 
 
 def fetch_symbol(api, key, *, now, lookback_days=30, historical_cache=None):
@@ -84,15 +105,37 @@ def run(*, limit=5, now=None, api=None):
     if _HISTORICAL_CACHE_DATE != now.date():
         _HISTORICAL_CACHE_DATE = now.date()
         _HISTORICAL_CACHE = {}
-    stock_bars, historical_bars, errors = {}, {}, {}
+    stock_bars, historical_bars, errors, stock_context = {}, {}, {}, {}
     for symbol, key in list(NIFTY_200.items())[:limit]:
         try:
             stock_bars[symbol], historical_bars[symbol] = fetch_symbol(
                 api, key, now=now, historical_cache=_HISTORICAL_CACHE)
+            previous_close = previous_session_close(historical_bars[symbol], now.date())
+            completed_today = [bar for bar in stock_bars[symbol]
+                               if bar["timestamp"].date() == now.date()]
+            latest = completed_today[-1] if completed_today else None
+            last_price = float(latest["close"]) if latest else None
+            daily_change_pct = (
+                (last_price / previous_close - 1) * 100
+                if last_price is not None and previous_close is not None else None
+            )
+            stock_context[symbol] = {
+                "symbol": symbol,
+                "last_price": last_price,
+                "previous_close": previous_close,
+                "daily_change_pct": round(daily_change_pct, 4)
+                if daily_change_pct is not None and isfinite(daily_change_pct) else None,
+                "candle_time": latest["timestamp"].isoformat() if latest else None,
+            }
         except Exception as exc:
             errors[symbol] = type(exc).__name__
+            stock_context[symbol] = {
+                "symbol": symbol, "last_price": None, "previous_close": None,
+                "daily_change_pct": None, "candle_time": None,
+            }
     result = screen_universe(stock_bars, historical_bars, now=now)
     result["fetch_errors"] = errors
+    result["stock_context"] = stock_context
     result["requested_count"] = limit
     return result
 
