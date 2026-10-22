@@ -103,7 +103,7 @@ def previous_session_close(historical_bars, before_date):
         return None
 
 
-def fetch_symbol(api, key, *, now, lookback_days=45, historical_cache=None, sleep_fn=None):
+def fetch_symbol(api, key, *, now, lookback_days=30, historical_cache=None, sleep_fn=None):
     """Fetch 15m historical + current intraday bars for one instrument."""
     today = now.date()
     yesterday = today - timedelta(days=1)
