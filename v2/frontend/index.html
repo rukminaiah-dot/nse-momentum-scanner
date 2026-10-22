@@ -279,7 +279,7 @@ function renderFavourite15m(){
  const currentScan=openNow()&&feed&&feed.status!=='UNAVAILABLE';
  status.textContent=state.favourite15mLoading&&!feed?'Loading verified 15-minute data for saved favourites…':feed?.status==='UNAVAILABLE'?'Favourite 15-minute feed unavailable · retained saved readings, if any, are historical only.':currentScan?'Current completed-candle favourite scan · volume, EMA trend and Stoch RSI are shown for saved stocks.':'Market closed or no current scan · last verified 15-minute readings are historical; no live signal is assigned.';
  const headers=['Stock','15m candle · O/H/L/C (IST)','RVOL vs 20 sessions','EMA20 / EMA50 · trend','Stoch RSI K / D','15m paper signal','Reason / data status'];
- host.innerHTML=table(headers,fav.map(symbol=>{
+ const display=fav.map(symbol=>{
   const row=rows.get(symbol),indicator=row?.indicator||row?.details||{},isCurrent=Boolean(currentScan&&row?.status==='LIVE_FRESH');
   const signal=row?(isCurrent?(row.signal||'WAIT'):'HISTORICAL · WAIT'):'WAIT · '+(feed?.status==='UNAVAILABLE'?'UNAVAILABLE':'LOADING');
   const signalClass=isCurrent&&row?.signal==='PAPER_BUY'?'green':isCurrent&&row?.signal==='PAPER_SELL'?'red':'amber';
@@ -287,9 +287,14 @@ function renderFavourite15m(){
   const stoch=indicator.status==='AVAILABLE'?num(indicator.stoch_k,2)+' / '+num(indicator.stoch_d,2):'Not available';
   const volume=row&&Number.isFinite(Number(row.relative_volume))?num(row.relative_volume,2)+'×':row?'—':'Waiting for verified data';
   const c=row?.candle||{},price=v=>v!=null&&Number.isFinite(Number(v))?num(v,2):'—';
-  const candle=row?.candle_time?esc(row.candle_time)+' IST · O/H/L/C '+[c.open,c.high,c.low,c.close].map(price).join('/'):'No verified completed 15m candle';
-  return tr([esc(symbol),candle,volume,esc(ema),stoch,'<span class="pill '+signalClass+'">'+esc(signal)+'</span>',esc(row?.reason||(feed?.status==='UNAVAILABLE'?'Market-data unavailable':'Waiting for favourite scan'))])
- }).join(''));
+  const candleTime=row?.candle_time?esc(row.candle_time)+' IST':'No verified completed 15m candle';
+  const ohlc=[c.open,c.high,c.low,c.close].map(price).join(' / ');
+  const reason=esc(row?.reason||(feed?.status==='UNAVAILABLE'?'Market-data unavailable':'Waiting for favourite scan'));
+  const pill='<span class="pill '+signalClass+'">'+esc(signal)+'</span>';
+  const mobile='<article class="stock-tile"><div class="topline"><strong>'+esc(symbol)+'</strong>'+pill+'</div><div class="small muted">15-minute candle · '+candleTime+'</div><div class="small">O / H / L / C · '+ohlc+'</div><div class="small">RVOL · '+volume+' vs 20-session same-slot baseline</div><div class="small">EMA 20 / 50 · '+esc(ema)+'</div><div class="small">Stoch RSI K / D · '+esc(stoch)+'</div><div class="small muted">Reason · '+reason+'</div></article>';
+  return {symbol,candle:candleTime+' · O/H/L/C '+ohlc,volume,ema,stoch,pill,reason,mobile};
+ });
+ host.innerHTML='<div class="desktop-stock-list">'+table(headers,display.map(x=>tr([esc(x.symbol),x.candle,x.volume,esc(x.ema),esc(x.stoch),x.pill,x.reason])).join(''))+'</div><div class="mobile-stock-list">'+display.map(x=>x.mobile).join('')+'</div>';
 }
 function refreshFavourite15m(force=false){
  const symbols=getFavourites();
