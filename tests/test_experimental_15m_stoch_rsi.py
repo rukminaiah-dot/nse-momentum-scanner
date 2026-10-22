@@ -81,6 +81,11 @@ class TestExperimental15m(unittest.TestCase):
             result = evaluate(bars, now=bars[-1]["timestamp"] + timedelta(minutes=15),
                               same_slot_average_volume=100)
         self.assertEqual(result["signal"], "PAPER_BUY")
+        self.assertEqual(result["details"]["trend"], "BULLISH")
+        self.assertEqual(result["details"]["ema20"], 101)
+        self.assertEqual(result["details"]["ema50"], 100)
+        self.assertEqual(result["details"]["stoch_k"], 18)
+        self.assertEqual(result["details"]["stoch_d"], 17)
 
     def test_buy_cross_above_oversold_is_wait(self):
         bars = self._signal_bars("buy")
