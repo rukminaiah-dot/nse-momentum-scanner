@@ -751,15 +751,17 @@ class FivePageUiTests(unittest.TestCase):
         start = api.index('@app.get("/api/v2/nifty200-stock-board")')
         end = api.index("\n\n@app.get(", start)
         board = api[start:end]
+        quotes = (HTML.parents[1] / "backend" / "nifty200_quotes.py").read_text(encoding="utf-8")
         for required in (
             "fetch_full_quotes(list(NIFTY_200.values()), tokens)",
+            "quote_change_fields(symbol, NIFTY_200[symbol]",
             '"prev_close_price"',
             '"daily_change_pct": (price - previous_close) / previous_close * 100',
             '"stocks_with_change_data"',
             '"order_execution_enabled": False',
             "change_status",
         ):
-            self.assertIn(required, board)
+            self.assertIn(required, board + quotes)
 
 
 if __name__ == "__main__":
