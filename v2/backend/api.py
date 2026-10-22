@@ -1132,11 +1132,15 @@ def stock_setup_backtest_status():
 
 @app.get("/api/v2/nifty200-stock-board")
 def nifty200_stock_board():
-    """Display the configured NIFTY 200 universe even when market is closed."""
-    from datetime import datetime, timedelta, time as clock_time
+    """Display the configured NIFTY 200 universe with verified previous-close changes."""
+    from datetime import datetime, timedelta, time as clock_time, timezone
+    import os
+    import time
     from zoneinfo import ZoneInfo
-    now = datetime.now(ZoneInfo("Asia/Kolkata"))
-    open_now = now.weekday() < 5 and clock_time(9, 15) <= now.time() < clock_time(15, 30)
+    from .upstox_quote_client import fetch_full_quotes
+
+    now_dt = datetime.now(ZoneInfo("Asia/Kolkata"))
+    open_now = now_dt.weekday() < 5 and clock_time(9, 15) <= now_dt.time() < clock_time(15, 30)
     stored = {}
     error = None
     try:
@@ -1146,13 +1150,47 @@ def nifty200_stock_board():
                 "SELECT symbol,updated_at,price,momentum,signal,trend_5m FROM scanner_results")}
     except sqlite3.Error:
         error = "STOCK_DATA_UNAVAILABLE"
+
+    # One read-only Full Market Quotes request covers the 200 configured keys
+    # (Upstox supports up to 500 keys per request). Cache briefly because the
+    # dashboard refreshes during the session.
+    monotonic_now = time.monotonic()
+    quote_cache = getattr(nifty200_stock_board, "_quote_cache", None)
+    quote_cache_at = getattr(nifty200_stock_board, "_quote_cache_at", 0.0)
+    cache_ttl = 10 if open_now else 60
+    if quote_cache is not None and monotonic_now - quote_cache_at < cache_ttl:
+        quotes, quote_source, quote_error = quote_cache
+    else:
+        tokens = list(dict.fromkeys(
+            value.strip() for value in (
+                os.environ.get("UPSTOX_ACCESS_TOKEN", ""),
+                os.environ.get("UPSTOX_ANALYTICS_TOKEN", ""),
+            ) if value and value.strip()
+        ))
+        quotes = {}
+        quote_source = None
+        quote_error = None
+        if not tokens:
+            quote_error = "TOKEN_NOT_CONFIGURED"
+        else:
+            try:
+                quotes, quote_source = fetch_full_quotes(list(NIFTY_200.values()), tokens)
+            except Exception as exc:
+                code = getattr(exc, "code", None)
+                quote_error = "HTTP_" + str(code) if isinstance(code, int) else type(exc).__name__
+        nifty200_stock_board._quote_cache = (quotes, quote_source, quote_error)
+        nifty200_stock_board._quote_cache_at = monotonic_now
+
+    from .nifty200_quotes import quote_change_fields
+    quote_now_utc = datetime.now(timezone.utc)
+
     stocks = []
     for symbol in sorted(NIFTY_200):
         row = stored.get(symbol) or {}
         fresh = False
         try:
             stamp = datetime.strptime(row["updated_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=ZoneInfo("Asia/Kolkata"))
-            fresh = open_now and stamp.date() == now.date() and timedelta(0) <= now - stamp <= timedelta(minutes=3)
+            fresh = open_now and stamp.date() == now_dt.date() and timedelta(0) <= now_dt - stamp <= timedelta(minutes=3)
         except (ValueError, TypeError, KeyError):
             pass
         stocks.append({
@@ -1162,11 +1200,16 @@ def nifty200_stock_board():
             "data_status": "LIVE_FRESH" if fresh else ("HISTORICAL" if row else "AWAITING_DATA"),
             "signal": row.get("signal") if fresh else None,
             "historical_signal": row.get("signal") if row and not fresh else None,
+            **quote_change_fields(symbol, NIFTY_200[symbol], quotes, quote_error, open_now, now_utc=quote_now_utc),
         })
     return {"status": error or ("MARKET_OPEN" if open_now else "MARKET_CLOSED"),
-            "as_of_ist": now.isoformat(), "universe_size": len(stocks),
+            "as_of_ist": now_dt.isoformat(), "universe_size": len(stocks),
             "stocks_with_stored_data": sum(s["last_price"] is not None for s in stocks),
             "stocks_with_fresh_data": sum(s["data_status"] == "LIVE_FRESH" for s in stocks),
+            "stocks_with_change_data": sum(s["change_status"] in ("CURRENT", "LAST_SESSION") for s in stocks),
+            "quotes_status": "AVAILABLE" if quote_source else "UNAVAILABLE",
+            "quotes_source": quote_source or "Upstox Full Market Quotes",
+            "quotes_error": quote_error,
             "order_execution_enabled": False, "stocks": stocks}
 
 

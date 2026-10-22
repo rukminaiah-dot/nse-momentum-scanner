@@ -649,6 +649,14 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("broker orders disabled.", self.html)
         self.assertIn("300 points is an example, not a fixed threshold", self.html)
 
+    def test_premarket_distinguishes_live_index_bias_from_partial_reversal_check(self):
+        self.assertIn('id="pm-page-title">Market Context &amp; Direction</h1>', self.html)
+        self.assertIn("live index bias uses index EMA and momentum only", self.html)
+        self.assertIn("separate from the Trend Reversal rules check below", self.html)
+        self.assertIn("LIVE INDEX BIAS", self.html)
+        self.assertIn("unavailable?'NO DATA'", self.html)
+        self.assertIn("No live signal is assigned", self.html)
+
     def test_experimental_prediction_uses_only_fresh_aligned_index_evidence(self):
         self.assertIn('id="ai-prediction-panel"', self.html)
         self.assertIn('id="ai-prediction-status"', self.html)
@@ -675,6 +683,7 @@ class FivePageUiTests(unittest.TestCase):
             "/api/v2/quality-ratings": "https://nse-momentum-scanner-api.onrender.com/api/v2/quality-ratings",
             "/api/v2/nifty200-feed-health": "https://nse-momentum-scanner-api.onrender.com/api/v2/nifty200-feed-health",
             "/api/v2/experimental/15m-stock-screen": "https://nse-momentum-scanner-api.onrender.com/api/v2/experimental/15m-stock-screen",
+            "/api/v2/experimental/15m-index-trends": "https://nse-momentum-scanner-api.onrender.com/api/v2/experimental/15m-index-trends",
             "/api/v2/trades": "https://nse-momentum-scanner-api.onrender.com/api/v2/trades",
             "/api/v2/preview-status": "https://nse-momentum-scanner-api.onrender.com/api/v2/nifty200-feed-health",
             "/api/v2/premarket-data": "https://nse-momentum-scanner-api.onrender.com/api/v2/premarket-data",
@@ -712,6 +721,47 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn('@app.get("/news_trend_relation.js")', api_source)
         self.assertIn('v2/frontend/news_trend_relation.js', api_source)
         self.assertIn('media_type="application/javascript"', api_source)
+
+
+    def test_nse200_board_explains_verified_session_change_and_keeps_all_stocks(self):
+        for required in (
+            'id="board-change-status"',
+            "Ranked high to low by verified Upstox session change",
+            "All 200 configured stocks remain listed",
+            "change_status",
+            "CURRENT','LAST_SESSION",
+            ".sort(dailyChangeSort)",
+            "All '+state.board.length+' stocks remain listed",
+        ):
+            self.assertIn(required, self.html)
+
+    def test_nse200_mobile_rows_show_rank_change_price_and_quote_status(self):
+        for required in (
+            "stock-change-row",
+            "Session change",
+            "Previous close:",
+            "Quote time unavailable",
+            "const headers=['Rank','Favourite','Stock','Session change %'",
+            "const changeCount=state.board.filter(hasVerifiedDailyChange).length",
+        ):
+            self.assertIn(required, self.html)
+
+    def test_board_api_uses_read_only_upstox_quotes_for_change_percent(self):
+        api = (HTML.parents[1] / "backend" / "api.py").read_text(encoding="utf-8")
+        start = api.index('@app.get("/api/v2/nifty200-stock-board")')
+        end = api.index("\n\n@app.get(", start)
+        board = api[start:end]
+        quotes = (HTML.parents[1] / "backend" / "nifty200_quotes.py").read_text(encoding="utf-8")
+        for required in (
+            "fetch_full_quotes(list(NIFTY_200.values()), tokens)",
+            "quote_change_fields(symbol, NIFTY_200[symbol]",
+            '"prev_close_price"',
+            '"daily_change_pct": (price - previous_close) / previous_close * 100',
+            '"stocks_with_change_data"',
+            '"order_execution_enabled": False',
+            "change_status",
+        ):
+            self.assertIn(required, board + quotes)
 
 
 if __name__ == "__main__":
