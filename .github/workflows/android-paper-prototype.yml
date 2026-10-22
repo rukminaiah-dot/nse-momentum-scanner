@@ -1,0 +1,43 @@
+name: Android Paper Scanner Prototype
+
+on:
+  push:
+    branches:
+      - experiment/android-paper-scanner
+    paths:
+      - "mobile/**"
+      - ".github/workflows/android-paper-prototype.yml"
+  pull_request:
+    paths:
+      - "mobile/**"
+      - ".github/workflows/android-paper-prototype.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK platform
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Install Gradle
+        run: |
+          curl --fail --location --silent --show-error https://services.gradle.org/distributions/gradle-8.9-bin.zip --output /tmp/gradle.zip
+          unzip -q /tmp/gradle.zip -d /tmp
+      - name: Run unit tests and build debug APK
+        working-directory: mobile
+        run: /tmp/gradle-8.9/bin/gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nse-paper-scanner-debug-apk
+          path: mobile/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
