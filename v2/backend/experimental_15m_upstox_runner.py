@@ -38,6 +38,18 @@ def _is_retryable_api_error(exc):
     }
 
 
+def _safe_error_label(exc):
+    """Expose only a safe error class/status; never API response text or headers."""
+    status = getattr(exc, "status", getattr(exc, "status_code", None))
+    try:
+        status = int(status)
+    except (TypeError, ValueError):
+        status = None
+    if status is not None and 100 <= status <= 599:
+        return f"{type(exc).__name__}:{status}"
+    return type(exc).__name__
+
+
 def _call_with_retry(call, *, sleep_fn=None):
     """Throttle requests and retry only transient Upstox/network failures."""
     sleep_fn = sleep_fn or time.sleep
@@ -163,7 +175,7 @@ def run(*, limit=5, now=None, api=None):
                 "candle_time": latest["timestamp"].isoformat() if latest else None,
             }
         except Exception as exc:
-            errors[symbol] = type(exc).__name__
+            errors[symbol] = _safe_error_label(exc)
             stock_context[symbol] = {
                 "symbol": symbol, "last_price": None, "previous_close": None,
                 "daily_change_pct": None, "candle_time": None,
