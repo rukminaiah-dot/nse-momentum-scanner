@@ -1,7 +1,7 @@
 """Regression tests for volume-first paper research screening."""
 import unittest
 from datetime import datetime, timedelta
-from v2.backend.experimental_15m_pipeline import screen_universe
+from v2.backend.experimental_15m_pipeline import screen_universe, analyze_favourites
 
 
 class Test15mPaperPipeline(unittest.TestCase):
@@ -17,6 +17,19 @@ class Test15mPaperPipeline(unittest.TestCase):
             if day.weekday() < 5:
                 self.history.append({"timestamp": day, "volume": 100})
             day += timedelta(days=1)
+
+    def test_favourite_context_is_returned_below_volume_threshold(self):
+        bars = [dict(x) for x in self.bars]
+        bars[-1]["volume"] = 120
+        result = analyze_favourites(
+            {"A": bars}, {"A": self.history}, symbols=["A"], now=self.now)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["symbol"], "A")
+        self.assertEqual(result[0]["status"], "LIVE_FRESH")
+        self.assertEqual(result[0]["signal"], "WAIT")
+        self.assertEqual(result[0]["reason"], "VOLUME_BELOW_THRESHOLD")
+        self.assertEqual(result[0]["relative_volume"], 1.2)
+        self.assertEqual(result[0]["candle"]["volume"], 120.0)
 
     def test_volume_gate_before_indicators(self):
         result = screen_universe({"A": self.bars}, {"A": self.history}, now=self.now)
