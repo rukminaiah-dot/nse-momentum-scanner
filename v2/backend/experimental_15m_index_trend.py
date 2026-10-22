@@ -91,6 +91,27 @@ def _stoch_rsi(values):
     return k, d
 
 
+def _paper_signal(*, ema20, ema50, sma21, k_previous, d_previous,
+                  k_current, d_current, candle, previous_bars):
+    """Apply standard oversold/overbought Stoch RSI crosses with trend filters."""
+    opn, high, low, close = (float(candle[key])
+                             for key in ("open", "high", "low", "close"))
+    if high <= low or len(previous_bars) != 3:
+        return "WAIT"
+    body = abs(close - opn) / (high - low)
+    bullish_cross = (k_previous <= d_previous and k_current > d_current
+                     and k_current <= 20)
+    bearish_cross = (k_previous >= d_previous and k_current < d_current
+                     and k_current >= 80)
+    buy = (ema20 > ema50 and close > sma21 and bullish_cross and close > opn
+           and body >= 0.5 and close >= high - 0.25 * (high - low)
+           and close > max(bar["high"] for bar in previous_bars))
+    sell = (ema20 < ema50 and close < sma21 and bearish_cross and close < opn
+            and body >= 0.5 and close <= low + 0.25 * (high - low)
+            and close < min(bar["low"] for bar in previous_bars))
+    return "PAPER_BUY" if buy else "PAPER_SELL" if sell else "WAIT"
+
+
 def evaluate_index(symbol, bars, *, now, min_prior_sessions=REQUIRED_PRIOR_SESSIONS):
     """Return a paper-only 15m signal and explainable quality/indicator fields."""
     def wait(reason, **extra):
@@ -181,17 +202,11 @@ def evaluate_index(symbol, bars, *, now, min_prior_sessions=REQUIRED_PRIOR_SESSI
     if len(k) < 2 or len(d) < 2 or not fast or not slow:
         return wait("INSUFFICIENT_INDICATOR_HISTORY",
                     prior_session_count=len(prior_sessions))
-    body = abs(close - opn) / (high - low)
-    bullish_cross = k[-2] <= d[-2] and k[-1] > d[-1] and k[-1] <= 20
-    bearish_cross = k[-2] >= d[-2] and k[-1] < d[-1] and k[-1] >= 80
     prior = recent[-4:-1]
-    buy = (fast[-1] > slow[-1] and close > sma21 and bullish_cross and close > opn
-           and body >= 0.5 and close >= high - 0.25 * (high - low)
-           and close > max(bar["high"] for bar in prior))
-    sell = (fast[-1] < slow[-1] and close < sma21 and bearish_cross and close < opn
-            and body >= 0.5 and close <= low + 0.25 * (high - low)
-            and close < min(bar["low"] for bar in prior))
-    signal = "PAPER_BUY" if buy else "PAPER_SELL" if sell else "WAIT"
+    signal = _paper_signal(
+        ema20=fast[-1], ema50=slow[-1], sma21=sma21,
+        k_previous=k[-2], d_previous=d[-2], k_current=k[-1], d_current=d[-1],
+        candle=latest, previous_bars=prior)
     return {
         "symbol": symbol, "mode": "PAPER", "signal": signal,
         "data_status": "LIVE_FRESH", "last_candle_ist": latest["timestamp"].isoformat(),
