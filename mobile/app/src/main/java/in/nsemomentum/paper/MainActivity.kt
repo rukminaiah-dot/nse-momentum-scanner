@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -32,15 +33,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 
 private data class Stock(val symbol: String, val instrumentKey: String)
 private enum class Page(val title: String) {
-    DASHBOARD("Home"), UNIVERSE("NSE 200"), FAVOURITES("Favourites"), HEALTH("Data health")
+    DASHBOARD("Home"), UNIVERSE("NSE 200"), FAVOURITES("Favourites"), SETTINGS("Settings")
 }
 
 class MainActivity : ComponentActivity() {
@@ -48,9 +54,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme {
-                Surface(color = MaterialTheme.colorScheme.background) {
-                    PaperScannerApp()
-                }
+                Surface(color = MaterialTheme.colorScheme.background) { PaperScannerApp() }
             }
         }
     }
@@ -71,6 +75,8 @@ private fun PaperScannerApp() {
         }.getOrElse { emptyList() }
     }
     val preferences = remember { context.getSharedPreferences("paper_preferences", 0) }
+    val tokenStore = remember { SecureTokenStore(context) }
+    val scanner = remember { UpstoxPaperScanner(CandleDatabase(context)) }
     val favourites = remember {
         mutableStateListOf<String>().apply {
             addAll(preferences.getStringSet("favourites", emptySet()).orEmpty().take(20))
@@ -78,6 +84,35 @@ private fun PaperScannerApp() {
     }
     var page by remember { mutableStateOf(Page.DASHBOARD) }
     var search by remember { mutableStateOf("") }
+    var scanning by remember { mutableStateOf(false) }
+    var scanStatus by remember { mutableStateOf("No scan run yet. Add your Upstox token in Settings.") }
+    var report by remember { mutableStateOf<ScanReport?>(null) }
+    var tokenConfigured by remember { mutableStateOf(tokenStore.read() != null) }
+    val scope = rememberCoroutineScope()
+
+    val runScan = {
+        val token = tokenStore.read()
+        if (token == null) {
+            scanStatus = "Set your Upstox access token in Settings before scanning."
+            page = Page.SETTINGS
+        } else if (!scanning && stocks.size == 200) {
+            scanning = true
+            scanStatus = "Fetching read-only 15-minute candles for the 200-stock universe…"
+            scope.launch {
+                try {
+                    val result = withContext(Dispatchers.IO) {
+                        scanner.scan(token, stocks.map { it.symbol to it.instrumentKey }, favourites.toSet())
+                    }
+                    report = result
+                    scanStatus = "Scan completed at ${result.scanTime} · ${result.failedRequests} feed errors"
+                } catch (_: Exception) {
+                    scanStatus = "Scan failed. Check internet, token, and Data health."
+                } finally {
+                    scanning = false
+                }
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -102,39 +137,55 @@ private fun PaperScannerApp() {
         }
     ) { inset ->
         when (page) {
-            Page.DASHBOARD -> Dashboard(stocks.size, favourites.size, Modifier.padding(inset))
-            Page.UNIVERSE -> Column(Modifier.fillMaxSize().padding(inset)) {
-                OutlinedTextField(
-                    value = search,
-                    onValueChange = { search = it },
-                    label = { Text("Search symbol") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-                val shown = stocks.filter { it.symbol.contains(search.trim(), ignoreCase = true) }
-                Text("${shown.size} of ${stocks.size} configured stocks", Modifier.padding(horizontal = 16.dp))
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(shown, key = { it.symbol }) { stock ->
-                        val selected = stock.symbol in favourites
-                        Card(
-                            onClick = {
-                                if (selected) favourites.remove(stock.symbol)
-                                else if (favourites.size < 20) favourites.add(stock.symbol)
-                                preferences.edit().putStringSet("favourites", favourites.toSet()).apply()
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(14.dp)
-                        ) {
-                            Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(stock.symbol, fontWeight = FontWeight.SemiBold)
-                                    Text(stock.instrumentKey, style = MaterialTheme.typography.labelSmall)
+            Page.DASHBOARD -> Dashboard(
+                stockCount = stocks.size,
+                favouriteCount = favourites.size,
+                scanStatus = scanStatus,
+                report = report,
+                scanning = scanning,
+                onRunScan = runScan,
+                modifier = Modifier.padding(inset)
+            )
+            Page.UNIVERSE -> {
+                val bySymbol = report?.rows?.associateBy { it.symbol }.orEmpty()
+                Column(Modifier.fillMaxSize().padding(inset)) {
+                    OutlinedTextField(
+                        value = search,
+                        onValueChange = { search = it },
+                        label = { Text("Search symbol") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                    val shown = stocks.filter { it.symbol.contains(search.trim(), ignoreCase = true) }
+                    Text("${shown.size} of ${stocks.size} configured stocks", Modifier.padding(horizontal = 16.dp))
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(shown, key = { it.symbol }) { stock ->
+                            val selected = stock.symbol in favourites
+                            val row = bySymbol[stock.symbol]
+                            Card(
+                                onClick = {
+                                    if (selected) favourites.remove(stock.symbol)
+                                    else if (favourites.size < 20) favourites.add(stock.symbol)
+                                    preferences.edit().putStringSet("favourites", favourites.toSet()).apply()
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(14.dp)
+                            ) {
+                                Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(stock.symbol, fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            row?.let { rowSummary(it) } ?: "No verified scan data",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                        Text(stock.instrumentKey, style = MaterialTheme.typography.labelSmall)
+                                    }
+                                    Text(if (selected) "★ Saved" else "☆ Add")
                                 }
-                                Text(if (selected) "★ Saved" else "☆ Add")
                             }
                         }
                     }
@@ -142,10 +193,11 @@ private fun PaperScannerApp() {
             }
             Page.FAVOURITES -> {
                 val selectedStocks = stocks.filter { it.symbol in favourites }
+                val bySymbol = report?.rows?.associateBy { it.symbol }.orEmpty()
                 if (selectedStocks.isEmpty()) {
                     MessagePage(
                         "Your favourites",
-                        "Add stocks from NSE 200. Each favourite will get its own 15-minute trend and Stochastic RSI check after verified candle data is connected.",
+                        "Search the NSE 200 list and tap a star to add up to 20 stocks. Technical checks run only for favourites.",
                         Modifier.padding(inset)
                     )
                 } else {
@@ -154,47 +206,126 @@ private fun PaperScannerApp() {
                         contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        item { Text("FAVOURITES · PAPER SIGNALS", fontWeight = FontWeight.Bold) }
+                        item { Text("FAVOURITES · 15-MINUTE PAPER SIGNALS", fontWeight = FontWeight.Bold) }
                         items(selectedStocks, key = { it.symbol }) { stock ->
+                            val row = bySymbol[stock.symbol]
                             Card(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(16.dp)) {
                                     Text(stock.symbol, fontWeight = FontWeight.Bold)
                                     Spacer(Modifier.height(6.dp))
-                                    Text("WAIT · NO VERIFIED CANDLE DATA")
-                                    Text("15-minute candle, RVOL, EMA 20/50 and Stochastic RSI will appear after read-only feed setup.",
-                                        style = MaterialTheme.typography.bodySmall)
+                                    Text(row?.signal ?: "WAIT · NO VERIFIED SCAN")
+                                    Text(
+                                        row?.let { rowDetail(it) } ?: "Candle time, RVOL, EMA trend and Stochastic RSI appear after a successful read-only scan.",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
                                 }
                             }
                         }
                     }
                 }
             }
-            Page.HEALTH -> MessagePage(
-                "Data health",
-                "No market data has been fetched by this prototype. It will never label stored or sample values as live. A paper signal requires a completed, fresh 15-minute candle and a verified 20-session same-slot volume baseline.",
-                Modifier.padding(inset)
+            Page.SETTINGS -> SettingsPage(
+                tokenConfigured = tokenConfigured,
+                scanStatus = scanStatus,
+                onSaveToken = { token ->
+                    runCatching { tokenStore.save(token) }
+                    tokenConfigured = tokenStore.read() != null
+                },
+                onClearToken = {
+                    tokenStore.clear()
+                    tokenConfigured = false
+                    scanStatus = "Token cleared from this device."
+                },
+                modifier = Modifier.padding(inset)
             )
         }
     }
 }
 
+private fun rowSummary(row: ScanRow): String {
+    val rvol = row.relativeVolume?.let { " · RVOL ${"%.2f".format(it)}×" }.orEmpty()
+    return "${row.signal}$rvol · ${row.reason}"
+}
+
+private fun rowDetail(row: ScanRow): String {
+    val time = row.candleTime ?: "Candle time unavailable"
+    val rvol = row.relativeVolume?.let { "RVOL ${"%.2f".format(it)}×" } ?: "RVOL unavailable"
+    return "$time · $rvol · ${row.reason}"
+}
+
 @Composable
-private fun Dashboard(stockCount: Int, favouriteCount: Int, modifier: Modifier = Modifier) {
-    Column(
-        modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
+private fun Dashboard(
+    stockCount: Int,
+    favouriteCount: Int,
+    scanStatus: String,
+    report: ScanReport?,
+    scanning: Boolean,
+    onRunScan: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val qualified = report?.rows?.count { (it.relativeVolume ?: 0.0) >= 1.5 } ?: 0
+    Column(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
             Column(Modifier.padding(18.dp)) {
                 Text("PAPER TRADING · NO ORDERS", fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
-                Text("WAIT · READ-ONLY FEED NOT CONNECTED", style = MaterialTheme.typography.titleMedium)
-                Text("No live or simulated performance is shown until genuine candles are available.")
+                Text(if (scanning) "SCANNING · READ ONLY" else "15-MINUTE VOLUME-FIRST SCAN", style = MaterialTheme.typography.titleMedium)
+                Text(scanStatus)
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = onRunScan, enabled = !scanning && stockCount == 200) {
+                    Text(if (scanning) "Scanning…" else "Run paper scan")
+                }
             }
         }
-        InfoCard("NSE 200", "$stockCount stocks configured", "Volume-first screening is planned for all 200 stocks.")
-        InfoCard("Favourites", "$favouriteCount / 20 selected", "15-minute technical checks apply only to saved favourites.")
-        InfoCard("Next step", "Connect read-only Upstox feed", "Secure sign-in and data validation come before any signal calculation.")
+        InfoCard("NSE 200 volume screen", "$stockCount stocks configured", "$qualified stocks currently at or above 1.5× volume, if a verified scan has completed.")
+        InfoCard("Favourites", "$favouriteCount / 20 selected", "EMA 20/50 and Stochastic RSI checks run only for saved favourites.")
+        if (report != null) {
+            report.rows.filter { (it.relativeVolume ?: 0.0) >= 1.5 }.take(10).forEach { row ->
+                InfoCard(row.symbol, row.signal, rowDetail(row))
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsPage(
+    tokenConfigured: Boolean,
+    scanStatus: String,
+    onSaveToken: (String) -> Unit,
+    onClearToken: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var tokenInput by remember { mutableStateOf("") }
+    Column(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Settings & data health", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("PAPER MODE · no order placement capability")
+        Text("Generate a personal access token in Upstox Developer Apps, then enter it here. The app encrypts it on this phone and does not log or upload it.")
+        OutlinedTextField(
+            value = tokenInput,
+            onValueChange = { tokenInput = it },
+            label = { Text("Upstox access token") },
+            visualTransformation = PasswordVisualTransformation(),
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = {
+                if (tokenInput.isNotBlank()) {
+                    onSaveToken(tokenInput)
+                    tokenInput = ""
+                }
+            }, enabled = tokenInput.isNotBlank()) { Text("Save encrypted token") }
+            Button(onClick = onClearToken) { Text("Clear token") }
+        }
+        Text(if (tokenConfigured) "Token saved on this device" else "No token saved")
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp)) {
+                Text("Latest scan status", fontWeight = FontWeight.SemiBold)
+                Text(scanStatus)
+                Text("Missing, stale, invalid, or incomplete candles produce WAIT / unavailable states.",
+                    style = MaterialTheme.typography.bodySmall)
+            }
+        }
     }
 }
 
