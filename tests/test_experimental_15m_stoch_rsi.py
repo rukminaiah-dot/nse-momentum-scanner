@@ -76,8 +76,7 @@ class TestExperimental15m(unittest.TestCase):
     def test_buy_requires_oversold_bullish_kd_cross(self):
         bars = self._signal_bars("buy")
         with patch("v2.backend.experimental_15m_stoch_rsi._ema",
-                   side_effect=[[100, 101], [99, 100]]), \\
-             patch("v2.backend.experimental_15m_stoch_rsi._stoch_rsi",
+                   side_effect=[[100, 101], [99, 100]]), patch("v2.backend.experimental_15m_stoch_rsi._stoch_rsi",
                    return_value=([10, 18], [15, 17])):
             result = evaluate(bars, now=bars[-1]["timestamp"] + timedelta(minutes=15),
                               same_slot_average_volume=100)
@@ -86,8 +85,7 @@ class TestExperimental15m(unittest.TestCase):
     def test_buy_cross_above_oversold_is_wait(self):
         bars = self._signal_bars("buy")
         with patch("v2.backend.experimental_15m_stoch_rsi._ema",
-                   side_effect=[[100, 101], [99, 100]]), \\
-             patch("v2.backend.experimental_15m_stoch_rsi._stoch_rsi",
+                   side_effect=[[100, 101], [99, 100]]), patch("v2.backend.experimental_15m_stoch_rsi._stoch_rsi",
                    return_value=([10, 25], [15, 20])):
             result = evaluate(bars, now=bars[-1]["timestamp"] + timedelta(minutes=15),
                               same_slot_average_volume=100)
@@ -96,8 +94,7 @@ class TestExperimental15m(unittest.TestCase):
     def test_sell_requires_overbought_bearish_kd_cross(self):
         bars = self._signal_bars("sell")
         with patch("v2.backend.experimental_15m_stoch_rsi._ema",
-                   side_effect=[[100, 99], [101, 100]]), \\
-             patch("v2.backend.experimental_15m_stoch_rsi._stoch_rsi",
+                   side_effect=[[100, 99], [101, 100]]), patch("v2.backend.experimental_15m_stoch_rsi._stoch_rsi",
                    return_value=([90, 82], [85, 83])):
             result = evaluate(bars, now=bars[-1]["timestamp"] + timedelta(minutes=15),
                               same_slot_average_volume=100)
@@ -106,8 +103,7 @@ class TestExperimental15m(unittest.TestCase):
     def test_sell_cross_below_overbought_is_wait(self):
         bars = self._signal_bars("sell")
         with patch("v2.backend.experimental_15m_stoch_rsi._ema",
-                   side_effect=[[100, 99], [101, 100]]), \\
-             patch("v2.backend.experimental_15m_stoch_rsi._stoch_rsi",
+                   side_effect=[[100, 99], [101, 100]]), patch("v2.backend.experimental_15m_stoch_rsi._stoch_rsi",
                    return_value=([90, 75], [85, 80])):
             result = evaluate(bars, now=bars[-1]["timestamp"] + timedelta(minutes=15),
                               same_slot_average_volume=100)
