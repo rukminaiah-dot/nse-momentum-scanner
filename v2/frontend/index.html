@@ -277,7 +277,7 @@ function renderFavourite15m(){
  const rows=new Map([...state.paperQualifiedStocks,...apiRows].map(x=>[x.symbol,x]));
  if(!fav.length){status.textContent='Choose a stock with ☆ to see its 15-minute paper readout here.';host.innerHTML='<div class="empty">No favourites selected.</div>';return}
  const currentScan=openNow()&&feed&&feed.status!=='UNAVAILABLE';
- status.textContent=currentScan?'Current completed-candle favourite scan · volume, EMA trend and Stoch RSI are shown for saved stocks.':'Market closed or no current scan · last verified 15-minute readings are historical; no live signal is assigned.';
+ status.textContent=state.favourite15mLoading&&!feed?'Loading verified 15-minute data for saved favourites…':feed?.status==='UNAVAILABLE'?'Favourite 15-minute feed unavailable · retained saved readings, if any, are historical only.':currentScan?'Current completed-candle favourite scan · volume, EMA trend and Stoch RSI are shown for saved stocks.':'Market closed or no current scan · last verified 15-minute readings are historical; no live signal is assigned.';
  const headers=['Stock','15m candle · O/H/L/C (IST)','RVOL vs 20 sessions','EMA20 / EMA50 · trend','Stoch RSI K / D','15m paper signal','Reason / data status'];
  host.innerHTML=table(headers,fav.map(symbol=>{
   const row=rows.get(symbol),indicator=row?.indicator||row?.details||{},isCurrent=Boolean(currentScan&&row?.status==='LIVE_FRESH');
