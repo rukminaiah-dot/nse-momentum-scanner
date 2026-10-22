@@ -34,6 +34,8 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("function refreshFavourite15m", self.html)
         self.assertIn("favorite_analysis", self.html)
         self.assertIn("Stoch RSI K / D", self.html)
+        self.assertIn("class=\"mobile-stock-list\"", self.html)
+        self.assertIn("15-minute candle · '+candleTime", self.html)
         self.assertIn("symbols='+encodeURIComponent(symbols.join(','))", self.html)
 
     def test_embedded_javascript_parses(self):
