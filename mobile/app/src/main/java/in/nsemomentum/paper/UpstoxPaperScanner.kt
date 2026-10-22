@@ -60,7 +60,7 @@ class UpstoxPaperScanner(private val database: CandleDatabase) {
         return ScanReport(
             rows = rows,
             scanTime = now.atZone(zone).toString(),
-            failedRequests = rows.count { it.reason.startsWith("FETCH_") || it.reason == "RATE_LIMITED" },
+            failedRequests = rows.count { it.reason in setOf("FETCH_FAILED", "RATE_LIMITED", "UPSTOX_AUTH_REQUIRED", "NO_CANDLES") },
             requestCount = rows.size
         )
     }
