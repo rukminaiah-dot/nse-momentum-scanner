@@ -749,7 +749,7 @@ class FivePageUiTests(unittest.TestCase):
     def test_board_api_uses_read_only_upstox_quotes_for_change_percent(self):
         api = (HTML.parents[1] / "backend" / "api.py").read_text(encoding="utf-8")
         start = api.index('@app.get("/api/v2/nifty200-stock-board")')
-        end = api.index("\\n\\n@app.get(", start)
+        end = api.index("\n\n@app.get(", start)
         board = api[start:end]
         for required in (
             "fetch_full_quotes(list(NIFTY_200.values()), tokens)",
