@@ -11,14 +11,19 @@ class Test15mPaperPipeline(unittest.TestCase):
                       "open": 100, "high": 102, "low": 99,
                       "close": 101, "volume": 180} for i in range(4)]
         self.now = self.bars[-1]["timestamp"] + timedelta(minutes=15)
-        self.history = [{"timestamp": datetime(2026, 9, 1, 10, 0) + timedelta(days=i),
-                         "volume": 100} for i in range(20)]
+        self.history = []
+        day = datetime(2026, 9, 1, 10, 0)
+        while len(self.history) < 21:
+            if day.weekday() < 5:
+                self.history.append({"timestamp": day, "volume": 100})
+            day += timedelta(days=1)
 
     def test_volume_gate_before_indicators(self):
         result = screen_universe({"A": self.bars}, {"A": self.history}, now=self.now)
         self.assertEqual(result["selected_count"], 1)
         self.assertEqual(result["selected"][0]["reason"], "INSUFFICIENT_15M_HISTORY")
         self.assertEqual(result["selected"][0]["relative_volume"], 1.8)
+        self.assertEqual(result["selected"][0]["candle_time"], self.bars[-1]["timestamp"].isoformat())
 
     def test_low_volume_excluded(self):
         bars = [dict(x) for x in self.bars]
@@ -39,7 +44,7 @@ class Test15mPaperPipeline(unittest.TestCase):
     def test_no_baseline_excluded(self):
         result = screen_universe({"A": self.bars}, {}, now=self.now)
         self.assertEqual(result["excluded"]["A"],
-                         "MISSING_VERIFIED_20_SESSION_VOLUME_BASELINE")
+                         "MISSING_VERIFIED_21_SESSION_VOLUME_BASELINE")
 
     def test_rank_highest_volume_first(self):
         high = [dict(x) for x in self.bars]
