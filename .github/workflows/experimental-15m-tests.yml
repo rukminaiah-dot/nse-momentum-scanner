@@ -1,0 +1,22 @@
+name: Experimental 15m Paper Strategy Tests
+
+on:
+  pull_request:
+    paths:
+      - 'v2/backend/experimental_15m_*.py'
+      - 'tests/test_experimental_15m_*.py'
+      - '.github/workflows/experimental-15m-tests.yml'
+  workflow_dispatch:
+
+jobs:
+  paper-only-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run isolated paper strategy regression tests
+        run: python -m unittest discover -s tests -p 'test_experimental_15m_*.py' -v
+      - name: Compile experimental runner
+        run: python -m py_compile v2/backend/experimental_15m_*.py

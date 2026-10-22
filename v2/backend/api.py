@@ -42,6 +42,61 @@ def get_index_trend_changes():
     return read_index_trend_changes()
 
 
+@app.get("/api/v2/experimental/15m-index-trends")
+def get_experimental_15m_index_trends():
+    """Serve isolated Upstox 15m index research signals; never places orders."""
+    import time
+    from .experimental_15m_index_trend import run
+
+    now = time.monotonic()
+    cached = getattr(get_experimental_15m_index_trends, "_cache", None)
+    cached_at = getattr(get_experimental_15m_index_trends, "_cache_at", 0.0)
+    if cached is not None and now - cached_at < 60:
+        return cached
+    try:
+        result = run()
+    except Exception as exc:
+        result = {
+            "mode": "PAPER",
+            "source": "UPSTOX_HISTORY_V3",
+            "status": "UNAVAILABLE",
+            "reason": type(exc).__name__,
+            "indices": [],
+        }
+    get_experimental_15m_index_trends._cache = result
+    get_experimental_15m_index_trends._cache_at = now
+    return result
+
+
+@app.get("/api/v2/experimental/15m-stock-screen")
+def get_experimental_15m_stock_screen():
+    """Return a read-only, paper-only NSE 200 15m volume screen."""
+    import time
+    from .experimental_15m_upstox_runner import run
+
+    cache = getattr(get_experimental_15m_stock_screen, "_cache", None)
+    cached_at = getattr(get_experimental_15m_stock_screen, "_cache_at", 0.0)
+    now = time.monotonic()
+    if cache is not None and now - cached_at < 300:
+        return cache
+    try:
+        result = run(limit=200)
+    except Exception as exc:
+        result = {
+            "mode": "PAPER",
+            "source": "UPSTOX_HISTORY_V3",
+            "status": "UNAVAILABLE",
+            "reason": type(exc).__name__,
+            "requested_count": 200,
+            "selected_count": 0,
+            "selected": [],
+            "fetch_errors": {},
+        }
+    get_experimental_15m_stock_screen._cache = result
+    get_experimental_15m_stock_screen._cache_at = now
+    return result
+
+
 @app.get("/api/v2/premarket-data")
 def get_premarket_data():
     """Read timestamped pre-market context; never emit execution signals."""
