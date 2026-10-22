@@ -6,12 +6,16 @@ and Stochastic RSI (14, 14, 3, 3). Signals are paper labels only.
 """
 from __future__ import annotations
 
+import json
+import logging
 import os
+import re
 from datetime import datetime, timedelta
 from math import isfinite
 from zoneinfo import ZoneInfo
 
 IST = ZoneInfo("Asia/Kolkata")
+logger = logging.getLogger(__name__)
 INDEX_INSTRUMENTS = {
     "NIFTY 50": "NSE_INDEX|Nifty 50",
     "SENSEX": "BSE_INDEX|SENSEX",
@@ -234,6 +238,28 @@ def _historical_candles_in_bounded_windows(api, key, *, from_date, to_date):
     return _parse_rows(rows)
 
 
+def _upstox_error_metadata(exc):
+    """Return safe provider error fields for private operational logs."""
+    status = getattr(exc, "status", None)
+    payload = {}
+    try:
+        body = getattr(exc, "body", None)
+        payload = json.loads(body) if isinstance(body, str) else {}
+    except (TypeError, ValueError):
+        payload = {}
+    errors = payload.get("errors", []) if isinstance(payload, dict) else []
+    first = errors[0] if isinstance(errors, list) and errors else {}
+    first = first if isinstance(first, dict) else {}
+    code = first.get("errorCode") or first.get("code")
+    message = first.get("message")
+    if not message and isinstance(payload, dict):
+        message = payload.get("message")
+    message = str(message or getattr(exc, "reason", "") or "").replace("\r", " ").replace("\n", " ")[:240]
+    message = re.sub(r"(?i)bearer\s+\S+", "Bearer [redacted]", message)
+    message = re.sub(r"(?i)(access[_ -]?token|authorization)\s*[:=]\s*[^,;\s]+", r"\1=[redacted]", message)
+    return status, code, message
+
+
 def run(*, now=None, api=None, lookback_days=90):
     """Fetch read-only 15m index history and intraday data from Upstox V3."""
     now = now or datetime.now(IST)
@@ -260,6 +286,11 @@ def run(*, now=None, api=None, lookback_days=90):
                         and bar["timestamp"] + timedelta(minutes=15) <= now.replace(tzinfo=None)]
             results.append(evaluate_index(symbol, history + complete, now=now))
         except Exception as exc:
+            status, code, message = _upstox_error_metadata(exc)
+            logger.warning(
+                "Upstox 15m index request failed symbol=%s type=%s status=%s code=%s message=%s",
+                symbol, type(exc).__name__, status, code, message,
+            )
             errors[symbol] = type(exc).__name__
             results.append({"symbol": symbol, "mode": "PAPER", "signal": "WAIT",
                             "data_status": "UNAVAILABLE", "reason": "UPSTOX_FETCH_FAILED"})
