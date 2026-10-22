@@ -7,7 +7,7 @@ from datetime import timedelta
 from math import isfinite
 
 
-def verified_15m_same_slot_average(current_bar, historical_bars, *, sessions=20):
+def verified_15m_same_slot_average(current_bar, historical_bars, *, sessions=21):
     if not isinstance(sessions, int) or isinstance(sessions, bool) or sessions < 1:
         raise ValueError("sessions must be a positive integer")
     try:
@@ -19,7 +19,7 @@ def verified_15m_same_slot_average(current_bar, historical_bars, *, sessions=20)
         by_day = {}
         for bar in historical_bars:
             prior = bar["timestamp"]
-            if prior.date() >= stamp.date() or (prior.hour, prior.minute) != (stamp.hour, stamp.minute):
+            if prior.date() >= stamp.date() or prior.weekday() >= 5 or (prior.hour, prior.minute) != (stamp.hour, stamp.minute):
                 continue
             volume = float(bar["volume"])
             if not isfinite(volume) or volume < 0:
