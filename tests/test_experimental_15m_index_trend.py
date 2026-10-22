@@ -124,11 +124,12 @@ class ExperimentalIndexTrendTests(unittest.TestCase):
             ["2026-10-22T10:15:00+05:30", 104.4, 104.8, 104.3, 104.7, 0],
         ]
         api = FakeApi(historical_rows, current_rows)
-        result = run(now=now, api=api)
+        result = run(now=now, api=api, lookback_days=27)
         self.assertEqual(result["mode"], "PAPER")
         self.assertEqual(len(result["indices"]), 3)
         self.assertEqual(len(api.historical_calls), 3)
         self.assertEqual(len(api.intraday_calls), 3)
+        self.assertTrue(all((datetime.fromisoformat(call[3]) - datetime.fromisoformat(call[4])).days < 28\n                            for call in api.historical_calls))
         for symbol, key in INDEX_INSTRUMENTS.items():
             self.assertIn((key, "minutes", "15"), api.intraday_calls)
         self.assertTrue(all(row["signal"] in {"WAIT", "PAPER_BUY", "PAPER_SELL"}
@@ -136,6 +137,25 @@ class ExperimentalIndexTrendTests(unittest.TestCase):
         self.assertTrue(all(row.get("sma21_session_close") is not None
                             for row in result["indices"]))
         self.assertFalse(any("order" in name.lower() for name in dir(api)))
+
+    def test_ninety_day_history_is_split_into_limit_safe_windows(self):
+        now = datetime(2026, 10, 22, 10, 16, tzinfo=IST)
+        api = FakeApi([], [])
+        run(now=now, api=api, lookback_days=90)
+        self.assertEqual(len(api.historical_calls), 12)
+        self.assertEqual(len(api.intraday_calls), 3)
+        for symbol, key in INDEX_INSTRUMENTS.items():
+            calls = [call for call in api.historical_calls if call[0] == key]
+            self.assertEqual(len(calls), 4)
+            windows = sorted((datetime.fromisoformat(call[4]).date(),
+                              datetime.fromisoformat(call[3]).date())
+                             for call in calls)
+            self.assertEqual(windows[0][0], now.date() - timedelta(days=91))
+            self.assertEqual(windows[-1][1], now.date() - timedelta(days=1))
+            for start, end in windows:
+                self.assertLess((end - start).days, 28)
+            for earlier, later in zip(windows, windows[1:]):
+                self.assertEqual(earlier[1] + timedelta(days=1), later[0])
 
     def test_rejects_duplicate_15m_timestamps(self):
         bars = history(21)
