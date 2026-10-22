@@ -17,7 +17,7 @@ class FivePageUiTests(unittest.TestCase):
 
     def test_nse200_board_renders_as_soon_as_its_api_responds(self):
         self.assertIsNotNone(re.search(
-            r"const boardPromise=get\\(corePaths\\[1\\]\\)\\.then\\(value=>\\{.*?state\\.board=.*?renderBoard\\(\\);",
+            r"const boardPromise=get\(corePaths\[1\]\)\.then\(value=>\{.*?state\.board=.*?renderBoard\(\);",
             self.html, re.S,
         ))
         self.assertIn("Promise.all([boardPromise,", self.html)
