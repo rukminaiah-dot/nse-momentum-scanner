@@ -117,8 +117,24 @@ def evaluate_index(symbol, bars, *, now, min_prior_sessions=REQUIRED_PRIOR_SESSI
         if earlier["timestamp"].date() == later["timestamp"].date() and delta != timedelta(minutes=15):
             return wait("NONCONTIGUOUS_15M_CANDLES")
     today = now.date()
-    prior_sessions = {bar["timestamp"].date() for bar in ordered
-                      if bar["timestamp"].date() < today}
+    slots_by_day = {}
+    for bar in ordered:
+        stamp = bar["timestamp"]
+        minute = stamp.hour * 60 + stamp.minute
+        if not (555 <= minute <= 915 and (minute - 555) % 15 == 0):
+            return wait("INVALID_15M_SESSION_ALIGNMENT")
+        try:
+            opn, high, low, close = (float(bar[key]) for key in ("open", "high", "low", "close"))
+        except (KeyError, TypeError, ValueError, OverflowError):
+            return wait("INVALID_CANDLE")
+        if not all(isfinite(value) and value > 0 for value in (opn, high, low, close)):
+            return wait("INVALID_CANDLE")
+        if high < max(opn, close, low) or low > min(opn, close, high) or high <= low:
+            return wait("INVALID_CANDLE")
+        slots_by_day.setdefault(stamp.date(), set()).add(minute)
+    expected_slots = {555 + 15 * index for index in range(25)}
+    prior_sessions = {day for day, slots in slots_by_day.items()
+                      if day < today and slots == expected_slots}
     if len(prior_sessions) < min_prior_sessions:
         return wait("INSUFFICIENT_21_PRIOR_SESSIONS",
                     prior_session_count=len(prior_sessions),
