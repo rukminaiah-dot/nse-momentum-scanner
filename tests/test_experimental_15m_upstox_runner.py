@@ -35,7 +35,18 @@ class TestUpstoxPaperRunner(unittest.TestCase):
         self.assertEqual(len(bars), 2)
         self.assertEqual(bars[-1]["timestamp"].minute, 45)
         self.assertEqual(api.calls[0][1][1:3], ("minutes", "15"))
+        self.assertEqual(api.calls[0][1][3], "2026-10-20")
+        self.assertEqual(api.calls[0][1][4], "2026-09-20")
         self.assertEqual(api.calls[1][1][1:3], ("minutes", "15"))
+
+    def test_historical_candles_are_cached_within_scan_day(self):
+        now = datetime(2026, 10, 21, 10, 8)
+        api = FakeApi([row(datetime(2026, 10, 20, 10))], [])
+        cache = {}
+        fetch_symbol(api, "NSE_EQ|TEST", now=now, historical_cache=cache)
+        fetch_symbol(api, "NSE_EQ|TEST", now=now, historical_cache=cache)
+        self.assertEqual(sum(1 for kind, _ in api.calls if kind == "history"), 1)
+        self.assertEqual(sum(1 for kind, _ in api.calls if kind == "intraday"), 2)
 
     def test_run_does_not_need_live_broker(self):
         now = datetime(2026, 10, 21, 10, 8)
