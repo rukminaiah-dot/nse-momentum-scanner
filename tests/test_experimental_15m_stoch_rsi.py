@@ -2,7 +2,7 @@
 import unittest
 from datetime import datetime, timedelta
 from unittest.mock import patch
-from v2.backend.experimental_15m_stoch_rsi import evaluate
+from v2.backend.experimental_15m_stoch_rsi import evaluate, indicator_snapshot
 
 
 class TestExperimental15m(unittest.TestCase):
@@ -16,6 +16,20 @@ class TestExperimental15m(unittest.TestCase):
             for i in range(60)
         ]
         self.now = self.bars[-1]["timestamp"] + timedelta(minutes=15)
+
+    def test_indicator_snapshot_exposes_favourite_context_without_signal(self):
+        result = indicator_snapshot(self.bars)
+        self.assertEqual(result["status"], "AVAILABLE")
+        self.assertIn(result["trend"], ("BULLISH", "BEARISH", "NEUTRAL"))
+        for key in ("ema20", "ema50", "stoch_k", "stoch_d"):
+            self.assertTrue(0 <= result[key] <= 10000)
+
+    def test_indicator_snapshot_rejects_duplicate_candles(self):
+        bars = [dict(bar) for bar in self.bars]
+        bars[-1]["timestamp"] = bars[-2]["timestamp"]
+        result = indicator_snapshot(bars)
+        self.assertEqual(result["status"], "UNAVAILABLE")
+        self.assertEqual(result["reason"], "DUPLICATE_15M_CANDLE")
 
     def test_requires_verified_volume(self):
         self.assertEqual(evaluate(self.bars, now=self.now,

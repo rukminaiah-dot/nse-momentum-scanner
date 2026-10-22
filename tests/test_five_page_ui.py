@@ -15,6 +15,39 @@ class FivePageUiTests(unittest.TestCase):
     def setUpClass(cls):
         cls.html = HTML.read_text(encoding="utf-8")
 
+    def test_nse200_board_renders_as_soon_as_its_api_responds(self):
+        self.assertIsNotNone(re.search(
+            r"const boardPromise=get\(corePaths\[1\]\)\.then\(value=>\{.*?state\.board=.*?renderBoard\(\);",
+            self.html, re.S,
+        ))
+        self.assertIn("Promise.all([boardPromise,", self.html)
+        self.assertIn("Promise.allSettled(otherPaths.map(get))", self.html)
+
+    def test_favourite_summary_does_not_show_legacy_5m_rating_columns(self):
+        self.assertIn(
+            "const favouriteHeaders=['Rank','Favourite','Stock','Session change %','Last price','Quote']",
+            self.html,
+        )
+        self.assertIn("15-minute candle, RVOL, EMA and Stoch RSI appear in the paper readout below.", self.html)
+
+    def test_saved_favourites_have_separate_15m_readout(self):
+        self.assertIn("function refreshFavourite15m", self.html)
+        self.assertIn("favorite_analysis", self.html)
+        self.assertIn("Stoch RSI K / D", self.html)
+        self.assertIn("class=\"mobile-stock-list\"", self.html)
+        self.assertIn("15-minute candle · '+candleTime", self.html)
+        self.assertIn("symbols='+encodeURIComponent(symbols.join(','))", self.html)
+
+    def test_nse200_search_results_appear_before_favourites(self):
+        self.assertLess(self.html.index('id="board-mobile"'), self.html.index('id="favourites-list"'))
+        self.assertLess(self.html.index('id="board-table"'), self.html.index('id="favourites-list"'))
+        self.assertIn("$('filter').oninput=renderBoard", self.html)
+        self.assertIn('placeholder="Search symbol or company (e.g. ICICI Bank)"', self.html)
+
+    def test_favourite_change_during_fetch_reloads_latest_selection(self):
+        self.assertIn("favourite15mRequestedSymbols", self.html)
+        self.assertIn("state.favourite15mRequestedSymbols!==getFavourites().join(',')", self.html)
+
     def test_embedded_javascript_parses(self):
         node = shutil.which("node")
         self.assertIsNotNone(node, "Node.js is required for UI syntax validation")
@@ -215,8 +248,8 @@ class FivePageUiTests(unittest.TestCase):
             "'5m Score / last'",
             "'EMA20 / EMA50 · trend'",
             "'Stoch RSI K / D'",
-            "details.stoch_k",
-            "details.stoch_d",
+            "indicator.stoch_k",
+            "indicator.stoch_d",
             "HISTORICAL · ",
             "No live signal is assigned",
         ):
@@ -735,7 +768,9 @@ class FivePageUiTests(unittest.TestCase):
 
     def test_api_requests_time_out_instead_of_staying_on_loading_state(self):
         self.assertIn("new AbortController()", self.html)
-        self.assertIn("setTimeout(()=>controller.abort(),12000)", self.html)
+        self.assertIn("async function get(path,timeoutMs=12000)", self.html)
+        self.assertIn("setTimeout(()=>controller.abort(),timeoutMs)", self.html)
+        self.assertIn("get(path,30000)", self.html)
         self.assertIn("finally{clearTimeout(timer)}", self.html)
 
     def test_reversal_context_refresh_updates_the_dedicated_flow_card(self):

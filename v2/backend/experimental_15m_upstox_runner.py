@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from math import isfinite
 from zoneinfo import ZoneInfo
 
-from .experimental_15m_pipeline import screen_universe
+from .experimental_15m_pipeline import screen_universe, analyze_favourites
 from .experimental_15m_volume import verified_15m_same_slot_average
 from .stock_universe import NIFTY_200
 
@@ -137,9 +137,22 @@ def fetch_symbol(api, key, *, now, lookback_days=30, historical_cache=None, slee
     return (history[-100:] + complete), history
 
 
-def run(*, limit=5, now=None, api=None):
-    if not 1 <= limit <= len(NIFTY_200):
-        raise ValueError("limit must be between 1 and the NSE universe size")
+def run(*, limit=5, now=None, api=None, symbols=None):
+    if symbols is None:
+        if not 1 <= limit <= len(NIFTY_200):
+            raise ValueError("limit must be between 1 and the NSE universe size")
+        requested = list(NIFTY_200.items())[:limit]
+        favourite_symbols = None
+    else:
+        if not isinstance(symbols, (list, tuple)) or not 1 <= len(symbols) <= 20:
+            raise ValueError("symbols must contain 1 to 20 NSE symbols")
+        favourite_symbols = [str(symbol).strip().upper() for symbol in symbols]
+        if len(set(favourite_symbols)) != len(favourite_symbols):
+            raise ValueError("symbols must be unique")
+        if any(symbol not in NIFTY_200 for symbol in favourite_symbols):
+            raise ValueError("symbols must belong to the configured NSE 200")
+        requested = [(symbol, NIFTY_200[symbol]) for symbol in favourite_symbols]
+        limit = len(requested)
     now = now or datetime.now(IST).replace(tzinfo=None)
     if now.tzinfo is not None:
         now = now.astimezone(IST).replace(tzinfo=None)
@@ -154,7 +167,7 @@ def run(*, limit=5, now=None, api=None):
         _HISTORICAL_CACHE_DATE = now.date()
         _HISTORICAL_CACHE = {}
     stock_bars, historical_bars, errors, stock_context, data_quality = {}, {}, {}, {}, {}
-    for symbol, key in list(NIFTY_200.items())[:limit]:
+    for symbol, key in requested:
         try:
             stock_bars[symbol], historical_bars[symbol] = fetch_symbol(
                 api, key, now=now, historical_cache=_HISTORICAL_CACHE)
@@ -203,6 +216,10 @@ def run(*, limit=5, now=None, api=None):
                 "completed_intraday_candles": 0,
             }
     result = screen_universe(stock_bars, historical_bars, now=now)
+    if favourite_symbols is not None:
+        result["favorite_analysis"] = analyze_favourites(
+            stock_bars, historical_bars, symbols=favourite_symbols,
+            now=now, screened=result)
     result["fetch_errors"] = errors
     result["stock_context"] = stock_context
     result["data_quality"] = data_quality

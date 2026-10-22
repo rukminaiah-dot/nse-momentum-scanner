@@ -4,8 +4,9 @@ Caller supplies completed 15-minute OHLCV history per symbol and the prior
 20-session same-slot history. No broker calls, orders, or production imports.
 """
 from math import isfinite
+from datetime import timedelta
 
-from .experimental_15m_stoch_rsi import Settings, evaluate
+from .experimental_15m_stoch_rsi import Settings, evaluate, indicator_snapshot
 from .experimental_15m_volume import verified_15m_same_slot_average
 
 
@@ -79,3 +80,61 @@ def screen_universe(stock_bars, historical_volume_bars, *, now,
             "strong_volume_count": sum(1 for row in analyzed if row["volume_tier"] == "STRONG"),
             "selected": analyzed,
             "excluded": excluded, "min_rvol": min_rvol}
+
+
+def analyze_favourites(stock_bars, historical_volume_bars, *, symbols, now,
+                       screened=None, settings=None):
+    """Return indicator context for selected favourites, without scanning the universe."""
+    settings = settings or Settings()
+    screened = screened or screen_universe(
+        stock_bars, historical_volume_bars, now=now, settings=settings)
+    qualified = {row["symbol"]: row for row in screened.get("selected", [])}
+    excluded = screened.get("excluded", {})
+    rows = []
+    for symbol in symbols:
+        bars = stock_bars.get(symbol) or []
+        if not bars:
+            rows.append({"symbol": symbol, "status": "UNAVAILABLE",
+                         "signal": "WAIT", "reason": "NO_COMPLETED_15M_CANDLES",
+                         "indicator": {"status": "UNAVAILABLE",
+                                       "reason": "NO_COMPLETED_15M_CANDLES"}})
+            continue
+        latest = bars[-1]
+        try:
+            baseline = verified_15m_same_slot_average(
+                latest, historical_volume_bars.get(symbol, ()))
+            current_volume = float(latest["volume"])
+            rvol = current_volume / baseline if baseline and baseline > 0 else None
+            candle = {field: round(float(latest[field]), 4)
+                      for field in ("open", "high", "low", "close", "volume")}
+            if not all(isfinite(value) for value in candle.values()):
+                raise ValueError("invalid candle")
+        except (KeyError, TypeError, ValueError, OverflowError):
+            rows.append({"symbol": symbol, "status": "UNAVAILABLE",
+                         "signal": "WAIT", "reason": "INVALID_15M_CANDLE",
+                         "indicator": {"status": "UNAVAILABLE",
+                                       "reason": "INVALID_15M_CANDLE"}})
+            continue
+        indicator = indicator_snapshot(bars, settings)
+        age_minutes = (now - (latest["timestamp"] + timedelta(minutes=15))).total_seconds() / 60
+        minute_of_day = latest["timestamp"].hour * 60 + latest["timestamp"].minute + 15
+        is_live = (latest["timestamp"].date() == now.date()
+                   and 0 <= age_minutes <= settings.max_age_minutes
+                   and 570 <= minute_of_day < 930)
+        candidate = qualified.get(symbol)
+        signal = candidate["signal"] if is_live and candidate else "WAIT"
+        reason = (candidate["reason"] if is_live and candidate
+                  else excluded.get(symbol, "VOLUME_BELOW_THRESHOLD") if is_live
+                  else "MARKET_CLOSED_HISTORICAL_ONLY")
+        rows.append({
+            "symbol": symbol,
+            "status": "LIVE_FRESH" if is_live else "HISTORICAL",
+            "signal": signal,
+            "reason": reason,
+            "candle_time": latest["timestamp"].isoformat(),
+            "candle": candle,
+            "relative_volume": round(rvol, 3) if rvol is not None and isfinite(rvol) else None,
+            "baseline_volume": round(baseline, 3) if baseline is not None else None,
+            "indicator": indicator,
+        })
+    return rows

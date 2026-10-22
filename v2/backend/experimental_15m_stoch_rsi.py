@@ -140,3 +140,42 @@ def evaluate(bars, *, now, same_slot_average_volume, settings=Settings()):
             "ema20": round(ema20, 4), "ema50": round(ema50, 4), "trend": trend,
             "targets_pct": [0.3, 0.5, 0.75, 1.0] if buy or sell else [],
             "reason": "15M_FILTERS_PASSED" if buy or sell else "NO_QUALIFYING_SETUP"}
+
+
+def indicator_snapshot(bars, settings=Settings()):
+    """Return validated EMA/Stoch RSI context without assigning a trade signal."""
+    required = max(settings.ema_slow, settings.rsi_period +
+                   settings.stoch_period + settings.k_smooth +
+                   settings.d_smooth + 2)
+    if len(bars) < required:
+        return {"status": "UNAVAILABLE", "reason": "INSUFFICIENT_15M_HISTORY"}
+    recent = bars[-required:]
+    try:
+        stamps = [bar["timestamp"] for bar in recent]
+        if len(set(stamps)) != len(stamps):
+            return {"status": "UNAVAILABLE", "reason": "DUPLICATE_15M_CANDLE"}
+        for earlier, later in zip(recent, recent[1:]):
+            delta = later["timestamp"] - earlier["timestamp"]
+            if delta <= timedelta(0):
+                return {"status": "UNAVAILABLE", "reason": "UNSORTED_15M_HISTORY"}
+            if earlier["timestamp"].date() == later["timestamp"].date() and delta != timedelta(minutes=15):
+                return {"status": "UNAVAILABLE", "reason": "NONCONTIGUOUS_15M_CANDLES"}
+        closes = [float(bar["close"]) for bar in recent]
+        if not all(isfinite(value) and value > 0 for value in closes):
+            return {"status": "UNAVAILABLE", "reason": "INVALID_PRICE"}
+        ema20 = _ema(closes, settings.ema_fast)
+        ema50 = _ema(closes, settings.ema_slow)
+        k, d = _stoch_rsi(closes, settings)
+        if not ema20 or not ema50 or not k or not d:
+            return {"status": "UNAVAILABLE", "reason": "INSUFFICIENT_STOCH_RSI_HISTORY"}
+        trend = "BULLISH" if ema20[-1] > ema50[-1] else "BEARISH" if ema20[-1] < ema50[-1] else "NEUTRAL"
+        return {
+            "status": "AVAILABLE",
+            "trend": trend,
+            "ema20": round(ema20[-1], 4),
+            "ema50": round(ema50[-1], 4),
+            "stoch_k": round(k[-1], 4),
+            "stoch_d": round(d[-1], 4),
+        }
+    except (KeyError, TypeError, ValueError, AttributeError, OverflowError):
+        return {"status": "UNAVAILABLE", "reason": "INVALID_15M_HISTORY"}
