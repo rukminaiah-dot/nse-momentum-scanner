@@ -37,9 +37,19 @@ class UpstoxPaperScanner(private val database: CandleDatabase) {
         now: java.time.Instant = java.time.Instant.now()
     ): ScanReport {
         require(token.isNotBlank())
+        if (universe.isEmpty()) return ScanReport(emptyList(), now.atZone(zone).toString(), 0, 0)
         val sessionDate = now.atZone(zone).toLocalDate()
-        val jobs = universe.map { (symbol, instrumentKey) ->
-            Callable { scanOne(token, symbol, instrumentKey, favourites, sessionDate, now) }
+        // Validate credentials once before fanning out requests across the universe.
+        val firstIntraday = try {
+            requestCandles(token, intradayPath(universe.first().second))
+        } catch (error: Exception) {
+            throw IOException(apiReason(error))
+        }
+        val jobs = universe.mapIndexed { index, (symbol, instrumentKey) ->
+            Callable {
+                scanOne(token, symbol, instrumentKey, favourites, sessionDate, now,
+                    if (index == 0) firstIntraday else null)
+            }
         }
         val futures = pool.invokeAll(jobs)
         val rows = futures.mapIndexed { index, future ->
@@ -61,19 +71,22 @@ class UpstoxPaperScanner(private val database: CandleDatabase) {
         instrumentKey: String,
         favourites: Set<String>,
         sessionDate: LocalDate,
-        now: java.time.Instant
+        now: java.time.Instant,
+        prefetchedIntraday: List<Candle>?
     ): ScanRow {
-        if (!database.hasTwentyPriorSessions(symbol, sessionDate)) {
+        if (!database.hasTwentyPriorSessions(symbol, sessionDate) &&
+            !database.historyAlreadyAttemptedToday(symbol, sessionDate)) {
             try {
                 val end = sessionDate.minusDays(1)
                 val start = end.minusMonths(1)
                 database.save(symbol, requestCandles(token,
                     historicalPath(instrumentKey, end, start)))
+                database.markHistoryAttempted(symbol, sessionDate)
             } catch (error: Exception) {
                 return ScanRow(symbol, reason = apiReason(error))
             }
         }
-        val intraday = try {
+        val intraday = if (prefetchedIntraday != null) prefetchedIntraday else try {
             requestCandles(token, intradayPath(instrumentKey))
         } catch (error: Exception) {
             return ScanRow(symbol, reason = apiReason(error))
