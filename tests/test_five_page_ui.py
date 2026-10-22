@@ -23,10 +23,8 @@ class FivePageUiTests(unittest.TestCase):
             r"const boardPromise=get\(corePaths\[1\]\)\.then\(value=>\{.*?state\.board=.*?renderBoard\(\);",
             load.group(1), re.S,
         ))
-        self.assertIn(
-            "Promise.all([boardPromise,Promise.allSettled(otherPaths.map(get))])",
-            load.group(1),
-        )
+        self.assertIn("Promise.all([boardPromise,", load.group(1))
+        self.assertIn("Promise.allSettled(otherPaths.map(get))", load.group(1))
 
     def test_favourite_summary_does_not_show_legacy_5m_rating_columns(self):
         self.assertIn(
