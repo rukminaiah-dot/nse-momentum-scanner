@@ -4,10 +4,10 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 android {
-    namespace = "in.nsemomentum.paper"
+    namespace = "com.nsemomentum.paper"
     compileSdk = 35
     defaultConfig {
-        applicationId = "in.nsemomentum.paper"
+        applicationId = "com.nsemomentum.paper"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
