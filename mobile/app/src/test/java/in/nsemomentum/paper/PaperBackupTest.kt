@@ -29,6 +29,10 @@ class PaperBackupTest {
             .put("peak_rvol", 2.0).put("last_price", 100.0)
             .put("last_volume", JSONObject.NULL).put("average_slot_volume", 1000.0))
     }
+    private fun withDatabase(context: Context, block: (CandleDatabase) -> Unit) {
+        val db = CandleDatabase(context)
+        try { block(db) } finally { db.close() }
+    }
     private fun snapshot() = PaperBackup.Snapshot(setOf("BASE", "CUSTOM"), listOf(custom), history())
     private fun rejects(block: () -> Unit) {
         try { block(); fail("Expected rejection") } catch (_: IllegalArgumentException) { }
@@ -37,7 +41,7 @@ class PaperBackupTest {
         val context = RuntimeEnvironment.getApplication() as Context
         context.deleteDatabase("paper_candles.db")
         context.getSharedPreferences("paper_preferences", 0).edit().putString("token", "SECRET_SENTINEL").commit()
-        CandleDatabase(context).use { db ->
+        withDatabase(context) { db ->
             db.importPaperHistory(snapshot().history)
             val encoded = PaperBackup.encode(snapshot().copy(history = db.exportPaperHistory()))
             assertFalse(encoded.contains("SECRET_SENTINEL"))
@@ -68,7 +72,7 @@ class PaperBackupTest {
         prefs.edit().clear().putStringSet("favourites", snapshot().favourites)
             .putString("custom_stocks", StockCatalog.encodeCustom(snapshot().custom))
             .putString("token", "DO_NOT_EXPORT").commit()
-        CandleDatabase(context).use { db ->
+        withDatabase(context) { db ->
             db.importPaperHistory(history())
             val store = PaperBackupStore(context, db, base)
             val encoded = store.export()
@@ -108,7 +112,7 @@ class PaperBackupTest {
     @Test fun databaseImportRollsBackOnFailureAndPreservesExistingRows() {
         val context = RuntimeEnvironment.getApplication() as Context
         context.deleteDatabase("paper_candles.db")
-        CandleDatabase(context).use { db ->
+        withDatabase(context) { db ->
             db.importPaperHistory(history())
             val changed = history()
             changed.getJSONArray("paper_outcomes").getJSONObject(0).put("exit_price", 999)
