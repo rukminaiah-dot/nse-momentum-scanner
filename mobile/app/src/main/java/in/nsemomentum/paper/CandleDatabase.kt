@@ -298,6 +298,58 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
         return output
     }
 
+    fun exportPaperHistory(): org.json.JSONObject {
+        val result = org.json.JSONObject()
+        val db = readableDatabase
+        db.beginTransaction()
+        try {
+            PaperBackup.tables.forEach { (table, columns) ->
+                val rows = org.json.JSONArray()
+                db.query(table, columns.toTypedArray(), null, null, null, null, null).use { cursor ->
+                    while (cursor.moveToNext()) {
+                        val row = org.json.JSONObject()
+                        columns.forEachIndexed { index, name ->
+                            row.put(name, when (cursor.getType(index)) {
+                                android.database.Cursor.FIELD_TYPE_NULL -> org.json.JSONObject.NULL
+                                android.database.Cursor.FIELD_TYPE_INTEGER -> cursor.getLong(index)
+                                android.database.Cursor.FIELD_TYPE_FLOAT -> cursor.getDouble(index)
+                                else -> cursor.getString(index)
+                            })
+                        }
+                        rows.put(row)
+                    }
+                }
+                result.put(table, rows)
+            }
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+        return result
+    }
+
+    /** Caller validates the complete backup before entry. Existing history wins; retry is idempotent. */
+    fun importPaperHistory(history: org.json.JSONObject) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            PaperBackup.tables.forEach { (table, columns) ->
+                val rows = history.getJSONArray(table)
+                for (i in 0 until rows.length()) {
+                    val row = rows.getJSONObject(i)
+                    val values = ContentValues()
+                    columns.forEach { column ->
+                        when (val value = row.get(column)) {
+                            org.json.JSONObject.NULL -> values.putNull(column)
+                            is Number -> values.put(column, value.toDouble())
+                            else -> values.put(column, value as String)
+                        }
+                    }
+                    db.insertWithOnConflict(table, null, values, SQLiteDatabase.CONFLICT_IGNORE)
+                }
+            }
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+    }
+
     fun clearAll() {
         val db = writableDatabase
         listOf("candles", "history_attempts", "daily_qualifications", "pending_paper_signals", "paper_outcomes", "latest_scan_rows")

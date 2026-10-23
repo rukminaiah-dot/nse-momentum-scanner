@@ -130,6 +130,99 @@ private fun PaperScannerApp() {
     var tokenConfigured by remember { mutableStateOf(tokenStore.read() != null) }
     val scope = rememberCoroutineScope()
     var scanJob by remember { mutableStateOf<Job?>(null) }
+    var backupStatus by remember { mutableStateOf("") }
+    var backupBusy by remember { mutableStateOf(false) }
+    var pendingBackup by remember { mutableStateOf<PaperBackup.Snapshot?>(null) }
+    fun backupAllowed() = !scanning && !preferences.getBoolean(PaperScanService.PREF_ACTIVE, false)
+    val exportBackup = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null && backupAllowed()) {
+            backupBusy = true
+            scope.launch {
+                try {
+                    val saved = withContext(Dispatchers.IO) {
+                        val snapshot = PaperBackup.Snapshot(
+                            preferences.getStringSet("favourites", emptySet()).orEmpty().toSet(),
+                            StockCatalog.decodeCustom(preferences.getString("custom_stocks", null), baseStocks),
+                            database.exportPaperHistory())
+                        val encoded = PaperBackup.encode(snapshot)
+                        // Validate our own output before reporting a successful backup.
+                        PaperBackup.decode(encoded, baseStocks)
+                        val bytes = encoded.toByteArray(Charsets.UTF_8)
+                        requireNotNull(context.contentResolver.openOutputStream(uri, "wt")).use { it.write(bytes) }
+                        val readBack = requireNotNull(context.contentResolver.openInputStream(uri)).use { it.readBytes() }
+                        require(bytes.contentEquals(readBack))
+                        snapshot
+                    }
+                    backupStatus = "Backup saved and read back: ${saved.favourites.size} favourites, ${saved.custom.size} custom stocks, and paper history. Token excluded. Keep this file private."
+                } catch (_: Exception) {
+                    backupStatus = "Backup failed. Do not uninstall or clear app data. Try another file location."
+                } finally { backupBusy = false }
+            }
+        }
+    }
+    val importBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null && backupAllowed()) {
+            backupBusy = true
+            scope.launch {
+                try {
+                    pendingBackup = withContext(Dispatchers.IO) {
+                        val bytes = requireNotNull(context.contentResolver.openInputStream(uri)).use { input ->
+                            val out = java.io.ByteArrayOutputStream()
+                            val buffer = ByteArray(8192)
+                            while (true) {
+                                val n = input.read(buffer)
+                                if (n < 0) break
+                                require(out.size() + n <= PaperBackup.MAX_BYTES)
+                                out.write(buffer, 0, n)
+                            }
+                            out.toByteArray()
+                        }
+                        PaperBackup.decode(bytes.toString(Charsets.UTF_8), baseStocks)
+                    }
+                } catch (_: Exception) {
+                    backupStatus = "Backup rejected: invalid, unsupported, or too large. No data changed."
+                } finally { backupBusy = false }
+            }
+        }
+    }
+    if (backupBusy && pendingBackup == null) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = {}, confirmButton = {},
+            title = { Text("Processing backup") },
+            text = { Text("Keep the app open until this completes.") }
+        )
+    }
+    pendingBackup?.let { incoming ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { if (!backupBusy) pendingBackup = null },
+            title = { Text("Restore paper backup?") },
+            text = { Text("Merge ${incoming.favourites.size} favourites, ${incoming.custom.size} custom stocks, and paper history. Existing history is kept on duplicate keys. Token and live scan state are unchanged. Imported history is user-supplied, not verified performance.") },
+            confirmButton = {
+                Button(enabled = !backupBusy, onClick = {
+                    if (backupAllowed()) {
+                        backupBusy = true
+                        scope.launch {
+                            try {
+                                val merged = PaperBackup.merge(incoming, favourites.toSet(), stocks.filter { it.isCustom }, baseStocks)
+                                withContext(Dispatchers.IO) {
+                                    database.importPaperHistory(merged.history)
+                                    check(preferences.edit().putStringSet("favourites", merged.favourites)
+                                        .putString("custom_stocks", StockCatalog.encodeCustom(merged.custom)).commit())
+                                }
+                                stocks.clear(); stocks.addAll(baseStocks + merged.custom)
+                                favourites.clear(); favourites.addAll(merged.favourites.sorted())
+                                backupStatus = "Restore complete. Imported history is user-supplied paper data, not verified performance."
+                                pendingBackup = null
+                            } catch (_: Exception) {
+                                backupStatus = "Restore not completed. Check stock conflicts, 20-stock limits, and free storage. Existing data is kept; retry is safe."
+                            } finally { backupBusy = false }
+                        }
+                    } else backupStatus = "Stop all scans before restoring."
+                }) { Text("Merge backup") }
+            },
+            dismissButton = { Button(enabled = !backupBusy, onClick = { pendingBackup = null }) { Text("Cancel") } }
+        )
+    }
     val startFullDayScan: () -> Unit = {
         if (tokenStore.read().isNullOrBlank()) {
             page = Page.SETTINGS
@@ -204,7 +297,7 @@ private fun PaperScannerApp() {
         if (token == null) {
             scanStatus = "Set your Upstox access token in Settings before scanning."
             page = Page.SETTINGS
-        } else if (!scanning && baseStocks.size == 200 && stocks.size >= 200) {
+        } else if (!backupBusy && pendingBackup == null && !scanning && baseStocks.size == 200 && stocks.size >= 200) {
             scanning = true
             scanProgress = "Verifying NSE session calendar, then stock history…"
             scanStatus = "Fetching read-only 15-minute candles for ${stocks.size} stocks…"
@@ -466,6 +559,10 @@ private fun PaperScannerApp() {
                 }
             }
             Page.SETTINGS -> SettingsPage(
+                backupStatus = backupStatus,
+                backupEnabled = !backupBusy && !scanning && !autoScanActive,
+                onExportBackup = { exportBackup.launch("nse-paper-backup.json") },
+                onImportBackup = { importBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
                 tokenConfigured = tokenConfigured,
                 scanStatus = scanStatus,
                 onSaveToken = { token ->
@@ -608,6 +705,10 @@ private fun PaperWeeklyChart(days: List<DailyPaperSummary>, outcomes: List<Paper
 
 @Composable
 private fun SettingsPage(
+    backupStatus: String,
+    backupEnabled: Boolean,
+    onExportBackup: () -> Unit,
+    onImportBackup: () -> Unit,
     tokenConfigured: Boolean,
     scanStatus: String,
     onSaveToken: (String) -> Unit,
@@ -616,6 +717,13 @@ private fun SettingsPage(
 ) {
     var tokenInput by remember { mutableStateOf("") }
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Local backup & restore", style = MaterialTheme.typography.titleMedium)
+        Text("Stop manual and full-day scans first. Export favourites, custom stocks, and paper history to a file you keep. Tokens and candle cache are excluded. This app cannot read another installed app's private data.")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(enabled = backupEnabled, onClick = onExportBackup) { Text("Export backup") }
+            Button(enabled = backupEnabled, onClick = onImportBackup) { Text("Restore backup") }
+        }
+        Text(backupStatus)
         Text("Settings & data health", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text("PAPER MODE · no order placement capability")
         Text("Generate a personal access token in Upstox Developer Apps, then enter it here. The app encrypts it on this phone and does not log or upload it.")

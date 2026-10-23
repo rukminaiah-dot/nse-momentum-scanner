@@ -10,11 +10,24 @@ android {
         applicationId = "com.nsemomentum.paper.preview"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.5.1-preview"
+        versionCode = 7
+        versionName = "0.6.0-preview"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+    // Persistent private keystore is supplied outside the repository. No debug-key fallback for release.
+    signingConfigs {
+        create("persistent") {
+            System.getenv("ANDROID_SIGNING_STORE_FILE")?.let { storeFile = file(it) }
+            storePassword = System.getenv("ANDROID_SIGNING_STORE_PASSWORD")
+            keyAlias = System.getenv("ANDROID_SIGNING_KEY_ALIAS")
+            keyPassword = System.getenv("ANDROID_SIGNING_KEY_PASSWORD")
+        }
+    }
+    buildTypes {
+        getByName("release") { signingConfig = signingConfigs.getByName("persistent") }
+    }
     testOptions {
+        unitTests.isIncludeAndroidResources = true
         unitTests.all {
             it.testLogging {
                 events("failed")
@@ -39,7 +52,18 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+}
+
+// Fail before release packaging if a persistent signing credential is missing.
+tasks.configureEach {
+    if (name == "preReleaseBuild") doFirst {
+        listOf("ANDROID_SIGNING_STORE_FILE", "ANDROID_SIGNING_STORE_PASSWORD",
+            "ANDROID_SIGNING_KEY_ALIAS", "ANDROID_SIGNING_KEY_PASSWORD").forEach {
+            check(!System.getenv(it).isNullOrBlank()) { "Persistent Android signing is not configured." }
+        }
+    }
 }

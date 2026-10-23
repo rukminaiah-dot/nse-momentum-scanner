@@ -18,3 +18,8 @@ v2/data/*.db
 
 v2/backend/*.before_*
 v2/frontend/*.bak_*
+
+# Android private signing material must never enter git.
+*.jks
+*.keystore
+keystore.properties
