@@ -8,16 +8,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZonedDateTime
 
-data class QualifiedStock(
-    val symbol: String,
-    val firstSeen: Instant,
-    val lastSeen: Instant,
-    val peakRelativeVolume: Double,
-    val lastPrice: Double?,
-    val lastVolume: Double?,
-    val averageSlotVolume: Double?
-)
-
 class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candles.db", null, 3), CandleStore {
     override fun onCreate(db: SQLiteDatabase) {
         createCandles(db)
@@ -163,25 +153,32 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
 
     private fun upsertQualification(db: SQLiteDatabase, date: LocalDate, row: ScanRow, at: Instant) {
         val key = arrayOf(date.toString(), row.symbol)
-        var firstSeen: String? = null
-        var peak = 0.0
+        var existing: QualifiedStock? = null
         db.query(
-            "daily_qualifications", arrayOf("first_seen", "peak_rvol"),
+            "daily_qualifications",
+            arrayOf("first_seen", "last_seen", "peak_rvol", "last_price", "last_volume", "average_slot_volume"),
             "session_date=? AND symbol=?", key, null, null, null
         ).use { cursor ->
             if (cursor.moveToFirst()) {
-                firstSeen = cursor.getString(0)
-                peak = cursor.getDouble(1)
+                existing = QualifiedStock(
+                    row.symbol, Instant.parse(cursor.getString(0)), Instant.parse(cursor.getString(1)),
+                    cursor.getDouble(2),
+                    if (cursor.isNull(3)) null else cursor.getDouble(3),
+                    if (cursor.isNull(4)) null else cursor.getDouble(4),
+                    if (cursor.isNull(5)) null else cursor.getDouble(5)
+                )
             }
         }
+        val updated = PaperOutcomeLogic.updateQualification(existing, row, at) ?: return
         val values = ContentValues().apply {
             put("session_date", date.toString())
-            put("symbol", row.symbol)
-            put("first_seen", firstSeen ?: at.toString())
-            put("last_seen", at.toString())
-            put("peak_rvol", maxOf(peak, row.relativeVolume ?: 0.0))
-            row.candle?.let { put("last_price", it.close); put("last_volume", it.volume) }
-            row.averageSlotVolume?.let { put("average_slot_volume", it) }
+            put("symbol", updated.symbol)
+            put("first_seen", updated.firstSeen.toString())
+            put("last_seen", updated.lastSeen.toString())
+            put("peak_rvol", updated.peakRelativeVolume)
+            updated.lastPrice?.let { put("last_price", it) }
+            updated.lastVolume?.let { put("last_volume", it) }
+            updated.averageSlotVolume?.let { put("average_slot_volume", it) }
         }
         db.insertWithOnConflict("daily_qualifications", null, values, SQLiteDatabase.CONFLICT_REPLACE)
     }
