@@ -1,12 +1,17 @@
 package com.nsemomentum.paper
 
 import android.os.Bundle
+import android.content.Intent
+import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -15,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,6 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -92,7 +99,8 @@ private fun PaperScannerApp() {
         }
     }
     val tokenStore = remember { SecureTokenStore(context) }
-    val scanner = remember { UpstoxPaperScanner(CandleDatabase(context)) }
+    val database = remember { CandleDatabase(context) }
+    val scanner = remember { UpstoxPaperScanner(database) }
     val favourites = remember {
         mutableStateListOf<String>().apply {
             addAll(preferences.getStringSet("favourites", emptySet()).orEmpty().take(20))
@@ -108,15 +116,52 @@ private fun PaperScannerApp() {
     var scanProgress by remember { mutableStateOf("") }
     var scanStatus by remember { mutableStateOf("No scan run yet. Add your Upstox token in Settings.") }
     var report by remember { mutableStateOf<ScanReport?>(null) }
+    var autoScanActive by remember { mutableStateOf(preferences.getBoolean(PaperScanService.PREF_ACTIVE, false)) }
+    var autoScanStatus by remember { mutableStateOf(preferences.getString(PaperScanService.PREF_STATUS, "Full-day scan is off.") ?: "Full-day scan is off.") }
+    var qualifiedToday by remember { mutableStateOf(emptyList<QualifiedStock>()) }
+    var weeklySummary by remember { mutableStateOf(emptyList<DailyPaperSummary>()) }
+    var weeklyOutcomes by remember { mutableStateOf(emptyList<PaperOutcome>()) }
     var tokenConfigured by remember { mutableStateOf(tokenStore.read() != null) }
     val scope = rememberCoroutineScope()
     var scanJob by remember { mutableStateOf<Job?>(null) }
+    val startFullDayScan = {
+        val intent = Intent(context, PaperScanService::class.java).setAction(PaperScanService.ACTION_START)
+        runCatching {
+            if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent) else context.startService(intent)
+            autoScanActive = true
+            autoScanStatus = "Starting full-day scan…"
+        }.onFailure { autoScanStatus = "Could not start full-day scan. Open the app and try again." }
+    }
+    val stopFullDayScan = {
+        context.stopService(Intent(context, PaperScanService::class.java))
+        autoScanActive = false
+        autoScanStatus = "Full-day paper scan stopped."
+    }
+    LaunchedEffect(Unit) {
+        while (true) {
+            autoScanActive = preferences.getBoolean(PaperScanService.PREF_ACTIVE, false)
+            autoScanStatus = preferences.getString(PaperScanService.PREF_STATUS, autoScanStatus) ?: autoScanStatus
+            val today = java.time.LocalDate.now(MarketSession.ZONE)
+            val snapshot = withContext(Dispatchers.IO) {
+                Triple(
+                    database.latestScanReport(),
+                    database.qualifiedStocks(today),
+                    database.weeklyOutcomes(today.minusDays(6), today)
+                )
+            }
+            if (snapshot.first != null && (report == null || autoScanActive)) report = snapshot.first
+            qualifiedToday = snapshot.second
+            weeklyOutcomes = snapshot.third
+            weeklySummary = PaperOutcomeLogic.summarize(snapshot.third, today.minusDays(6), today)
+            delay(15_000)
+        }
+    }
     LaunchedEffect(report) {
         while (report != null) {
             val snapshot = java.time.ZonedDateTime.parse(report!!.scanTime).toInstant()
             val candleExpiry = report!!.rows.mapNotNull { it.candle?.timestamp?.plusSeconds(1800) }.minOrNull()
             val expiresAt = minOf(snapshot.plusSeconds(900), candleExpiry ?: snapshot.plusSeconds(900))
-            if (java.time.Instant.now() >= expiresAt) {
+            if (java.time.Instant.now() >= expiresAt && !autoScanActive) {
                 report = null
                 scanStatus = "Previous snapshot expired. Run a new paper scan."
                 scanProgress = ""
@@ -150,6 +195,7 @@ private fun PaperScannerApp() {
                             }
                         )
                     }
+                    withContext(Dispatchers.IO) { database.recordScanReport(result) }
                     report = result
                     scanStatus = "Snapshot as of ${result.scanTime} · ${result.failedRequests} stock feed errors\n" +
                         result.rows.groupingBy { it.reason }.eachCount().entries.joinToString(" · ") { "${it.key}: ${it.value}" }
@@ -211,12 +257,20 @@ private fun PaperScannerApp() {
                 report = report,
                 scanning = scanning,
                 scanProgress = scanProgress,
+                autoScanActive = autoScanActive,
+                autoScanStatus = autoScanStatus,
+                qualifiedToday = qualifiedToday,
+                weeklySummary = weeklySummary,
+                weeklyOutcomes = weeklyOutcomes,
+                onStartFullDayScan = startFullDayScan,
+                onStopFullDayScan = stopFullDayScan,
                 onRunScan = runScan,
                 onCancelScan = { scanJob?.cancel() },
                 modifier = Modifier.padding(inset)
             )
             Page.UNIVERSE -> {
                 val bySymbol = report?.rows?.associateBy { it.symbol }.orEmpty()
+                val qualifiedBySymbol = qualifiedToday.associateBy { it.symbol }
                 Column(Modifier.fillMaxSize().padding(inset)) {
                     Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -317,6 +371,9 @@ private fun PaperScannerApp() {
                                             row?.let { "${it.signal} · ${it.reason}" } ?: "WAIT · No verified scan data",
                                             style = MaterialTheme.typography.labelSmall
                                         )
+                                        qualifiedBySymbol[stock.symbol]?.let { qualified ->
+                                            Text("QUALIFIED TODAY · peak RVOL ${formatPrice(qualified.peakRelativeVolume)}×", style = MaterialTheme.typography.labelSmall)
+                                        }
                                         Text(stock.instrumentKey, style = MaterialTheme.typography.labelSmall)
                                     }
                                     Column {
