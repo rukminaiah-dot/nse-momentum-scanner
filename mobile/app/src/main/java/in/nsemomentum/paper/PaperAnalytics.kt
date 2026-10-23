@@ -34,6 +34,7 @@ object PaperOutcomeLogic {
     /** Score one completed signal on exactly the next 15-minute candle, entered at its open and exited at its close. */
     fun scoreNextCandle(pending: PendingPaperSignal, next: Candle): PaperOutcome? {
         if (pending.direction !in setOf(-1, 1) || !PaperStrategy.validCandle(next)) return null
+        if (pending.signalTime.atZone(zone).toLocalTime() >= LocalTime.of(15, 15)) return null
         if (next.timestamp != pending.signalTime.plusSeconds(900)) return null
         if (next.timestamp.atZone(zone).toLocalDate() != pending.signalTime.atZone(zone).toLocalDate()) return null
         val percent = pending.direction * ((next.close - next.open) / next.open) * 100.0
