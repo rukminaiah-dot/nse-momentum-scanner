@@ -21,6 +21,16 @@ data class PaperOutcome(
     val returnPercent: Double
 )
 
+data class QualifiedStock(
+    val symbol: String,
+    val firstSeen: Instant,
+    val lastSeen: Instant,
+    val peakRelativeVolume: Double,
+    val lastPrice: Double?,
+    val lastVolume: Double?,
+    val averageSlotVolume: Double?
+)
+
 data class DailyPaperSummary(
     val date: LocalDate,
     val averageReturnPercent: Double,
@@ -30,6 +40,21 @@ data class DailyPaperSummary(
 
 object PaperOutcomeLogic {
     private val zone = ZoneId.of("Asia/Kolkata")
+
+    fun updateQualification(existing: QualifiedStock?, row: ScanRow, observedAt: Instant): QualifiedStock? {
+        val rvol = row.relativeVolume ?: return existing
+        val candle = row.candle ?: return existing
+        if (!rvol.isFinite() || rvol < 1.5) return existing
+        return QualifiedStock(
+            symbol = row.symbol,
+            firstSeen = existing?.firstSeen ?: observedAt,
+            lastSeen = observedAt,
+            peakRelativeVolume = maxOf(existing?.peakRelativeVolume ?: 0.0, rvol),
+            lastPrice = candle.close,
+            lastVolume = candle.volume,
+            averageSlotVolume = row.averageSlotVolume
+        )
+    }
 
     /** Score one completed signal on exactly the next 15-minute candle, entered at its open and exited at its close. */
     fun scoreNextCandle(pending: PendingPaperSignal, next: Candle): PaperOutcome? {
