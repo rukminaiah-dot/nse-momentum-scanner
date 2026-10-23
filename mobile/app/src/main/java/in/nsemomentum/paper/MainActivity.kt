@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -51,6 +53,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
+import java.util.Locale
 
 private enum class Page(val title: String) {
     DASHBOARD("Home"), UNIVERSE("NSE 200"), FAVOURITES("Favourites"), SETTINGS("Settings")
@@ -97,6 +100,7 @@ private fun PaperScannerApp() {
     }
     var page by remember { mutableStateOf(Page.DASHBOARD) }
     var search by remember { mutableStateOf("") }
+    var stockSort by remember { mutableStateOf(StockSort.DAY_CHANGE) }
     var customSymbolInput by remember { mutableStateOf("") }
     var customKeyInput by remember { mutableStateOf("") }
     var customStockMessage by remember { mutableStateOf("") }
@@ -259,7 +263,21 @@ private fun PaperScannerApp() {
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
                     )
-                    val shown = stocks.filter { it.symbol.contains(search.trim(), ignoreCase = true) }
+                    val filteredStocks = stocks.filter { it.symbol.contains(search.trim(), ignoreCase = true) }
+                    Text("Sort stocks", Modifier.padding(start = 16.dp, top = 4.dp))
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        StockSort.entries.forEach { option ->
+                            FilterChip(
+                                selected = stockSort == option,
+                                onClick = { stockSort = option },
+                                label = { Text(option.label) }
+                            )
+                        }
+                    }
+                    val shown = StockListOrdering.sort(filteredStocks, bySymbol, stockSort)
                     Text("${shown.size} of ${stocks.size} stocks · ${stocks.count { it.isCustom }} custom", Modifier.padding(horizontal = 16.dp))
                     LazyColumn(
                         modifier = Modifier.weight(1f),
@@ -277,8 +295,27 @@ private fun PaperScannerApp() {
                                     Column(Modifier.weight(1f)) {
                                         Text(stock.symbol + if (stock.isCustom) " · CUSTOM" else "", fontWeight = FontWeight.SemiBold)
                                         Text(
-                                            row?.let { rowSummary(it) } ?: "No verified scan data",
+                                            row?.candle?.close?.let { "Last 15m close ₹${formatPrice(it)}" } ?: "Last 15m close unavailable",
                                             style = MaterialTheme.typography.bodySmall
+                                        )
+                                        Text(
+                                            row?.dailyChangePercent?.let {
+                                                "Day change ${if (it >= 0) "+" else ""}${formatPercent(it)}% vs prior close"
+                                            } ?: "Day change unavailable",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                        Text(
+                                            row?.let {
+                                                val currentVolume = it.candle?.volume?.let(::formatVolume) ?: "unavailable"
+                                                val averageVolume = it.averageSlotVolume?.let(::formatVolume) ?: "unavailable"
+                                                val rvol = it.relativeVolume?.let { value -> "${formatPrice(value)}×" } ?: "unavailable"
+                                                "15m volume $currentVolume · 20-session same-slot avg $averageVolume · RVOL $rvol"
+                                            } ?: "15m volume unavailable · 20-session avg unavailable",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                        Text(
+                                            row?.let { "${it.signal} · ${it.reason}" } ?: "WAIT · No verified scan data",
+                                            style = MaterialTheme.typography.labelSmall
                                         )
                                         Text(stock.instrumentKey, style = MaterialTheme.typography.labelSmall)
                                     }
@@ -363,6 +400,11 @@ private fun PaperScannerApp() {
         }
     }
 }
+
+private fun formatPrice(value: Double): String = String.format(Locale.US, "%.2f", value)
+private fun formatPercent(value: Double): String = String.format(Locale.US, "%.2f", value)
+private fun formatVolume(value: Double): String =
+    java.text.NumberFormat.getNumberInstance(Locale("en", "IN")).apply { maximumFractionDigits = 2 }.format(value)
 
 private fun rowSummary(row: ScanRow): String {
     val rvol = row.relativeVolume?.let { " · RVOL ${"%.2f".format(it)}×" }.orEmpty()
