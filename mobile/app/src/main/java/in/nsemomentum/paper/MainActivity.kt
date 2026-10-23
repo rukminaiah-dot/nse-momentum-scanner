@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -563,7 +564,7 @@ private fun PaperWeeklyChart(days: List<DailyPaperSummary>, outcomes: List<Paper
                         val barColor = if (day.averageReturnPercent >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                         Box(
                             Modifier.align(if (day.averageReturnPercent >= 0) Alignment.CenterStart else Alignment.CenterEnd)
-                                .width(width).fillMaxSize().background(barColor, RoundedCornerShape(8.dp))
+                                .width(width).fillMaxHeight().background(barColor, RoundedCornerShape(8.dp))
                         )
                     }
                     Text("${if (day.averageReturnPercent > 0) "+" else ""}${formatPercent(day.averageReturnPercent)}%", style = MaterialTheme.typography.labelSmall)
