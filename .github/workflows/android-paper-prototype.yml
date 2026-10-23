@@ -35,9 +35,12 @@ jobs:
         run: |
           curl --fail --location --silent --show-error https://services.gradle.org/distributions/gradle-8.9-bin.zip --output /tmp/gradle.zip
           unzip -q /tmp/gradle.zip -d /tmp
-      - name: Run unit tests and build debug APK
+      - name: Run all Android unit tests
         working-directory: mobile
-        run: /tmp/gradle-8.9/bin/gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
+        run: /tmp/gradle-8.9/bin/gradle --no-daemon :app:testDebugUnitTest
+      - name: Build APK only after tests pass
+        working-directory: mobile
+        run: /tmp/gradle-8.9/bin/gradle --no-daemon :app:assembleDebug
       - name: Verify release signing fails closed without private credentials
         working-directory: mobile
         shell: bash
