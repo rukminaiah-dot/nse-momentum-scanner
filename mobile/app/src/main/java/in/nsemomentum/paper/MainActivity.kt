@@ -581,7 +581,7 @@ private fun PaperWeeklyChart(days: List<DailyPaperSummary>, outcomes: List<Paper
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Weekly paper P&L · success rate", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Text("One completed 15-minute candle after each PAPER_BUY/SELL signal · equal-weight mean return · gross before charges and slippage.", style = MaterialTheme.typography.bodySmall)
+            Text("Saved favourites only · next 15-minute candle open-to-close · equal-weight mean return · gross before charges and slippage.", style = MaterialTheme.typography.bodySmall)
             Text("Last 7 days: ${if (average >= 0) "+" else ""}${formatPercent(average)}% average · ${formatPercent(success)}% success ($wins/$tradeCount closed)", style = MaterialTheme.typography.bodyMedium)
             if (tradeCount == 0) Text("No completed paper outcomes yet. No success rate is inferred from open or unverified signals.", style = MaterialTheme.typography.bodySmall)
             days.forEach { day ->
