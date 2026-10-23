@@ -126,7 +126,7 @@ private fun PaperScannerApp() {
     var tokenConfigured by remember { mutableStateOf(tokenStore.read() != null) }
     val scope = rememberCoroutineScope()
     var scanJob by remember { mutableStateOf<Job?>(null) }
-    val startFullDayScan = {
+    val startFullDayScan: () -> Unit = {
         if (tokenStore.read().isNullOrBlank()) {
             page = Page.SETTINGS
             autoScanStatus = "Add an Upstox token in Settings before starting the full-day scan."
@@ -139,7 +139,7 @@ private fun PaperScannerApp() {
             }.onFailure { autoScanStatus = "Could not start full-day scan. Open the app and try again." }
         }
     }
-    val stopFullDayScan = {
+    val stopFullDayScan: () -> Unit = {
         context.stopService(Intent(context, PaperScanService::class.java))
         autoScanActive = false
         autoScanStatus = "Full-day paper scan stopped."
