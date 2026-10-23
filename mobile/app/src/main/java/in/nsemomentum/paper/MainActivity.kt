@@ -85,6 +85,7 @@ private fun PaperScannerApp() {
     var page by remember { mutableStateOf(Page.DASHBOARD) }
     var search by remember { mutableStateOf("") }
     var scanning by remember { mutableStateOf(false) }
+    var scanProgress by remember { mutableStateOf("") }
     var scanStatus by remember { mutableStateOf("No scan run yet. Add your Upstox token in Settings.") }
     var report by remember { mutableStateOf<ScanReport?>(null) }
     var tokenConfigured by remember { mutableStateOf(tokenStore.read() != null) }
@@ -97,14 +98,25 @@ private fun PaperScannerApp() {
             page = Page.SETTINGS
         } else if (!scanning && stocks.size == 200) {
             scanning = true
+            scanProgress = "Connecting to Upstox…"
             scanStatus = "Fetching read-only 15-minute candles for the 200-stock universe…"
             scope.launch {
                 try {
                     val result = withContext(Dispatchers.IO) {
-                        scanner.scan(token, stocks.map { it.symbol to it.instrumentKey }, favourites.toSet())
+                        scanner.scan(
+                            token,
+                            stocks.map { it.symbol to it.instrumentKey },
+                            favourites.toSet(),
+                            onProgress = { completed, total, symbol ->
+                                scope.launch(Dispatchers.Main.immediate) {
+                                    scanProgress = "Checked $completed / $total stocks · last: $symbol"
+                                }
+                            }
+                        )
                     }
                     report = result
                     scanStatus = "Scan completed at ${result.scanTime} · ${result.failedRequests} feed errors"
+                    scanProgress = "Finished ${result.requestCount} of ${stocks.size} stocks."
                 } catch (error: Exception) {
                     scanStatus = when (error.message) {
                         "UPSTOX_AUTH_REQUIRED" -> "Upstox rejected the token. Generate a fresh token and save it in Settings."
@@ -147,6 +159,7 @@ private fun PaperScannerApp() {
                 scanStatus = scanStatus,
                 report = report,
                 scanning = scanning,
+                scanProgress = scanProgress,
                 onRunScan = runScan,
                 modifier = Modifier.padding(inset)
             )
@@ -264,6 +277,7 @@ private fun Dashboard(
     scanStatus: String,
     report: ScanReport?,
     scanning: Boolean,
+    scanProgress: String,
     onRunScan: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -275,6 +289,7 @@ private fun Dashboard(
                 Spacer(Modifier.height(8.dp))
                 Text(if (scanning) "SCANNING · READ ONLY" else "15-MINUTE VOLUME-FIRST SCAN", style = MaterialTheme.typography.titleMedium)
                 Text(scanStatus)
+                if (scanProgress.isNotBlank()) Text(scanProgress, style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.height(8.dp))
                 Button(onClick = onRunScan, enabled = !scanning && stockCount == 200) {
                     Text(if (scanning) "Scanning…" else "Run paper scan")
