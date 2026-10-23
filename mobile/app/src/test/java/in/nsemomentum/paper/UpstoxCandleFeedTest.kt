@@ -68,6 +68,30 @@ class UpstoxCandleFeedTest {
             catch (error: IOException) { assertEquals("UNSUPPORTED_SPECIAL_SESSION", error.message) }
         } finally { server.shutdown() }
     }
+
+    @Test fun totalCallTimeoutBoundsSlowResponseBodies() = runBlocking {
+        val server = MockWebServer()
+        try {
+            repeat(3) { server.enqueue(MockResponse().setBody(emptyCandles).setBodyDelay(2, TimeUnit.SECONDS)) }
+            withTimeout(4000) {
+                try { feed(server, 100).candles("test", "/v3/historical-candle/test"); fail("Expected network timeout") }
+                catch (error: IOException) { assertEquals("NETWORK_ERROR", error.message) }
+            }
+            assertEquals(3, server.requestCount)
+        } finally { server.shutdown() }
+    }
+    @Test fun localRollingBudgetBlocksFurtherCalls() = runBlocking {
+        val server = MockWebServer()
+        try {
+            repeat(2) { server.enqueue(MockResponse().setBody(emptyCandles)) }
+            val client = UpstoxCandleFeed(OkHttpClient(), server.url("/").toString().trimEnd('/'), 0, 2)
+            repeat(2) { client.candles("test", "/v3/historical-candle/test") }
+            try { client.candles("test", "/v3/historical-candle/test"); fail("Expected local budget limit") }
+            catch (error: IOException) { assertEquals("LOCAL_RATE_BUDGET_EXHAUSTED", error.message) }
+            assertEquals(2, server.requestCount)
+        } finally { server.shutdown() }
+    }
+
     @Test fun duplicateAndInvalidPayloadsAreRejected() {
         val row = """["2026-10-22T09:15:00+05:30",10,11,9,10.5,100]"""
         try {

@@ -24,15 +24,22 @@ class UpstoxCandleFeed(
         .callTimeout(25, TimeUnit.SECONDS).followRedirects(false).followSslRedirects(false)
         .retryOnConnectionFailure(false).build(),
     private val baseUrl: String = "https://api.upstox.com",
-    private val spacingMillis: Long = 200
+    private val spacingMillis: Long = 200,
+    private val attemptBudget: Int = 1900
 ) : CandleFeed {
     private val gate = Mutex()
     private var nextRequestNanos = 0L
+    private val recentAttempts = java.util.ArrayDeque<Long>()
 
     private suspend fun pace() = gate.withLock {
         val wait = (nextRequestNanos - System.nanoTime()) / 1_000_000
         if (wait > 0) delay(wait + 1)
-        nextRequestNanos = System.nanoTime() + spacingMillis * 1_000_000
+        val now = System.nanoTime()
+        val window = TimeUnit.MINUTES.toNanos(30)
+        while (recentAttempts.isNotEmpty() && now - recentAttempts.first > window) recentAttempts.removeFirst()
+        if (recentAttempts.size >= attemptBudget) throw IOException("LOCAL_RATE_BUDGET_EXHAUSTED")
+        recentAttempts.addLast(now)
+        nextRequestNanos = now + spacingMillis * 1_000_000
     }
 
     private suspend fun deferRequests(millis: Long) = gate.withLock {

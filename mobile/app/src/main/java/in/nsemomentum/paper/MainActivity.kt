@@ -101,7 +101,9 @@ private fun PaperScannerApp() {
     LaunchedEffect(report) {
         while (report != null) {
             val snapshot = java.time.ZonedDateTime.parse(report!!.scanTime).toInstant()
-            if (java.time.Duration.between(snapshot, java.time.Instant.now()).seconds > 900) {
+            val candleExpiry = report!!.rows.mapNotNull { it.candle?.timestamp?.plusSeconds(1800) }.minOrNull()
+            val expiresAt = minOf(snapshot.plusSeconds(900), candleExpiry ?: snapshot.plusSeconds(900))
+            if (java.time.Instant.now() >= expiresAt) {
                 report = null
                 scanStatus = "Previous snapshot expired. Run a new paper scan."
                 scanProgress = ""
@@ -151,6 +153,7 @@ private fun PaperScannerApp() {
                     scanStatus = when (error.message) {
                         "UPSTOX_AUTH_REQUIRED" -> "Upstox rejected the token. Generate a fresh token and save it in Settings."
                         "RATE_LIMITED" -> "Upstox rate limit reached. Wait before scanning again."
+                        "LOCAL_RATE_BUDGET_EXHAUSTED" -> "Local 30-minute API budget reached. Wait before scanning again."
                         "MARKET_CLOSED" -> "NSE is closed according to the exchange calendar."
                         "NO_COMPLETED_MARKET_CANDLE" -> "No fresh completed market candle. Scan after 09:30 IST during a regular session."
                         "UNSUPPORTED_SPECIAL_SESSION" -> "Special NSE session detected. Regular-session baseline unavailable; scan stopped."
@@ -281,10 +284,14 @@ private fun PaperScannerApp() {
                 tokenConfigured = tokenConfigured,
                 scanStatus = scanStatus,
                 onSaveToken = { token ->
+                    scanJob?.cancel()
+                    report = null
                     runCatching { tokenStore.save(token) }
                     tokenConfigured = tokenStore.read() != null
                 },
                 onClearToken = {
+                    scanJob?.cancel()
+                    report = null
                     tokenStore.clear()
                     tokenConfigured = false
                     scanStatus = "Token cleared from this device."
@@ -358,7 +365,7 @@ private fun SettingsPage(
     modifier: Modifier = Modifier
 ) {
     var tokenInput by remember { mutableStateOf("") }
-    Column(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Settings & data health", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text("PAPER MODE · no order placement capability")
         Text("Generate a personal access token in Upstox Developer Apps, then enter it here. The app encrypts it on this phone and does not log or upload it.")

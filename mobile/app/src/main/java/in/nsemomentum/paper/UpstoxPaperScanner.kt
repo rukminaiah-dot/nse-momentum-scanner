@@ -67,7 +67,7 @@ class UpstoxPaperScanner(
                     val row = try { scanOne(token, symbol, key, favourites, today, target, sessions, now) }
                     catch (error: CancellationException) { throw error }
                     catch (error: Exception) {
-                        if (error.message == "UPSTOX_AUTH_REQUIRED") throw error
+                        if (error.message in setOf("UPSTOX_AUTH_REQUIRED", "LOCAL_RATE_BUDGET_EXHAUSTED")) throw error
                         ScanRow(symbol, reason = safeReason(error))
                     }
                     progressLock.withLock {
