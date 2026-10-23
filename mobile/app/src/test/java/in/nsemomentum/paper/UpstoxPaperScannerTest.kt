@@ -100,6 +100,30 @@ class UpstoxPaperScannerTest {
             fail("Expected timeout")
         } catch (_: TimeoutCancellationException) { }
     }
+    @Test fun indexScanUses21SessionsZeroVolumeAndCorrectExchange() = runBlocking {
+        val dates = generateSequence(date.minusDays(1)) { it.minusDays(1) }
+            .filter { it.dayOfWeek.value <= 5 }.take(21).map { regular(it) }.toList()
+        val calls = mutableListOf<String>()
+        val feed = object : CandleFeed {
+            override suspend fun session(token: String, date: LocalDate): MarketSession? = error("Exchange required")
+            override suspend fun session(token: String, date: LocalDate, exchange: String): MarketSession? {
+                calls += exchange
+                return if (date.dayOfWeek.value <= 5) regular(date) else null
+            }
+            override suspend fun candles(token: String, path: String): List<Candle> {
+                if (path.contains("intraday")) return intraday.map { it.copy(volume = 0.0) }
+                val from = LocalDate.parse(path.substringAfterLast('/'))
+                val to = LocalDate.parse(path.substringBeforeLast('/').substringAfterLast('/'))
+                return dates.filter { it.date in from..to }.flatMap { s -> s.slots().map { bar(it, 0.0) } }
+            }
+        }
+        val report = UpstoxPaperScanner(MemoryStore(), feed).scan("test", listOf("SENSEX" to "BSE_INDEX|SENSEX"), setOf("SENSEX"), now)
+        assertEquals(setOf("BSE"), calls.toSet())
+        assertEquals(0, report.failedRequests)
+        assertNull(report.rows.single().relativeVolume)
+        assertNotNull(report.rows.single().technicals)
+        assertEquals("NO_QUALIFYING_15M_SHIFT", report.rows.single().reason)
+    }
     @Test fun closedDayNeverRequestsCandles() = runBlocking {
         val feed = Feed()
         try {

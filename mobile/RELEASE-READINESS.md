@@ -29,8 +29,10 @@ There is no broker order endpoint. The web production implementation is unchange
   proven available. Its certificate and package must be compared before update.
 - Do not uninstall the existing app. If an original-key update is impossible,
   create a new stable package and migrate only data the old app can export.
-- An in-app APK updater requires a stable signed release channel. It is not
-  activated in this candidate; no unsigned/unverified APK download is offered.
+- The in-app updater is implemented but a signed release channel has not been
+  published. Debug builds refuse updates. Release builds require a newer version,
+  matching package, SHA256, and the installed signing certificate before opening
+  Android's confirmation. End-to-end real-device installation remains unverified.
 - Live NSE/BSE/indices data, realme background behavior, backup/restore and two
   consecutive signed installations retaining data still require device tests.
 - No profitability or historical performance is established by synthetic tests.
@@ -50,3 +52,12 @@ release manifest with package/version/SHA256, verify package and signing certifi
 against the installed app before invoking Android's installer, reject downgrades,
 and require the user's installation confirmation. Publishing that channel needs
 explicit approval. Google Play is not used for this stage.
+
+## Update channel contract (not published)
+
+A release tagged `android-paper-VERSION` must contain `android-update.json` with
+`packageName`, numeric `versionCode`, HTTPS GitHub release `apkUrl`, and SHA256
+`sha256`, plus the privately signed APK asset. Publishing requires explicit user
+approval. The updater sends no Upstox token, rejects downgrades and foreign
+packages/certificates, and leaves Android to ask the user to allow installation.
+The current candidate does not create a release or publish update metadata.

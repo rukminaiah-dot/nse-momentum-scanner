@@ -537,7 +537,7 @@ private fun PaperScannerApp() {
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         item { Text("FAVOURITES · 15-MINUTE PAPER SIGNALS", fontWeight = FontWeight.Bold)
-                            Text("BUY/SELL require RVOL ≥ 1.5×, EMA direction, a strong candle breaking the prior 3 bars, and a Stoch RSI cross at ≤20 / ≥80. Otherwise WAIT; no position or order tracking.", style = MaterialTheme.typography.bodySmall) }
+                            Text("Equities require RVOL ≥ 1.5× plus EMA, candle breakout and Stoch RSI confirmation. Indices use the web index rules with a 21-session SMA and no RVOL. All signals are paper-only.", style = MaterialTheme.typography.bodySmall) }
                         items(selectedStocks, key = { it.symbol }) { stock ->
                             val row = bySymbol[stock.symbol]
                             Card(Modifier.fillMaxWidth()) {
@@ -713,7 +713,27 @@ private fun SettingsPage(
     modifier: Modifier = Modifier
 ) {
     var tokenInput by remember { mutableStateOf("") }
+    val updateContext = LocalContext.current
+    val updateScope = rememberCoroutineScope()
+    var updating by remember { mutableStateOf(false) }
+    var updateStatus by remember { mutableStateOf("Updates require a privately signed release. Existing app data is preserved.") }
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("App updates", style = MaterialTheme.typography.titleMedium)
+        Button(enabled = !updating && backupEnabled, onClick = {
+            updating = true
+            updateStatus = "Checking and verifying update…"
+            updateScope.launch {
+                try {
+                    val installer = withContext(Dispatchers.IO) { ApkUpdates(updateContext).prepare() }
+                    updateContext.startActivity(installer)
+                    updateStatus = "Follow Android's installation prompt. If installation is not allowed, enable it for this app and retry."
+                } catch (cancelled: CancellationException) { throw cancelled }
+                catch (error: Exception) {
+                    updateStatus = error.message?.takeIf { it.length < 180 } ?: "Update unavailable; existing app is unchanged."
+                } finally { updating = false }
+            }
+        }) { Text(if (updating) "Checking update…" else "Download verified update") }
+        Text(updateStatus, style = MaterialTheme.typography.bodySmall)
         Text("Local backup & restore", style = MaterialTheme.typography.titleMedium)
         Text("Stop manual and full-day scans first. Export favourites, custom stocks, and paper history to a file you keep. Tokens and candle cache are excluded. This app cannot read another installed app's private data.")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

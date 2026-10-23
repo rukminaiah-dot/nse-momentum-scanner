@@ -101,6 +101,18 @@ class UpstoxCandleFeedTest {
         } finally { server.shutdown() }
     }
 
+    @Test fun bseCalendarCannotBeSubstitutedWithNseCalendar() = runBlocking {
+        val server = MockWebServer()
+        try {
+            val date = LocalDate.parse("2026-10-22"); val regular = regular(date)
+            fun body(exchange: String) = """{"status":"success","data":[{"exchange":"$exchange","start_time":${regular.start.toEpochMilli()},"end_time":${regular.end.toEpochMilli()}}]}"""
+            server.enqueue(MockResponse().setBody(body("NSE")))
+            assertNull(feed(server).session("test", date, "BSE"))
+            server.enqueue(MockResponse().setBody(body("BSE")))
+            assertEquals(regular, feed(server).session("test", date, "BSE"))
+        } finally { server.shutdown() }
+    }
+
     @Test fun duplicateAndInvalidPayloadsAreRejected() {
         val row = """["2026-10-22T09:15:00+05:30",10,11,9,10.5,100]"""
         try {
