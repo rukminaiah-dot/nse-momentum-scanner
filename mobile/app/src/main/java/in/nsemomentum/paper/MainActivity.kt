@@ -1,9 +1,13 @@
 package com.nsemomentum.paper
 
 import android.os.Bundle
+import android.Manifest
+import android.content.pm.PackageManager
 import android.content.Intent
 import android.os.Build
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
@@ -139,6 +143,19 @@ private fun PaperScannerApp() {
             }.onFailure { autoScanStatus = "Could not start full-day scan. Open the app and try again." }
         }
     }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) startFullDayScan()
+        else autoScanStatus = "Allow notifications to keep the full-day scan visible and easy to stop."
+    }
+    val requestFullDayScan: () -> Unit = {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else startFullDayScan()
+    }
     val stopFullDayScan: () -> Unit = {
         context.stopService(Intent(context, PaperScanService::class.java))
         autoScanActive = false
@@ -156,7 +173,12 @@ private fun PaperScannerApp() {
                     database.weeklyOutcomes(today.minusDays(6), today)
                 )
             }
-            if (snapshot.first != null && (report == null || autoScanActive)) report = snapshot.first
+            val persistedReport = snapshot.first
+            val persistedScanTime = persistedReport?.let {
+                runCatching { java.time.ZonedDateTime.parse(it.scanTime).toInstant() }.getOrNull()
+            }
+            val snapshotAge = persistedScanTime?.let { java.time.Duration.between(it, java.time.Instant.now()).seconds }
+            if (persistedReport != null && snapshotAge != null && snapshotAge in 0..900) report = persistedReport
             qualifiedToday = snapshot.second
             weeklyOutcomes = snapshot.third
             weeklySummary = PaperOutcomeLogic.summarize(snapshot.third, today.minusDays(6), today)
@@ -269,7 +291,7 @@ private fun PaperScannerApp() {
                 qualifiedToday = qualifiedToday,
                 weeklySummary = weeklySummary,
                 weeklyOutcomes = weeklyOutcomes,
-                onStartFullDayScan = startFullDayScan,
+                onStartFullDayScan = requestFullDayScan,
                 onStopFullDayScan = stopFullDayScan,
                 onRunScan = runScan,
                 onCancelScan = { scanJob?.cancel() },
