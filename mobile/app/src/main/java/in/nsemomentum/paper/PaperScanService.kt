@@ -193,6 +193,7 @@ class PaperScanService : Service() {
     }
 
     override fun onDestroy() {
+        preferences.edit().putBoolean(PREF_ACTIVE, false).apply()
         scanJob?.cancel()
         serviceScope.cancel()
         super.onDestroy()
