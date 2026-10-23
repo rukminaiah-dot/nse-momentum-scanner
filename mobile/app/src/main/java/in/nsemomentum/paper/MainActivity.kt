@@ -61,6 +61,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import java.util.Locale
+import kotlin.math.abs
 
 private enum class Page(val title: String) {
     DASHBOARD("Home"), UNIVERSE("NSE 200"), FAVOURITES("Favourites"), SETTINGS("Settings")
@@ -488,6 +489,13 @@ private fun Dashboard(
     report: ScanReport?,
     scanning: Boolean,
     scanProgress: String,
+    autoScanActive: Boolean,
+    autoScanStatus: String,
+    qualifiedToday: List<QualifiedStock>,
+    weeklySummary: List<DailyPaperSummary>,
+    weeklyOutcomes: List<PaperOutcome>,
+    onStartFullDayScan: () -> Unit,
+    onStopFullDayScan: () -> Unit,
     onRunScan: () -> Unit,
     onCancelScan: () -> Unit,
     modifier: Modifier = Modifier
@@ -501,18 +509,66 @@ private fun Dashboard(
                 Text(if (scanning) "SCANNING · READ ONLY" else "15-MINUTE VOLUME-FIRST SCAN", style = MaterialTheme.typography.titleMedium)
                 Text(scanStatus)
                 if (scanProgress.isNotBlank()) Text(scanProgress, style = MaterialTheme.typography.bodySmall)
+                Text(autoScanStatus, style = MaterialTheme.typography.bodySmall)
+                Text("Full-day mode checks each completed 15-minute candle and keeps a stock in today's qualified list after it first reaches 1.5×.", style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.height(8.dp))
-                Button(onClick = onRunScan, enabled = !scanning && stockCount >= 200) {
-                    Text(if (scanning) "Scanning…" else "Run paper scan")
+                if (autoScanActive) {
+                    Button(onClick = onStopFullDayScan) { Text("Stop full-day scan") }
+                } else {
+                    Button(onClick = onStartFullDayScan, enabled = !scanning && stockCount >= 200) { Text("Start full-day scan") }
                 }
-                if (scanning) Button(onClick = onCancelScan) { Text("Cancel scan") }
+                Button(onClick = onRunScan, enabled = !scanning && !autoScanActive && stockCount >= 200) {
+                    Text(if (scanning) "Scanning…" else "Run one scan")
+                }
+                if (scanning) Button(onClick = onCancelScan) { Text("Cancel one scan") }
             }
         }
-        InfoCard("NSE 200 + custom volume screen", "$stockCount stocks configured", "$customStockCount custom additions · $qualified stocks at or above 1.5× verified volume, if a scan has completed.")
+        InfoCard("NSE 200 + custom volume screen", "$stockCount stocks configured", "$customStockCount custom additions · $qualified stocks currently at or above 1.5× on the latest scan.")
         InfoCard("Favourites", "$favouriteCount / 20 selected", "EMA 20/50 and Stochastic RSI checks run only for saved favourites.")
-        if (report != null) {
-            report.rows.filter { (it.relativeVolume ?: 0.0) >= 1.5 }.forEach { row ->
-                InfoCard(row.symbol, row.signal, rowDetail(row))
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Qualified today · ${qualifiedToday.size}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("A stock stays here after qualifying once during today's market session, even if its later RVOL falls.", style = MaterialTheme.typography.bodySmall)
+                if (qualifiedToday.isEmpty()) Text("No stock has qualified in a verified scan today.", style = MaterialTheme.typography.bodySmall)
+                qualifiedToday.forEach { stock ->
+                    Text("${stock.symbol} · peak RVOL ${formatPrice(stock.peakRelativeVolume)}× · last price ${stock.lastPrice?.let { "₹${formatPrice(it)}" } ?: "unavailable"}")
+                }
+            }
+        }
+        PaperWeeklyChart(weeklySummary, weeklyOutcomes)
+    }
+}
+
+@Composable
+private fun PaperWeeklyChart(days: List<DailyPaperSummary>, outcomes: List<PaperOutcome>) {
+    val tradeCount = outcomes.size
+    val wins = outcomes.count { it.returnPercent > 0.0 }
+    val average = outcomes.map { it.returnPercent }.average().takeIf { outcomes.isNotEmpty() } ?: 0.0
+    val success = if (tradeCount == 0) 0.0 else wins * 100.0 / tradeCount
+    val scale = days.maxOfOrNull { abs(it.averageReturnPercent) }?.coerceAtLeast(0.05) ?: 0.05
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Weekly paper P&L · success rate", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text("One completed 15-minute candle after each PAPER_BUY/SELL signal · equal-weight mean return · gross before charges and slippage.", style = MaterialTheme.typography.bodySmall)
+            Text("Last 7 days: ${if (average >= 0) "+" else ""}${formatPercent(average)}% average · ${formatPercent(success)}% success ($wins/$tradeCount closed)", style = MaterialTheme.typography.bodyMedium)
+            if (tradeCount == 0) Text("No completed paper outcomes yet. No success rate is inferred from open or unverified signals.", style = MaterialTheme.typography.bodySmall)
+            days.forEach { day ->
+                Text(day.date.format(java.time.format.DateTimeFormatter.ofPattern("EEE dd", Locale.US)))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    BoxWithConstraints(
+                        Modifier.weight(1f).height(14.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+                    ) {
+                        val fraction = (abs(day.averageReturnPercent) / scale).coerceIn(0.0, 1.0).toFloat() * 0.5f
+                        val width = maxWidth * fraction
+                        val barColor = if (day.averageReturnPercent >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                        Box(
+                            Modifier.align(if (day.averageReturnPercent >= 0) Alignment.CenterStart else Alignment.CenterEnd)
+                                .width(width).fillMaxSize().background(barColor, RoundedCornerShape(8.dp))
+                        )
+                    }
+                    Text("${if (day.averageReturnPercent > 0) "+" else ""}${formatPercent(day.averageReturnPercent)}%", style = MaterialTheme.typography.labelSmall)
+                }
+                Text("${day.closedSignals} closed · ${formatPercent(day.successPercent)}% success", style = MaterialTheme.typography.labelSmall)
             }
         }
     }
