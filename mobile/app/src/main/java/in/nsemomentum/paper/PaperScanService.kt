@@ -48,7 +48,9 @@ class PaperScanService : Service() {
             return START_NOT_STICKY
         }
         if (scanJob?.isActive == true) return START_STICKY
-        preferences.edit().putBoolean(PREF_ACTIVE, true).apply()
+        preferences.edit().putBoolean(PREF_ACTIVE, true)
+            .putString(PREF_STATUS, "Full-day scan started; waiting for completed 15-minute candles.")
+            .apply()
         showForeground("Starting read-only 15-minute scan…")
         scanJob = serviceScope.launch { runMarketDay(startId) }
         return START_STICKY
@@ -78,6 +80,7 @@ class PaperScanService : Service() {
                 return
             }
             try {
+                preferences.edit().putString(PREF_STATUS, "Scanning completed 15-minute NSE candles…").apply()
                 showForeground("Checking completed 15-minute NSE candles…")
                 val report = scanner.scan(token, universe, selected)
                 database.recordScanReport(report)
