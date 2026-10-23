@@ -51,9 +51,38 @@ class PaperBackupTest {
             val exported = db.exportPaperHistory()
             PaperBackup.tables.keys.forEach { table ->
                 assertEquals(1, exported.getJSONArray(table).length())
-                assertTrue(history().getJSONArray(table).getJSONObject(0).similar(exported.getJSONArray(table).getJSONObject(0)))
+                val expected = history().getJSONArray(table).getJSONObject(0)
+                val actual = exported.getJSONArray(table).getJSONObject(0)
+                PaperBackup.tables.getValue(table).forEach { column ->
+                    if (expected.get(column) is Number) assertEquals(expected.getDouble(column), actual.getDouble(column), 0.0)
+                    else assertEquals(expected.get(column), actual.get(column))
+                }
             }
             assertEquals("SECRET_SENTINEL", context.getSharedPreferences("paper_preferences", 0).getString("token", null))
+        }
+    }
+    @Test fun storageRoundTripRestoresPreferencesAndRejectsInvalidBeforeWrites() {
+        val context = RuntimeEnvironment.getApplication() as Context
+        context.deleteDatabase("paper_candles.db")
+        val prefs = context.getSharedPreferences("paper_preferences", 0)
+        prefs.edit().clear().putStringSet("favourites", snapshot().favourites)
+            .putString("custom_stocks", StockCatalog.encodeCustom(snapshot().custom))
+            .putString("token", "DO_NOT_EXPORT").commit()
+        CandleDatabase(context).use { db ->
+            db.importPaperHistory(history())
+            val store = PaperBackupStore(context, db, base)
+            val encoded = store.export()
+            assertFalse(encoded.contains("DO_NOT_EXPORT"))
+            db.clearAll()
+            prefs.edit().remove("favourites").remove("custom_stocks").commit()
+            store.restore(encoded)
+            store.restore(encoded)
+            assertEquals(snapshot().favourites, prefs.getStringSet("favourites", emptySet()))
+            assertEquals(snapshot().custom, StockCatalog.decodeCustom(prefs.getString("custom_stocks", null), base))
+            assertEquals("DO_NOT_EXPORT", prefs.getString("token", null))
+            val before = store.export()
+            rejects { store.restore(JSONObject(encoded).put("version", 99).toString()) }
+            assertEquals(before, store.export())
         }
     }
     @Test fun invalidAndFutureFilesAreRejectedBeforeImport() {

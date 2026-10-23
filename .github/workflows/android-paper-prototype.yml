@@ -19,6 +19,7 @@ permissions:
 jobs:
   build-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -37,6 +38,22 @@ jobs:
       - name: Run unit tests and build debug APK
         working-directory: mobile
         run: /tmp/gradle-8.9/bin/gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
+      - name: Verify release signing fails closed without private credentials
+        working-directory: mobile
+        shell: bash
+        run: |
+          if /tmp/gradle-8.9/bin/gradle --no-daemon :app:preReleaseBuild > "$RUNNER_TEMP/signing-check.log" 2>&1; then
+            echo "::error::Release unexpectedly accepted missing signing credentials"
+            exit 1
+          fi
+          grep -q "Persistent Android signing is not configured" "$RUNNER_TEMP/signing-check.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-unit-test-results
+          path: mobile/app/build/test-results/testDebugUnitTest/*.xml
+          if-no-files-found: warn
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         with:
           name: nse-paper-scanner-debug-apk

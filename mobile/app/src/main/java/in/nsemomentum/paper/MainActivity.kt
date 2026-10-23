@@ -140,13 +140,8 @@ private fun PaperScannerApp() {
             scope.launch {
                 try {
                     val saved = withContext(Dispatchers.IO) {
-                        val snapshot = PaperBackup.Snapshot(
-                            preferences.getStringSet("favourites", emptySet()).orEmpty().toSet(),
-                            StockCatalog.decodeCustom(preferences.getString("custom_stocks", null), baseStocks),
-                            database.exportPaperHistory())
-                        val encoded = PaperBackup.encode(snapshot)
-                        // Validate our own output before reporting a successful backup.
-                        PaperBackup.decode(encoded, baseStocks)
+                        val encoded = PaperBackupStore(context, database, baseStocks).export()
+                        val snapshot = PaperBackup.decode(encoded, baseStocks)
                         val bytes = encoded.toByteArray(Charsets.UTF_8)
                         requireNotNull(context.contentResolver.openOutputStream(uri, "wt")).use { it.write(bytes) }
                         val readBack = requireNotNull(context.contentResolver.openInputStream(uri)).use { it.readBytes() }
@@ -203,11 +198,8 @@ private fun PaperScannerApp() {
                         backupBusy = true
                         scope.launch {
                             try {
-                                val merged = PaperBackup.merge(incoming, favourites.toSet(), stocks.filter { it.isCustom }, baseStocks)
-                                withContext(Dispatchers.IO) {
-                                    database.importPaperHistory(merged.history)
-                                    check(preferences.edit().putStringSet("favourites", merged.favourites)
-                                        .putString("custom_stocks", StockCatalog.encodeCustom(merged.custom)).commit())
+                                val merged = withContext(Dispatchers.IO) {
+                                    PaperBackupStore(context, database, baseStocks).restore(PaperBackup.encode(incoming))
                                 }
                                 stocks.clear(); stocks.addAll(baseStocks + merged.custom)
                                 favourites.clear(); favourites.addAll(merged.favourites.sorted())
