@@ -71,13 +71,22 @@ class UpstoxCandleFeedTest {
 
     @Test fun totalCallTimeoutBoundsSlowResponseBodies() = runBlocking {
         val server = MockWebServer()
+        val attempts = java.util.concurrent.atomic.AtomicInteger()
         try {
             repeat(3) { server.enqueue(MockResponse().setBody(emptyCandles).setBodyDelay(2, TimeUnit.SECONDS)) }
-            withTimeout(4000) {
-                try { feed(server, 100).candles("test", "/v3/historical-candle/test"); fail("Expected network timeout") }
+            val http = OkHttpClient.Builder().callTimeout(300, TimeUnit.MILLISECONDS)
+                .retryOnConnectionFailure(false)
+                .eventListener(object : okhttp3.EventListener() {
+                    override fun callStart(call: okhttp3.Call) { attempts.incrementAndGet() }
+                }).build()
+            val client = UpstoxCandleFeed(http, server.url("/").toString().trimEnd('/'), 0)
+            withTimeout(6000) {
+                try { client.candles("test", "/v3/historical-candle/test"); fail("Expected network timeout") }
                 catch (error: IOException) { assertEquals("NETWORK_ERROR", error.message) }
             }
-            assertEquals(3, server.requestCount)
+            // A total-call timeout may expire before HTTP bytes reach the server on a busy runner.
+            assertEquals(3, attempts.get())
+            assertTrue(server.requestCount in 1..3)
         } finally { server.shutdown() }
     }
     @Test fun localRollingBudgetBlocksFurtherCalls() = runBlocking {

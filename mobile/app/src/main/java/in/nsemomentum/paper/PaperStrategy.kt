@@ -64,7 +64,7 @@ object PaperStrategy {
         if (currentVolume >= 0 && baseline > 0 && currentVolume.isFinite() && baseline.isFinite())
             currentVolume / baseline else null
 
-    /** Mirrors the experimental Python rules; emits paper labels only. */
+    /** Experimental momentum filters; indicators use the full verified history. Paper labels only. */
     fun evaluate(bars: List<Candle>, now: Instant, sameSlotAverageVolume: Double?): PaperSignal {
         fun wait(reason: String) = PaperSignal(reason = reason)
         val required = maxOf(52, 14 + 14 + 3 + 3 + 2, 4)
