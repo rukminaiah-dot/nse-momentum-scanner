@@ -127,12 +127,17 @@ private fun PaperScannerApp() {
     val scope = rememberCoroutineScope()
     var scanJob by remember { mutableStateOf<Job?>(null) }
     val startFullDayScan = {
-        val intent = Intent(context, PaperScanService::class.java).setAction(PaperScanService.ACTION_START)
-        runCatching {
-            if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent) else context.startService(intent)
-            autoScanActive = true
-            autoScanStatus = "Starting full-day scan…"
-        }.onFailure { autoScanStatus = "Could not start full-day scan. Open the app and try again." }
+        if (tokenStore.read().isNullOrBlank()) {
+            page = Page.SETTINGS
+            autoScanStatus = "Add an Upstox token in Settings before starting the full-day scan."
+        } else {
+            val intent = Intent(context, PaperScanService::class.java).setAction(PaperScanService.ACTION_START)
+            runCatching {
+                if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent) else context.startService(intent)
+                autoScanActive = true
+                autoScanStatus = "Starting full-day scan…"
+            }.onFailure { autoScanStatus = "Could not start full-day scan. Open the app and try again." }
+        }
     }
     val stopFullDayScan = {
         context.stopService(Intent(context, PaperScanService::class.java))
@@ -443,12 +448,16 @@ private fun PaperScannerApp() {
                 scanStatus = scanStatus,
                 onSaveToken = { token ->
                     scanJob?.cancel()
+                    context.stopService(Intent(context, PaperScanService::class.java))
+                    autoScanActive = false
                     report = null
                     runCatching { tokenStore.save(token) }
                     tokenConfigured = tokenStore.read() != null
                 },
                 onClearToken = {
                     scanJob?.cancel()
+                    context.stopService(Intent(context, PaperScanService::class.java))
+                    autoScanActive = false
                     report = null
                     tokenStore.clear()
                     tokenConfigured = false
