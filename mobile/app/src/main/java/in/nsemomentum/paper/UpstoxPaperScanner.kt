@@ -22,7 +22,9 @@ data class ScanRow(
     val signal: String = "WAIT",
     val reason: String,
     val candle: Candle? = null,
-    val technicals: TechnicalContext? = null
+    val technicals: TechnicalContext? = null,
+    val averageSlotVolume: Double? = null,
+    val dailyChangePercent: Double? = null
 )
 
 data class ScanReport(val rows: List<ScanRow>, val scanTime: String, val failedRequests: Int, val requestCount: Int)
@@ -126,7 +128,21 @@ class UpstoxPaperScanner(
         val result = if (symbol in favourites) PaperStrategy.evaluate(ordered, now, baseline) else PaperSignal(
             signal = if (rvol >= 1.5) "VOLUME_QUALIFIED" else "WAIT",
             reason = if (rvol >= 1.5) "FAVOURITE_ONLY_FOR_TECHNICALS" else "VOLUME_BELOW_THRESHOLD")
-        return ScanRow(symbol, target.atZone(MarketSession.ZONE).toString(), rvol, result.signal, result.reason, latest, context)
+        val previousCloseTime = sessions.first().slots().last()
+        val previousClose = cached.singleOrNull { it.timestamp == previousCloseTime }?.close
+        val dailyChange = previousClose?.takeIf { it > 0.0 }?.let { ((latest.close - it) / it) * 100.0 }
+            ?.takeIf { it.isFinite() }
+        return ScanRow(
+            symbol = symbol,
+            candleTime = target.atZone(MarketSession.ZONE).toString(),
+            relativeVolume = rvol,
+            signal = result.signal,
+            reason = result.reason,
+            candle = latest,
+            technicals = context,
+            averageSlotVolume = baseline,
+            dailyChangePercent = dailyChange
+        )
     }
 
     private fun safeReason(error: Throwable): String = error.message?.takeIf {
