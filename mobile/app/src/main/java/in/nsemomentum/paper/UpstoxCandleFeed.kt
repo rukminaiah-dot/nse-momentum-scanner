@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-/** Only GET requests to candle and exchange-calendar endpoints. Never logs response bodies or tokens. */
+/** Only GET requests to candles, exchange calendars and instrument search. Never logs response bodies or tokens. */
 class UpstoxCandleFeed(
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS).readTimeout(15, TimeUnit.SECONDS)
@@ -95,6 +95,15 @@ class UpstoxCandleFeed(
             delay(500L * (1L shl attempt))
         }
         throw IOException("FETCH_FAILED")
+    }
+
+    suspend fun searchInstruments(token: String, query: String, exchange: String, page: Int = 1): InstrumentSearchPage {
+        require(token.isNotBlank()) { "TOKEN_NOT_CONFIGURED" }
+        val normalized = InstrumentSearchRules.query(query)
+        require(exchange in setOf("NSE", "BSE") && page in 1..100000)
+        val encoded = java.net.URLEncoder.encode(normalized, "UTF-8")
+        val path = "/v2/instruments/search?query=$encoded&exchanges=$exchange&segments=EQ%2CINDEX&page_number=$page&records=30"
+        return InstrumentSearchRules.parse(request(token, path), exchange, page)
     }
 
     override suspend fun candles(token: String, path: String): List<Candle> = parseCandles(request(token, path))

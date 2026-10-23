@@ -8,8 +8,18 @@ The existing favourites preference is now the active scan list (0–20 instrumen
 No automatic stock selection or full-universe scan. Both manual and foreground
 scans use that list; list changes are disabled during scanning. The NSE 200 catalog
 remains available for selection, with NIFTY50, SENSEX and BANKNIFTY index entries.
-Custom NSE_EQ and BSE_EQ keys can be added with distinct labels. Exact broker keys
-are required; this is not yet a downloadable full BSE search catalog.
+Company-name/symbol search uses the official read-only Upstox instrument search
+endpoint, with explicit NSE/BSE selection and pagination. The broker response
+supplies the key; exchange tokens are never substituted for instrument keys.
+NSE/BSE listings of the same company stay distinct. Add/remove is committed to
+local preferences before the screen changes, and history is preserved on removal.
+Search needs the token saved on-device. There is no new backend service.
+
+Lookup accepts only consistent supported equity/index mappings. Unknown indices
+and derivatives are omitted, malformed keys/pagination fail closed, and result
+selections expire after five minutes. A successful lookup confirms the returned
+identity, not intraday candle availability or profitable signals. That is checked
+separately by the scan. Search failures never change the active list.
 
 Equities retain 15-minute EMA20/50, Stochastic RSI and 20 verified same-slot volume
 rules. Indices port the web experimental_15m_index_trend rule: 21 session-close
@@ -61,3 +71,18 @@ A release tagged `android-paper-VERSION` must contain `android-update.json` with
 approval. The updater sends no Upstox token, rejects downgrades and foreign
 packages/certificates, and leaves Android to ask the user to allow installation.
 The current candidate does not create a release or publish update metadata.
+
+## Test gates for 0.8.0 preview
+
+The Android workflow runs the complete offline Python regression suite first,
+then all Android unit tests, then packages the debug APK only if both pass.
+Pure lookup/selection contract tests were committed and run before wiring the
+network request. Additional tests cover encoded queries, exchange filters,
+pagination, failed authentication, inconsistent responses, cancellation, redirect
+rejection, local persistence, duplicate selection, the 20-item limit, and backup
+round trips for BSE/index selections. Fixtures are synthetic; they do not establish
+live broker access, live candle coverage or financial performance.
+
+Official contract references:
+- https://upstox.com/developer/api-documentation/instrument-search/
+- https://upstox.com/developer/api-documentation/instruments/

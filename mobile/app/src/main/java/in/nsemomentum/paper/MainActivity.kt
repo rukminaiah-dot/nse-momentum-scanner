@@ -106,7 +106,9 @@ private fun PaperScannerApp() {
     }
     val tokenStore = remember { SecureTokenStore(context) }
     val database = remember { CandleDatabase(context) }
-    val scanner = remember { UpstoxPaperScanner(database) }
+    val sharedFeed = remember { UpstoxCandleFeed() }
+    val scanner = remember { UpstoxPaperScanner(database, sharedFeed) }
+    val selectionStore = remember { InstrumentSelectionStore(context, baseStocks) }
     val favourites = remember {
         mutableStateListOf<String>().apply {
             addAll(preferences.getStringSet("favourites", emptySet()).orEmpty().take(20))
@@ -115,8 +117,7 @@ private fun PaperScannerApp() {
     var page by remember { mutableStateOf(Page.DASHBOARD) }
     var search by remember { mutableStateOf("") }
     var stockSort by remember { mutableStateOf(StockSort.DAY_CHANGE) }
-    var customSymbolInput by remember { mutableStateOf("") }
-    var customKeyInput by remember { mutableStateOf("") }
+    var showInstrumentSearch by remember { mutableStateOf(false) }
     var customStockMessage by remember { mutableStateOf("") }
     var scanning by remember { mutableStateOf(false) }
     var scanProgress by remember { mutableStateOf("") }
@@ -287,6 +288,29 @@ private fun PaperScannerApp() {
         }
     }
 
+    if (showInstrumentSearch) {
+        InstrumentSearchDialog(
+            enabled = !scanning && !autoScanActive && !backupBusy && pendingBackup == null,
+            activeCount = favourites.size,
+            onSearch = { query, exchange, number ->
+                val token = tokenStore.read()?.takeIf { it.isNotBlank() } ?: error("TOKEN_NOT_CONFIGURED")
+                sharedFeed.searchInstruments(token, query, exchange, number)
+            },
+            onAdd = { instrument, age ->
+                if (scanning || autoScanActive || backupBusy || pendingBackup != null) "Stop scans and backup operations before changing the list."
+                else runCatching {
+                    val saved = selectionStore.add(instrument, age)
+                    stocks.clear(); stocks.addAll(saved.catalog)
+                    favourites.clear(); favourites.addAll(saved.active.sorted())
+                    report = null
+                    customStockMessage = "${instrument.symbol} · ${instrument.exchange} added. ${saved.active.size} / 20 active."
+                    customStockMessage
+                }.getOrElse { it.message ?: "Could not save selection. Nothing was added." }
+            },
+            onDismiss = { showInstrumentSearch = false }
+        )
+    }
+
     val runScan = {
         val token = tokenStore.read()
         if (token == null) {
@@ -392,38 +416,12 @@ private fun PaperScannerApp() {
                 Column(Modifier.fillMaxSize().padding(inset)) {
                     Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Add NSE / BSE stock", fontWeight = FontWeight.SemiBold)
-                            OutlinedTextField(
-                                value = customSymbolInput,
-                                onValueChange = { customSymbolInput = it },
-                                label = { Text("Stock symbol") },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            OutlinedTextField(
-                                value = customKeyInput,
-                                onValueChange = { customKeyInput = it },
-                                label = { Text("Upstox instrument key, e.g. NSE_EQ|INE…") },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Button(onClick = {
-                                when (val result = StockCatalog.validateNew(
-                                    customSymbolInput, customKeyInput, stocks, stocks.count { it.isCustom }
-                                )) {
-                                    is StockInputResult.Accepted -> {
-                                        stocks.add(result.stock)
-                                        preferences.edit().putString("custom_stocks", StockCatalog.encodeCustom(stocks)).apply()
-                                        customSymbolInput = ""
-                                        customKeyInput = ""
-                                        customStockMessage = "${result.stock.symbol} added on this phone. Tap Add to scan to include it in your active 20."
-                                    }
-                                    is StockInputResult.Rejected -> customStockMessage = result.reason
-                                }
-                            }, enabled = !scanning && !autoScanActive && !backupBusy && stocks.count { it.isCustom } < StockCatalog.MAX_CUSTOM_STOCKS) {
-                                Text("Add stock")
+                            Text("My scan · ${favourites.size} / 20 active", fontWeight = FontWeight.SemiBold)
+                            Button(onClick = { showInstrumentSearch = true },
+                                enabled = !scanning && !autoScanActive && !backupBusy && pendingBackup == null) {
+                                Text("Search company · NSE / BSE")
                             }
-                            Text("Custom rows are saved on this phone. Enter the exact NSE_EQ or BSE_EQ equity key from Upstox; symbol-only lookup is not available.",
+                            Text("Choose a company and exchange. Upstox supplies its instrument key automatically. Remove a selection to free a place when your list reaches 20.",
                                 style = MaterialTheme.typography.bodySmall)
                             if (customStockMessage.isNotBlank()) Text(customStockMessage, style = MaterialTheme.typography.bodySmall)
                         }
@@ -497,22 +495,24 @@ private fun PaperScannerApp() {
                                     Column {
                                         TextButton(
                                             onClick = {
-                                                if (selected) favourites.remove(stock.symbol)
-                                                else if (favourites.size < 20) favourites.add(stock.symbol)
-                                                preferences.edit().putStringSet("favourites", favourites.toSet()).apply()
-                                                report = null
+                                                runCatching { selectionStore.setActive(stock.symbol, !selected) }
+                                                    .onSuccess { saved ->
+                                                        stocks.clear(); stocks.addAll(saved.catalog)
+                                                        favourites.clear(); favourites.addAll(saved.active.sorted())
+                                                        report = null
+                                                        customStockMessage = if (selected) "${stock.symbol} removed from scan. History kept." else "${stock.symbol} added to scan."
+                                                    }.onFailure { customStockMessage = it.message ?: "Could not save selection." }
                                             },
                                             enabled = !scanning && !autoScanActive && !backupBusy && (selected || favourites.size < 20)
                                         ) { Text(if (selected) "Remove from scan" else "Add to scan") }
                                         if (stock.isCustom) TextButton(onClick = {
-                                            stocks.remove(stock)
-                                            favourites.remove(stock.symbol)
-                                            preferences.edit()
-                                                .putStringSet("favourites", favourites.toSet())
-                                                .putString("custom_stocks", StockCatalog.encodeCustom(stocks))
-                                                .apply()
-                                            report = report?.copy(rows = report!!.rows.filterNot { it.symbol == stock.symbol })
-                                            customStockMessage = "${stock.symbol} removed from this phone."
+                                            runCatching { selectionStore.deleteCustom(stock.symbol) }
+                                                .onSuccess { saved ->
+                                                    stocks.clear(); stocks.addAll(saved.catalog)
+                                                    favourites.clear(); favourites.addAll(saved.active.sorted())
+                                                    report = null
+                                                    customStockMessage = "${stock.symbol} deleted from this phone's list. History kept."
+                                                }.onFailure { customStockMessage = it.message ?: "Could not delete custom entry." }
                                         }, enabled = !scanning && !autoScanActive && !backupBusy) { Text("Delete custom") }
                                     }
                                 }
