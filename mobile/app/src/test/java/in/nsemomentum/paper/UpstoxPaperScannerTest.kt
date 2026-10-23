@@ -14,7 +14,9 @@ class UpstoxPaperScannerTest {
     private val sessions = generateSequence(date.minusDays(1)) { it.minusDays(1) }
         .filter { it.dayOfWeek.value <= 5 && it != holiday }.take(20).map { regular(it) }.toList()
     private val history = sessions.flatMap { it.slots().map { t -> bar(t) } }
-    private val intraday = today.slots().take(4).map { bar(it, 200.0) }
+    private val intraday = today.slots().take(4).mapIndexed { index, time ->
+        bar(time, 200.0).let { if (index == 3) it.copy(close = 10.8) else it }
+    }
     private val universe = listOf("ONE" to "NSE_EQ|ONE", "TWO" to "NSE_EQ|TWO")
 
     private class MemoryStore : CandleStore {
@@ -57,6 +59,9 @@ class UpstoxPaperScannerTest {
         assertEquals(listOf(1, 2), progress)
         assertEquals(2, result.requestCount); assertEquals(0, result.failedRequests)
         assertTrue(result.rows.all { it.relativeVolume == 2.0 })
+        assertTrue(result.rows.all { it.candle?.close == 10.8 })
+        assertTrue(result.rows.all { it.averageSlotVolume == 100.0 })
+        assertEquals((10.8 / 10.5 - 1.0) * 100.0, result.rows.first().dailyChangePercent!!, 1e-9)
         assertNotNull(result.rows.first { it.symbol == "ONE" }.technicals)
         assertNull(result.rows.first { it.symbol == "TWO" }.technicals)
         assertTrue(feed.calendarDates.contains(holiday))
