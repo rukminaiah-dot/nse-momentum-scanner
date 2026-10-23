@@ -7,11 +7,11 @@ android {
     namespace = "com.nsemomentum.paper"
     compileSdk = 35
     defaultConfig {
-        applicationId = "com.nsemomentum.paper"
+        applicationId = "com.nsemomentum.paper.preview"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.5.0"
+        versionCode = 6
+        versionName = "0.5.1-preview"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     testOptions {
