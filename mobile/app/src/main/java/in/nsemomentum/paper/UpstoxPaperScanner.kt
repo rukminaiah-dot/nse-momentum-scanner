@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets
 import java.time.LocalDate
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 
 data class ScanRow(
     val symbol: String,
@@ -34,7 +35,8 @@ class UpstoxPaperScanner(private val database: CandleDatabase) {
         token: String,
         universe: List<Pair<String, String>>,
         favourites: Set<String>,
-        now: java.time.Instant = java.time.Instant.now()
+        now: java.time.Instant = java.time.Instant.now(),
+        onProgress: (completed: Int, total: Int, symbol: String) -> Unit = { _, _, _ -> }
     ): ScanReport {
         require(token.isNotBlank())
         if (universe.isEmpty()) return ScanReport(emptyList(), now.atZone(zone).toString(), 0, 0)
@@ -45,10 +47,16 @@ class UpstoxPaperScanner(private val database: CandleDatabase) {
         } catch (error: Exception) {
             throw IOException(apiReason(error))
         }
+        val completed = AtomicInteger(0)
         val jobs = universe.mapIndexed { index, (symbol, instrumentKey) ->
             Callable {
-                scanOne(token, symbol, instrumentKey, favourites, sessionDate, now,
-                    if (index == 0) firstIntraday else null)
+                try {
+                    scanOne(token, symbol, instrumentKey, favourites, sessionDate, now,
+                        if (index == 0) firstIntraday else null)
+                } finally {
+                    val count = completed.incrementAndGet()
+                    runCatching { onProgress(count, universe.size, symbol) }
+                }
             }
         }
         val futures = pool.invokeAll(jobs)
