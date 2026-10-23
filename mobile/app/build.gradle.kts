@@ -10,8 +10,8 @@ android {
         applicationId = "com.nsemomentum.paper.preview"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "0.6.0-preview"
+        versionCode = 8
+        versionName = "0.7.0-preview"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     // Persistent private keystore is supplied outside the repository. No debug-key fallback for release.

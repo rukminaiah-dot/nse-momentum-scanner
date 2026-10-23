@@ -117,7 +117,7 @@ object PaperStrategy {
         )
     }
 
-    private fun ema(values: List<Double>, period: Int): List<Double> {
+    internal fun ema(values: List<Double>, period: Int): List<Double> {
         if (values.size < period) return emptyList()
         val out = mutableListOf(values.take(period).average())
         val alpha = 2.0 / (period + 1)
@@ -143,7 +143,7 @@ object PaperStrategy {
         return out
     }
 
-    private fun stochRsi(values: List<Double>): Pair<List<Double>, List<Double>> {
+    internal fun stochRsi(values: List<Double>): Pair<List<Double>, List<Double>> {
         val rsi = rsi(values)
         val raw = (13 until rsi.size).map { i ->
             val window = rsi.subList(i - 13, i + 1)

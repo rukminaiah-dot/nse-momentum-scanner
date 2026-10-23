@@ -69,7 +69,7 @@ import java.util.Locale
 import kotlin.math.abs
 
 private enum class Page(val title: String) {
-    DASHBOARD("Home"), UNIVERSE("NSE 200"), FAVOURITES("Favourites"), SETTINGS("Settings")
+    DASHBOARD("Home"), UNIVERSE("Instruments"), FAVOURITES("My 20"), SETTINGS("Settings")
 }
 
 class MainActivity : ComponentActivity() {
@@ -95,7 +95,7 @@ private fun PaperScannerApp() {
             (0 until rows.length()).map { i ->
                 val row = rows.getJSONObject(i)
                 Stock(row.getString("symbol"), row.getString("instrumentKey"))
-            }
+            } + StockCatalog.indices
         }.getOrElse { emptyList() }
     }
     val stocks = remember {
@@ -219,6 +219,8 @@ private fun PaperScannerApp() {
         if (tokenStore.read().isNullOrBlank()) {
             page = Page.SETTINGS
             autoScanStatus = "Add an Upstox token in Settings before starting the full-day scan."
+        } else if (favourites.isEmpty()) {
+            autoScanStatus = "Select at least one instrument in Instruments first."
         } else {
             val intent = Intent(context, PaperScanService::class.java).setAction(PaperScanService.ACTION_START)
             runCatching {
@@ -263,7 +265,8 @@ private fun PaperScannerApp() {
                 runCatching { java.time.ZonedDateTime.parse(it.scanTime).toInstant() }.getOrNull()
             }
             val snapshotAge = persistedScanTime?.let { java.time.Duration.between(it, java.time.Instant.now()).seconds }
-            if (persistedReport != null && snapshotAge != null && snapshotAge in 0..900) report = persistedReport
+            if (persistedReport != null && snapshotAge != null && snapshotAge in 0..900 &&
+                persistedReport.rows.map { it.symbol }.toSet() == favourites.toSet()) report = persistedReport
             qualifiedToday = snapshot.second
             weeklyOutcomes = snapshot.third
             weeklySummary = PaperOutcomeLogic.summarize(snapshot.third, today.minusDays(6), today)
@@ -289,18 +292,19 @@ private fun PaperScannerApp() {
         if (token == null) {
             scanStatus = "Set your Upstox access token in Settings before scanning."
             page = Page.SETTINGS
-        } else if (!backupBusy && pendingBackup == null && !scanning && baseStocks.size == 200 && stocks.size >= 200) {
+        } else if (!backupBusy && pendingBackup == null && !scanning && !autoScanActive && favourites.isNotEmpty() && favourites.size <= StockCatalog.MAX_ACTIVE) {
             scanning = true
-            scanProgress = "Verifying NSE session calendar, then stock history…"
-            scanStatus = "Fetching read-only 15-minute candles for ${stocks.size} stocks…"
+            scanProgress = "Verifying exchange session calendars, then stock history…"
+            scanStatus = "Fetching read-only 15-minute candles for ${favourites.size} selected instruments…"
             report = null
             val selectedFavourites = favourites.toSet()
+            val activeStocks = stocks.toList()
             scanJob = scope.launch {
                 try {
                     val result = withContext(Dispatchers.IO) {
                         scanner.scan(
                             token,
-                            stocks.map { it.symbol to it.instrumentKey },
+                            StockCatalog.active(activeStocks, selectedFavourites).map { it.symbol to it.instrumentKey },
                             selectedFavourites,
                             onProgress = { completed, total, symbol ->
                                 withContext(Dispatchers.Main.immediate) {
@@ -313,7 +317,7 @@ private fun PaperScannerApp() {
                     report = result
                     scanStatus = "Snapshot as of ${result.scanTime} · ${result.failedRequests} stock feed errors\n" +
                         result.rows.groupingBy { it.reason }.eachCount().entries.joinToString(" · ") { "${it.key}: ${it.value}" }
-                    scanProgress = "Finished ${result.requestCount} of ${stocks.size} stocks."
+                    scanProgress = "Finished ${result.requestCount} of ${selectedFavourites.size} instruments."
                 } catch (error: TimeoutCancellationException) {
                     scanProgress = ""
                     scanStatus = "Scan timed out after 10 minutes. No signals retained."
@@ -364,7 +368,7 @@ private fun PaperScannerApp() {
     ) { inset ->
         when (page) {
             Page.DASHBOARD -> Dashboard(
-                stockCount = stocks.size,
+                stockCount = favourites.size,
                 favouriteCount = favourites.size,
                 customStockCount = stocks.count { it.isCustom },
                 scanStatus = scanStatus,
@@ -388,7 +392,7 @@ private fun PaperScannerApp() {
                 Column(Modifier.fillMaxSize().padding(inset)) {
                     Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Add custom NSE stock", fontWeight = FontWeight.SemiBold)
+                            Text("Add NSE / BSE stock", fontWeight = FontWeight.SemiBold)
                             OutlinedTextField(
                                 value = customSymbolInput,
                                 onValueChange = { customSymbolInput = it },
@@ -412,14 +416,14 @@ private fun PaperScannerApp() {
                                         preferences.edit().putString("custom_stocks", StockCatalog.encodeCustom(stocks)).apply()
                                         customSymbolInput = ""
                                         customKeyInput = ""
-                                        customStockMessage = "${result.stock.symbol} added on this phone. It will be checked on the next scan."
+                                        customStockMessage = "${result.stock.symbol} added on this phone. Tap Add to scan to include it in your active 20."
                                     }
                                     is StockInputResult.Rejected -> customStockMessage = result.reason
                                 }
-                            }, enabled = stocks.count { it.isCustom } < StockCatalog.MAX_CUSTOM_STOCKS) {
+                            }, enabled = !scanning && !autoScanActive && !backupBusy && stocks.count { it.isCustom } < StockCatalog.MAX_CUSTOM_STOCKS) {
                                 Text("Add stock")
                             }
-                            Text("Custom rows are saved on this phone. Enter the exact NSE equity key from Upstox; symbol-only lookup is not available.",
+                            Text("Custom rows are saved on this phone. Enter the exact NSE_EQ or BSE_EQ equity key from Upstox; symbol-only lookup is not available.",
                                 style = MaterialTheme.typography.bodySmall)
                             if (customStockMessage.isNotBlank()) Text(customStockMessage, style = MaterialTheme.typography.bodySmall)
                         }
@@ -496,9 +500,10 @@ private fun PaperScannerApp() {
                                                 if (selected) favourites.remove(stock.symbol)
                                                 else if (favourites.size < 20) favourites.add(stock.symbol)
                                                 preferences.edit().putStringSet("favourites", favourites.toSet()).apply()
+                                                report = null
                                             },
-                                            enabled = selected || favourites.size < 20
-                                        ) { Text(if (selected) "★ Saved" else "☆ Add") }
+                                            enabled = !scanning && !autoScanActive && !backupBusy && (selected || favourites.size < 20)
+                                        ) { Text(if (selected) "Remove from scan" else "Add to scan") }
                                         if (stock.isCustom) TextButton(onClick = {
                                             stocks.remove(stock)
                                             favourites.remove(stock.symbol)
@@ -508,7 +513,7 @@ private fun PaperScannerApp() {
                                                 .apply()
                                             report = report?.copy(rows = report!!.rows.filterNot { it.symbol == stock.symbol })
                                             customStockMessage = "${stock.symbol} removed from this phone."
-                                        }) { Text("Remove") }
+                                        }, enabled = !scanning && !autoScanActive && !backupBusy) { Text("Delete custom") }
                                     }
                                 }
                             }
@@ -521,8 +526,8 @@ private fun PaperScannerApp() {
                 val bySymbol = report?.rows?.associateBy { it.symbol }.orEmpty()
                 if (selectedStocks.isEmpty()) {
                     MessagePage(
-                        "Your favourites",
-                        "Search the NSE 200 list and tap a star to add up to 20 stocks. Technical checks run only for favourites.",
+                        "My active instruments",
+                        "Select up to 20 instruments in Instruments. Only these are scanned, with technical checks for every selection.",
                         Modifier.padding(inset)
                     )
                 } else {
@@ -636,16 +641,16 @@ private fun Dashboard(
                 if (autoScanActive) {
                     Button(onClick = onStopFullDayScan) { Text("Stop full-day scan") }
                 } else {
-                    Button(onClick = onStartFullDayScan, enabled = !scanning && stockCount >= 200) { Text("Start full-day scan") }
+                    Button(onClick = onStartFullDayScan, enabled = !scanning && stockCount in 1..20) { Text("Start full-day scan") }
                 }
-                Button(onClick = onRunScan, enabled = !scanning && !autoScanActive && stockCount >= 200) {
+                Button(onClick = onRunScan, enabled = !scanning && !autoScanActive && stockCount in 1..20) {
                     Text(if (scanning) "Scanning…" else "Run one scan")
                 }
                 if (scanning) Button(onClick = onCancelScan) { Text("Cancel one scan") }
             }
         }
-        InfoCard("NSE 200 + custom volume screen", "$stockCount stocks configured", "$customStockCount custom additions · $qualified stocks currently at or above 1.5× on the latest scan.")
-        InfoCard("Favourites", "$favouriteCount / 20 selected", "EMA 20/50 and Stochastic RSI checks run only for saved favourites.")
+        InfoCard("Selected instrument scan", "$stockCount / 20 active instruments", "$customStockCount custom additions · $qualified stocks currently at or above 1.5× on the latest scan.")
+        InfoCard("Favourites", "$favouriteCount / 20 selected", "Every selected instrument receives technical checks. Indices use price-based rules without RVOL.")
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Qualified today · ${qualifiedToday.size}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)

@@ -12,9 +12,24 @@ sealed interface StockInputResult {
 }
 
 object StockCatalog {
+    const val MAX_ACTIVE = 20
+    val indices = listOf(
+        Stock("NIFTY50", "NSE_INDEX|Nifty 50"),
+        Stock("SENSEX", "BSE_INDEX|SENSEX"),
+        Stock("BANKNIFTY", "NSE_INDEX|Nifty Bank")
+    )
+
+    /** Existing favourites become the active list; never silently scan unselected instruments. */
+    fun active(catalog: List<Stock>, selected: Set<String>): List<Stock> {
+        require(selected.size <= MAX_ACTIVE) { "ACTIVE_LIST_OVER_LIMIT" }
+        require(catalog.map { it.symbol }.distinct().size == catalog.size) { "DUPLICATE_SYMBOL" }
+        require(selected.all { symbol -> catalog.any { it.symbol == symbol } }) { "UNKNOWN_ACTIVE_INSTRUMENT" }
+        return catalog.filter { it.symbol in selected }
+    }
+
     const val MAX_CUSTOM_STOCKS = 20
     private val symbolPattern = Regex("^[A-Z0-9][A-Z0-9&._-]{0,29}$")
-    private val keyPattern = Regex("^NSE_EQ\\|[A-Z0-9]+$")
+    private val keyPattern = Regex("^(NSE_EQ|BSE_EQ)\\|[A-Z0-9]+$")
 
     fun validateNew(
         symbolInput: String,
@@ -25,10 +40,10 @@ object StockCatalog {
         val symbol = symbolInput.trim().uppercase(Locale.ROOT)
         val instrumentKey = instrumentKeyInput.trim().uppercase(Locale.ROOT)
         if (!symbolPattern.matches(symbol)) {
-            return StockInputResult.Rejected("Enter a valid NSE symbol (letters, numbers, . _ & or -).")
+            return StockInputResult.Rejected("Enter a valid stock label (letters, numbers, . _ & or -).")
         }
         if (!keyPattern.matches(instrumentKey)) {
-            return StockInputResult.Rejected("Enter the exact Upstox key, for example NSE_EQ|INE848E01016.")
+            return StockInputResult.Rejected("Enter the exact NSE_EQ or BSE_EQ Upstox equity key.")
         }
         if (existing.any { it.symbol.equals(symbol, ignoreCase = true) }) {
             return StockInputResult.Rejected("That symbol is already in the stock list.")

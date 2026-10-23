@@ -29,5 +29,9 @@ interface CandleStore {
 
 interface CandleFeed {
     suspend fun session(token: String, date: LocalDate): MarketSession?
+    suspend fun session(token: String, date: LocalDate, exchange: String): MarketSession? {
+        require(exchange == "NSE") { "UNVERIFIED_EXCHANGE_CALENDAR" }
+        return session(token, date)
+    }
     suspend fun candles(token: String, path: String): List<Candle>
 }

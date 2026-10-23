@@ -99,9 +99,12 @@ class UpstoxCandleFeed(
 
     override suspend fun candles(token: String, path: String): List<Candle> = parseCandles(request(token, path))
 
-    override suspend fun session(token: String, date: LocalDate): MarketSession? {
+    override suspend fun session(token: String, date: LocalDate): MarketSession? = session(token, date, "NSE")
+
+    override suspend fun session(token: String, date: LocalDate, exchange: String): MarketSession? {
+        require(exchange in setOf("NSE", "BSE"))
         val data = request(token, "/v2/market/timings/$date").getJSONArray("data")
-        val entries = (0 until data.length()).map { data.getJSONObject(it) }.filter { it.getString("exchange") == "NSE" }
+        val entries = (0 until data.length()).map { data.getJSONObject(it) }.filter { it.getString("exchange") == exchange }
         if (entries.isEmpty()) return null // Exchange calendar explicitly says NSE is closed.
         if (entries.size != 1) throw IOException("UNVERIFIED_MARKET_CALENDAR")
         val entry = entries.single()

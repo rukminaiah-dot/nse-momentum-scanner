@@ -11,6 +11,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import org.json.JSONArray
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -67,8 +68,8 @@ class PaperScanService : Service() {
         val scanner = UpstoxPaperScanner(database)
         while (true) {
             val universe = readUniverse()
-            if (universe.size < 200) {
-                markStopped("NSE 200 stock list did not load; scan was stopped.")
+            if (universe.isEmpty() || universe.size > StockCatalog.MAX_ACTIVE) {
+                markStopped("Select 1–20 valid instruments; scan was stopped.")
                 stopSelf(startId)
                 return
             }
@@ -90,6 +91,9 @@ class PaperScanService : Service() {
                 val lastTime = report.rows.firstNotNullOfOrNull { it.candleTime } ?: "no verified candle"
                 showForeground("Scan saved · $qualified qualified today · $lastTime")
                 preferences.edit().putString(PREF_STATUS, "Last scan: $lastTime · $qualified stocks qualified today · ${report.failedRequests} feed errors").apply()
+            } catch (_: TimeoutCancellationException) {
+                preferences.edit().putString(PREF_STATUS, "Scan timed out; retrying at the next candle.").apply()
+                showForeground("Scan timed out; retrying at the next candle.")
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: IOException) {
@@ -131,8 +135,10 @@ class PaperScanService : Service() {
             val row = rows.getJSONObject(index)
             Stock(row.getString("symbol"), row.getString("instrumentKey"))
         }
-        val customs = StockCatalog.decodeCustom(preferences.getString("custom_stocks", null), base)
-        (base + customs).map { it.symbol to it.instrumentKey }
+        val catalog = base + StockCatalog.indices
+        val customs = StockCatalog.decodeCustom(preferences.getString("custom_stocks", null), catalog)
+        StockCatalog.active(catalog + customs, preferences.getStringSet("favourites", emptySet()).orEmpty())
+            .map { it.symbol to it.instrumentKey }
     }.getOrDefault(emptyList())
 
     private fun nextBoundary(after: Instant): Instant? {

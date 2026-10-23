@@ -46,26 +46,32 @@ class UpstoxPaperScanner(
         require(universe.map { it.first }.distinct().size == universe.size)
         require(universe.map { it.second }.distinct().size == universe.size)
         val date = now.atZone(MarketSession.ZONE).toLocalDate()
-        val today = feed.session(token, date) ?: throw IOException("MARKET_CLOSED")
-        val target = today.completedSlot(now) ?: throw IOException("NO_COMPLETED_MARKET_CANDLE")
-        val sessions = mutableListOf<MarketSession>()
-        var previous = date.minusDays(1)
-        repeat(60) {
-            if (sessions.size < 20) {
-                feed.session(token, previous)?.let { session ->
-                    if (!session.isRegular()) throw IOException("UNSUPPORTED_SPECIAL_SESSION")
-                    sessions += session
+        val calendars = universe.map { it.second.substringBefore('_') }.distinct().associateWith { exchange ->
+            val today = feed.session(token, date, exchange) ?: throw IOException("MARKET_CLOSED")
+            val target = today.completedSlot(now) ?: throw IOException("NO_COMPLETED_MARKET_CANDLE")
+            val required = if (universe.any { it.second.startsWith("${exchange}_INDEX|") }) 21 else 20
+            val sessions = mutableListOf<MarketSession>()
+            var previous = date.minusDays(1)
+            repeat(60) {
+                if (sessions.size < required) {
+                    feed.session(token, previous, exchange)?.let { session ->
+                        if (!session.isRegular()) throw IOException("UNSUPPORTED_SPECIAL_SESSION")
+                        sessions += session
+                    }
+                    previous = previous.minusDays(1)
                 }
-                previous = previous.minusDays(1)
             }
+            if (sessions.size != required) throw IOException("UNVERIFIED_MARKET_CALENDAR")
+            Triple(today, target, sessions)
         }
-        if (sessions.size != 20) throw IOException("UNVERIFIED_MARKET_CALENDAR")
         val permits = Semaphore(4)
         val progressLock = Mutex()
         var completed = 0
         val rows = coroutineScope {
             universe.map { (symbol, key) -> async {
                 permits.withPermit {
+                    val (today, target, prior) = calendars.getValue(key.substringBefore('_'))
+                    val sessions = prior.take(if (key.contains("_INDEX|")) 21 else 20)
                     val row = try { scanOne(token, symbol, key, favourites, today, target, sessions, now) }
                     catch (error: CancellationException) { throw error }
                     catch (error: Exception) {
@@ -88,9 +94,13 @@ class UpstoxPaperScanner(
         today: MarketSession, target: Instant, sessions: List<MarketSession>, now: Instant
     ): ScanRow {
         val encoded = URLEncoder.encode(key, "UTF-8").replace("+", "%20")
-        var cached = database.bars(symbol)
-        val targetCandle = Candle(target, 1.0, 1.0, 1.0, 1.0, 0.0)
-        if (PaperStrategy.sameSlotAverage(targetCandle, cached, sessions) == null) {
+        val isIndex = key.contains("_INDEX|")
+        // Cache by instrument key: deleting/re-adding a label must not reuse another instrument's data.
+        var cached = database.bars(key)
+        fun historyReady(bars: List<Candle>): Boolean = if (isIndex)
+            IndexPaperStrategy.verifiedHistory(bars, sessions)
+        else PaperStrategy.sameSlotAverage(Candle(target, 1.0, 1.0, 1.0, 1.0, 0.0), bars, sessions) != null
+        if (!historyReady(cached)) {
             // At most 28 calendar days per request, safely inside V3's one-month limit.
             var end = today.date.minusDays(1)
             val oldest = sessions.minOf { it.date }
@@ -104,10 +114,10 @@ class UpstoxPaperScanner(
                 end = start.minusDays(1)
             }
             // Validate the raw response before cache upserts can conceal duplicates or missing slots.
-            if (PaperStrategy.sameSlotAverage(targetCandle, history, sessions) == null)
-                return ScanRow(symbol, reason = "NO_VERIFIED_20_SESSION_BASELINE")
-            database.save(symbol, history)
-            cached = database.bars(symbol)
+            if (!historyReady(history))
+                return ScanRow(symbol, reason = if (isIndex) "NO_VERIFIED_21_SESSION_HISTORY" else "NO_VERIFIED_20_SESSION_BASELINE")
+            database.save(key, history)
+            cached = database.bars(key)
         }
         val intraday = feed.candles(token, "/v3/historical-candle/intraday/$encoded/minutes/15")
         if (intraday.any { !PaperStrategy.validCandle(it) || it.timestamp !in today.slots() } ||
@@ -117,17 +127,18 @@ class UpstoxPaperScanner(
             return ScanRow(symbol, reason = "MISSING_COMPLETED_15M_CANDLE")
         // Only fresh intraday input can establish today's latest bar; cache cannot mask feed gaps.
         val latest = complete.single { it.timestamp == target }
-        val baseline = PaperStrategy.sameSlotAverage(latest, cached, sessions)
-            ?: return ScanRow(symbol, reason = "NO_VERIFIED_20_SESSION_BASELINE")
-        database.save(symbol, complete)
+        val baseline = if (isIndex) null else PaperStrategy.sameSlotAverage(latest, cached, sessions)
+        if (!isIndex && baseline == null) return ScanRow(symbol, reason = "NO_VERIFIED_20_SESSION_BASELINE")
+        database.save(key, complete)
         val allBars = cached.filter { bar -> sessions.any { it.date == bar.timestamp.atZone(MarketSession.ZONE).toLocalDate() } } + complete
         val ordered = allBars.sortedBy { it.timestamp }
-        val rvol = PaperStrategy.relativeVolume(latest.volume, baseline)
-            ?: return ScanRow(symbol, reason = "INVALID_VOLUME")
+        val rvol = baseline?.let { PaperStrategy.relativeVolume(latest.volume, it) }
+        if (!isIndex && rvol == null) return ScanRow(symbol, reason = "INVALID_VOLUME")
         val context = if (symbol in favourites) PaperStrategy.context(ordered) else null
-        val result = if (symbol in favourites) PaperStrategy.evaluate(ordered, now, baseline) else PaperSignal(
-            signal = if (rvol >= 1.5) "VOLUME_QUALIFIED" else "WAIT",
-            reason = if (rvol >= 1.5) "FAVOURITE_ONLY_FOR_TECHNICALS" else "VOLUME_BELOW_THRESHOLD")
+        val result = if (isIndex) IndexPaperStrategy.evaluate(ordered, sessions, now)
+        else if (symbol in favourites) PaperStrategy.evaluate(ordered, now, baseline) else PaperSignal(
+            signal = if ((rvol ?: 0.0) >= 1.5) "VOLUME_QUALIFIED" else "WAIT",
+            reason = if ((rvol ?: 0.0) >= 1.5) "FAVOURITE_ONLY_FOR_TECHNICALS" else "VOLUME_BELOW_THRESHOLD")
         val previousCloseTime = sessions.first().slots().last()
         val previousClose = cached.singleOrNull { it.timestamp == previousCloseTime }?.close
         val dailyChange = previousClose?.takeIf { it > 0.0 }?.let { ((latest.close - it) / it) * 100.0 }

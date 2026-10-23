@@ -1,0 +1,46 @@
+name: Android Private Signed Candidate
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  candidate:
+    if: github.ref == 'refs/heads/experiment/android-paper-scanner'
+    environment: android-experimental-signing
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install build tools
+        run: |
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+          curl --fail --location --silent --show-error https://services.gradle.org/distributions/gradle-8.9-bin.zip --output "$RUNNER_TEMP/gradle.zip"
+          unzip -q "$RUNNER_TEMP/gradle.zip" -d "$RUNNER_TEMP"
+      - name: Test and build privately signed candidate
+        working-directory: mobile
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
+          ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
+          ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_BASE64" || { echo 'Private Android signing is not configured.'; exit 1; }
+          export ANDROID_SIGNING_STORE_FILE="$RUNNER_TEMP/android-signing.jks"
+          umask 077
+          trap 'rm -f "$ANDROID_SIGNING_STORE_FILE"' EXIT
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$ANDROID_SIGNING_STORE_FILE"
+          "$RUNNER_TEMP/gradle-8.9/bin/gradle" --no-daemon :app:testDebugUnitTest :app:assembleRelease
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs app/build/outputs/apk/release/app-release.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-signed-candidate
+          path: mobile/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 7
