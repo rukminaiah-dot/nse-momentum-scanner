@@ -136,9 +136,9 @@ class PaperScanService : Service() {
         val date = after.atZone(zone).toLocalDate()
         return (0..24).asSequence()
             .map { index ->
-                date.atTime(LocalTime.of(9, 30)).plusMinutes(index * 15L).atZone(zone).toInstant().plusSeconds(3)
+                date.atTime(LocalTime.of(9, 30)).plusMinutes(index * 15L).atZone(zone).toInstant().plusSeconds(20)
             }
-            .firstOrNull { it.isAfter(after) && it.atZone(zone).toLocalTime() <= LocalTime.of(15, 30).plusSeconds(3) }
+            .firstOrNull { it.isAfter(after) && it.atZone(zone).toLocalTime() <= LocalTime.of(15, 30).plusSeconds(20) }
     }
 
     private fun showForeground(text: String) {
