@@ -16,6 +16,8 @@ data class Candle(
     val volume: Double
 )
 
+data class TechnicalContext(val ema20: Double, val ema50: Double, val stochK: Double, val stochD: Double)
+
 data class PaperSignal(
     val signal: String = "WAIT",
     val reason: String,
@@ -27,24 +29,35 @@ data class PaperSignal(
 object PaperStrategy {
     private val marketZone = ZoneId.of("Asia/Kolkata")
 
-    /** Strict average for the 20 latest prior weekday observations of this 15m slot. */
-    fun sameSlotAverage(current: Candle, priorCandles: List<Candle>, sessions: Int = 20): Double? {
-        if (sessions < 1 || current.volume < 0 || !current.volume.isFinite()) return null
+    /** Exactly the preceding 20 exchange-verified sessions; missing sessions are never substituted. */
+    fun sameSlotAverage(current: Candle, priorCandles: List<Candle>, sessions: List<MarketSession>): Double? {
+        if (!validCandle(current) || sessions.size != 20 || sessions.any { !it.isRegular() } ||
+            sessions.map { it.date }.distinct().size != 20) return null
         val local = current.timestamp.atZone(marketZone)
+        if (sessions.any { it.date >= local.toLocalDate() }) return null
         val slot = local.toLocalTime()
-        val minutes = slot.hour * 60 + slot.minute
-        if (minutes < 9 * 60 + 15 || minutes >= 15 * 60 + 30 || (minutes - 9 * 60 - 15) % 15 != 0) return null
-        val dayVolumes = mutableMapOf<LocalDate, Double>()
-        for (bar in priorCandles) {
-            val stamp = bar.timestamp.atZone(marketZone)
-            if (stamp.toLocalDate() >= local.toLocalDate() || stamp.dayOfWeek.value > 5 || stamp.toLocalTime() != slot) continue
-            if (!bar.volume.isFinite() || bar.volume < 0) continue
-            if (dayVolumes.put(stamp.toLocalDate(), bar.volume) != null) return null
+        if (slot.second != 0 || slot.nano != 0 || slot < LocalTime.of(9, 15) ||
+            slot >= LocalTime.of(15, 30) || (slot.hour * 60 + slot.minute - 555) % 15 != 0) return null
+        val volumes = sessions.map { session ->
+            val bars = priorCandles.filter { it.timestamp.atZone(marketZone).toLocalDate() == session.date }
+            if (bars.size != 25 || bars.any { !validCandle(it) } ||
+                bars.map { it.timestamp }.toSet() != session.slots().toSet()) return null
+            bars.single { it.timestamp.atZone(marketZone).toLocalTime() == slot }.volume
         }
-        val values = dayVolumes.toSortedMap().values.toList().takeLast(sessions)
-        if (values.size != sessions) return null
-        val average = values.average()
-        return average.takeIf { it > 0 && it.isFinite() }
+        return volumes.average().takeIf { it > 0 && it.isFinite() }
+    }
+
+    fun validCandle(bar: Candle): Boolean =
+        listOf(bar.open, bar.high, bar.low, bar.close, bar.volume).all { it.isFinite() } &&
+            minOf(bar.open, bar.high, bar.low, bar.close) > 0 && bar.volume >= 0 &&
+            bar.high >= maxOf(bar.open, bar.close) && bar.low <= minOf(bar.open, bar.close) &&
+            bar.high >= bar.low
+
+    fun context(bars: List<Candle>): TechnicalContext? {
+        if (bars.size < 52 || bars.any { !validCandle(it) }) return null
+        val closes = bars.map { it.close }
+        val (k, d) = stochRsi(closes)
+        return TechnicalContext(ema(closes, 20).last(), ema(closes, 50).last(), k.last(), d.last())
     }
 
     fun relativeVolume(currentVolume: Double, baseline: Double): Double? =
@@ -80,7 +93,7 @@ object PaperStrategy {
         val body = abs(latest.close - latest.open) / (latest.high - latest.low)
         if (body < 0.5) return wait("WEAK_CANDLE_BODY")
 
-        val closes = recent.map { it.close }
+        val closes = bars.map { it.close }
         val fast = ema(closes, 20).lastOrNull() ?: return wait("INSUFFICIENT_EMA_HISTORY")
         val slow = ema(closes, 50).lastOrNull() ?: return wait("INSUFFICIENT_EMA_HISTORY")
         val (k, d) = stochRsi(closes)

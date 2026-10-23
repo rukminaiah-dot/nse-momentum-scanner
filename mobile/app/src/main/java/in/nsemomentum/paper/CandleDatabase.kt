@@ -4,10 +4,8 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
-import java.time.LocalDate
-import java.time.ZoneId
 
-class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candles.db", null, 2) {
+class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candles.db", null, 2), CandleStore {
     override fun onCreate(db: SQLiteDatabase) {
         createCandles(db)
         createHistoryAttempts(db)
@@ -42,7 +40,7 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
         )
     }
 
-    fun save(symbol: String, bars: List<Candle>) {
+    override fun save(symbol: String, bars: List<Candle>) {
         if (bars.isEmpty()) return
         val db = writableDatabase
         db.beginTransaction()
@@ -65,7 +63,7 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
         }
     }
 
-    fun bars(symbol: String): List<Candle> {
+    override fun bars(symbol: String): List<Candle> {
         val output = mutableListOf<Candle>()
         readableDatabase.query(
             "candles", arrayOf("timestamp", "open", "high", "low", "close", "volume"),
@@ -82,33 +80,6 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
             }
         }
         return output
-    }
-
-    fun hasTwentyPriorSessions(symbol: String, sessionDate: LocalDate): Boolean {
-        val zone = ZoneId.of("Asia/Kolkata")
-        val dates = bars(symbol).map { it.timestamp.atZone(zone).toLocalDate() }
-            .filter { it < sessionDate && it.dayOfWeek.value <= 5 }
-            .toSet()
-        return dates.size >= 20
-    }
-
-    fun historyAlreadyAttemptedToday(symbol: String, sessionDate: LocalDate): Boolean {
-        readableDatabase.query(
-            "history_attempts", arrayOf("attempted_on"), "symbol=?",
-            arrayOf(symbol), null, null, null
-        ).use { cursor ->
-            return cursor.moveToFirst() && cursor.getString(0) == sessionDate.toString()
-        }
-    }
-
-    fun markHistoryAttempted(symbol: String, sessionDate: LocalDate) {
-        val values = ContentValues().apply {
-            put("symbol", symbol)
-            put("attempted_on", sessionDate.toString())
-        }
-        writableDatabase.insertWithOnConflict(
-            "history_attempts", null, values, SQLiteDatabase.CONFLICT_REPLACE
-        )
     }
 
     fun clearAll() {

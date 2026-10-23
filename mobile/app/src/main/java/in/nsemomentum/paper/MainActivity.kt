@@ -3,6 +3,8 @@ package com.nsemomentum.paper
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -28,6 +30,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,6 +42,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -90,6 +97,18 @@ private fun PaperScannerApp() {
     var report by remember { mutableStateOf<ScanReport?>(null) }
     var tokenConfigured by remember { mutableStateOf(tokenStore.read() != null) }
     val scope = rememberCoroutineScope()
+    var scanJob by remember { mutableStateOf<Job?>(null) }
+    LaunchedEffect(report) {
+        while (report != null) {
+            val snapshot = java.time.ZonedDateTime.parse(report!!.scanTime).toInstant()
+            if (java.time.Duration.between(snapshot, java.time.Instant.now()).seconds > 900) {
+                report = null
+                scanStatus = "Previous snapshot expired. Run a new paper scan."
+                scanProgress = ""
+            }
+            delay(15_000)
+        }
+    }
 
     val runScan = {
         val token = tokenStore.read()
@@ -98,29 +117,44 @@ private fun PaperScannerApp() {
             page = Page.SETTINGS
         } else if (!scanning && stocks.size == 200) {
             scanning = true
-            scanProgress = "Connecting to Upstox…"
+            scanProgress = "Verifying NSE session calendar, then stock history…"
             scanStatus = "Fetching read-only 15-minute candles for the 200-stock universe…"
-            scope.launch {
+            report = null
+            val selectedFavourites = favourites.toSet()
+            scanJob = scope.launch {
                 try {
                     val result = withContext(Dispatchers.IO) {
                         scanner.scan(
                             token,
                             stocks.map { it.symbol to it.instrumentKey },
-                            favourites.toSet(),
+                            selectedFavourites,
                             onProgress = { completed, total, symbol ->
-                                scope.launch(Dispatchers.Main.immediate) {
+                                withContext(Dispatchers.Main.immediate) {
                                     scanProgress = "Checked $completed / $total stocks · last: $symbol"
                                 }
                             }
                         )
                     }
                     report = result
-                    scanStatus = "Scan completed at ${result.scanTime} · ${result.failedRequests} feed errors"
+                    scanStatus = "Snapshot as of ${result.scanTime} · ${result.failedRequests} stock feed errors\n" +
+                        result.rows.groupingBy { it.reason }.eachCount().entries.joinToString(" · ") { "${it.key}: ${it.value}" }
                     scanProgress = "Finished ${result.requestCount} of ${stocks.size} stocks."
+                } catch (error: TimeoutCancellationException) {
+                    scanProgress = ""
+                    scanStatus = "Scan timed out after 10 minutes. No signals retained."
+                } catch (error: CancellationException) {
+                    scanProgress = ""
+                    scanStatus = "Scan cancelled. No signals retained."
+                    throw error
                 } catch (error: Exception) {
+                    scanProgress = ""
                     scanStatus = when (error.message) {
                         "UPSTOX_AUTH_REQUIRED" -> "Upstox rejected the token. Generate a fresh token and save it in Settings."
                         "RATE_LIMITED" -> "Upstox rate limit reached. Wait before scanning again."
+                        "MARKET_CLOSED" -> "NSE is closed according to the exchange calendar."
+                        "NO_COMPLETED_MARKET_CANDLE" -> "No fresh completed market candle. Scan after 09:30 IST during a regular session."
+                        "UNSUPPORTED_SPECIAL_SESSION" -> "Special NSE session detected. Regular-session baseline unavailable; scan stopped."
+                        "UNVERIFIED_MARKET_CALENDAR" -> "Exchange calendar could not verify 20 prior sessions. Scan stopped."
                         else -> "Scan failed. Check internet and Data health; no signal is assigned."
                     }
                 } finally {
@@ -161,6 +195,7 @@ private fun PaperScannerApp() {
                 scanning = scanning,
                 scanProgress = scanProgress,
                 onRunScan = runScan,
+                onCancelScan = { scanJob?.cancel() },
                 modifier = Modifier.padding(inset)
             )
             Page.UNIVERSE -> {
@@ -223,7 +258,8 @@ private fun PaperScannerApp() {
                         contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        item { Text("FAVOURITES · 15-MINUTE PAPER SIGNALS", fontWeight = FontWeight.Bold) }
+                        item { Text("FAVOURITES · 15-MINUTE PAPER SIGNALS", fontWeight = FontWeight.Bold)
+                            Text("BUY/SELL require RVOL ≥ 1.5×, EMA direction, a strong candle breaking the prior 3 bars, and a Stoch RSI cross at ≤20 / ≥80. Otherwise WAIT; no position or order tracking.", style = MaterialTheme.typography.bodySmall) }
                         items(selectedStocks, key = { it.symbol }) { stock ->
                             val row = bySymbol[stock.symbol]
                             Card(Modifier.fillMaxWidth()) {
@@ -267,7 +303,12 @@ private fun rowSummary(row: ScanRow): String {
 private fun rowDetail(row: ScanRow): String {
     val time = row.candleTime ?: "Candle time unavailable"
     val rvol = row.relativeVolume?.let { "RVOL ${"%.2f".format(it)}×" } ?: "RVOL unavailable"
-    return "$time · $rvol · ${row.reason}"
+    val candle = row.candle?.let { "\n15m O ${it.open} · H ${it.high} · L ${it.low} · C ${it.close} · V ${it.volume.toLong()}" }.orEmpty()
+    val technical = row.technicals?.let {
+        "\nEMA 20 ${"%.2f".format(it.ema20)} · EMA 50 ${"%.2f".format(it.ema50)}" +
+            "\nStoch RSI (14,14,3,3) K ${"%.2f".format(it.stochK)} · D ${"%.2f".format(it.stochD)}"
+    }.orEmpty()
+    return "$time · $rvol · ${row.reason}$candle$technical"
 }
 
 @Composable
@@ -279,10 +320,11 @@ private fun Dashboard(
     scanning: Boolean,
     scanProgress: String,
     onRunScan: () -> Unit,
+    onCancelScan: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val qualified = report?.rows?.count { (it.relativeVolume ?: 0.0) >= 1.5 } ?: 0
-    Column(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
             Column(Modifier.padding(18.dp)) {
                 Text("PAPER TRADING · NO ORDERS", fontWeight = FontWeight.Bold)
@@ -294,12 +336,13 @@ private fun Dashboard(
                 Button(onClick = onRunScan, enabled = !scanning && stockCount == 200) {
                     Text(if (scanning) "Scanning…" else "Run paper scan")
                 }
+                if (scanning) Button(onClick = onCancelScan) { Text("Cancel scan") }
             }
         }
         InfoCard("NSE 200 volume screen", "$stockCount stocks configured", "$qualified stocks currently at or above 1.5× volume, if a verified scan has completed.")
         InfoCard("Favourites", "$favouriteCount / 20 selected", "EMA 20/50 and Stochastic RSI checks run only for saved favourites.")
         if (report != null) {
-            report.rows.filter { (it.relativeVolume ?: 0.0) >= 1.5 }.take(10).forEach { row ->
+            report.rows.filter { (it.relativeVolume ?: 0.0) >= 1.5 }.forEach { row ->
                 InfoCard(row.symbol, row.signal, rowDetail(row))
             }
         }
