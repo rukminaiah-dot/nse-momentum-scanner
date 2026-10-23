@@ -62,15 +62,15 @@ class PaperScanService : Service() {
             stopSelf(startId)
             return
         }
-        val universe = readUniverse()
-        if (universe.size < 200) {
-            markStopped("NSE 200 stock list did not load; scan was not started.")
-            stopSelf(startId)
-            return
-        }
-        val selected = preferences.getStringSet("favourites", emptySet()).orEmpty()
         val scanner = UpstoxPaperScanner(database)
         while (true) {
+            val universe = readUniverse()
+            if (universe.size < 200) {
+                markStopped("NSE 200 stock list did not load; scan was stopped.")
+                stopSelf(startId)
+                return
+            }
+            val selected = preferences.getStringSet("favourites", emptySet()).orEmpty()
             val now = Instant.now()
             if (now.atZone(zone).toLocalTime() > LocalTime.of(15, 33)) {
                 markStopped("Market session scan finished.")
