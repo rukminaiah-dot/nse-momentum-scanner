@@ -38,14 +38,14 @@ class ReversalEvidenceUiTests(unittest.TestCase):
         self.assertIn("state.trendChanges", dashboard)
         self.assertIn("['PAPER_BUY','PAPER_SELL','WAIT']", dashboard)
         self.assertIn("x.data_status==='LIVE_FRESH'", dashboard)
-        self.assertIn("No live signal is assigned.", dashboard)
+        self.assertIn("No live signal assigned", dashboard)
         self.assertIn("21-session average", dashboard)
         self.assertIn("Volume: not available for spot indices.", dashboard)
         self.assertIn("historical", dashboard)
         self.assertNotIn("BOTTOM REVERSAL WATCH", dashboard)
         self.assertNotIn("500-point move", dashboard)
-        self.assertIn("Loading verified 15-minute candles", dashboard)
-        self.assertIn("unavailable/stale", dashboard)
+        self.assertIn("15-minute index feed unavailable", dashboard)
+        self.assertIn("unavailable=x.data_status==='UNAVAILABLE'", dashboard)
         self.assertIn("/api/v2/experimental/15m-index-trends", self.html)
 
     def test_timestamped_news_is_related_to_the_verified_short_term_trend(self):
