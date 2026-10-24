@@ -232,7 +232,7 @@ def _historical_candles_in_bounded_windows(api, key, *, from_date, to_date):
     while cursor <= to_date:
         window_end = min(to_date, cursor + timedelta(days=HISTORICAL_WINDOW_DAYS - 1))
         response = api.get_historical_candle_data1(
-            key, "minutes", 15, window_end.isoformat(), cursor.isoformat())
+            key, "minutes", 15, window_end.date().isoformat(), cursor.date().isoformat())
         rows.extend(response.data.candles or [])
         cursor = window_end + timedelta(days=1)
     return _parse_rows(rows)

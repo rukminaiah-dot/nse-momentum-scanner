@@ -185,6 +185,9 @@ class ExperimentalIndexTrendTests(unittest.TestCase):
         self.assertEqual(len(api.intraday_calls), 3)
         for symbol, key in INDEX_INSTRUMENTS.items():
             calls = [call for call in api.historical_calls if call[0] == key]
+            for call in calls:
+                self.assertRegex(call[3], r"^\d{4}-\d{2}-\d{2}$")
+                self.assertRegex(call[4], r"^\d{4}-\d{2}-\d{2}$")
             self.assertEqual(len(calls), 4)
             windows = sorted((datetime.fromisoformat(call[4]).date(),
                               datetime.fromisoformat(call[3]).date())
