@@ -625,7 +625,7 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("· historical", self.html)
 
     def test_market_data_refreshes_more_often_during_session_than_closed(self):
-        self.assertIn("const delay=document.visibilityState==='visible'&&openNow()?10000:60000", self.html)
+        self.assertIn("const delay=!state.apiReady?5000:document.visibilityState==='visible'&&openNow()?10000:60000", self.html)
         self.assertIn("clearTimeout(refreshTimer)", self.html)
         self.assertIn("Date.now()-state.lastAuxLoadedAt>=60000", self.html)
         self.assertIn("state.lastHistoryLoadedAt<60000", self.html)
@@ -692,7 +692,7 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("if(valid.length<2)", self.html)
         self.assertIn("not a trained forecast", self.html)
         self.assertIn("No invented probability", self.html)
-        self.assertIn("renderAiPrediction();", self.html)
+        self.assertIn("renderSafely('Outlook',renderAiPrediction)", self.html)
 
 
 
