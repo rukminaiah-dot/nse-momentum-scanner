@@ -23,3 +23,9 @@ v2/frontend/*.bak_*
 *.jks
 *.keystore
 keystore.properties
+
+# Permanent Android signing and recovery remain outside the checkout.
+*.p12
+android-signing-backup.age
+password.txt
+backup-verified.json

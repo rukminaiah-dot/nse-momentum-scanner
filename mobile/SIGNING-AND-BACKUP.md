@@ -1,7 +1,14 @@
 # Experimental Android updates and recovery
 
-The original package is `com.nsemomentum.paper`; current preview is
-`com.nsemomentum.paper.preview`. Different packages have separate private data.
+The original package is `com.nsemomentum.paper`; historical previews use
+`com.nsemomentum.paper.preview`. The permanent candidate now uses
+`com.nsemomentum.paper.scanner`, with disposable debug builds on
+`com.nsemomentum.paper.scanner.dev`. Different packages have separate private data.
+
+For the phone-only owner-run signing and recovery procedure, see
+[PHONE-SIGNING-SETUP.md](PHONE-SIGNING-SETUP.md). No permanent signing key is
+created by a CI build. The private candidate workflow verifies the configured
+public certificate pin before offering an APK artifact.
 The preview cannot back up the original app's data. Do not uninstall the original
 or clear its storage to resolve a signature conflict.
 

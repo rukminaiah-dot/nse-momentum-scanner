@@ -7,11 +7,12 @@ android {
     namespace = "com.nsemomentum.paper"
     compileSdk = 35
     defaultConfig {
-        applicationId = "com.nsemomentum.paper.preview"
+        applicationId = "com.nsemomentum.paper.scanner"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "0.8.0-preview"
+        versionCode = 10
+        versionName = "0.9.0-candidate"
+        resValue("string", "app_name", "Momentum Paper Scanner")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     // Persistent private keystore is supplied outside the repository. No debug-key fallback for release.
@@ -24,6 +25,10 @@ android {
         }
     }
     buildTypes {
+        getByName("debug") {
+            applicationIdSuffix = ".dev"
+            resValue("string", "app_name", "Momentum Scanner Test")
+        }
         getByName("release") { signingConfig = signingConfigs.getByName("persistent") }
     }
     testOptions {

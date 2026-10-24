@@ -1,5 +1,9 @@
 # 20-instrument APK candidate — not an approved release
 
+0.9.0 uses a separate permanent package and an isolated debug package. See
+[PHONE-SIGNING-SETUP.md](PHONE-SIGNING-SETUP.md) for phone-only private key setup.
+No permanent key has been generated or provisioned by preparing this candidate.
+
 Development branch only: experiment/android-paper-scanner. No production deployment.
 
 ## Implemented candidate
@@ -56,6 +60,9 @@ ANDROID_SIGNING_KEY_PASSWORD. Provision the key through a private trusted system
 never through chat. Keep an encrypted offline recovery copy. The workflow never
 publishes a release, deploys the server, or uploads private material. Its output is
 a candidate for signature and update-preservation testing, not release approval.
+The job verifies the public ANDROID_SIGNING_CERT_SHA256 environment variable.
+The workflow runs on experimental pushes and explicitly skips signing when
+configuration is absent; a successful status check alone is not a signed build.
 
 Before enabling downloads in the app, retain one signing identity, use an HTTPS
 release manifest with package/version/SHA256, verify package and signing certificate
