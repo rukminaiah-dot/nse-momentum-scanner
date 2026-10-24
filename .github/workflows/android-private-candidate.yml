@@ -86,23 +86,24 @@ jobs:
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$ANDROID_SIGNING_STORE_FILE"
           "$RUNNER_TEMP/gradle-8.9/bin/gradle" --no-daemon :app:assembleRelease
           python tools/verify_signed_apk.py app/build/outputs/apk/release/app-release.apk --build-tools "$ANDROID_HOME/build-tools/35.0.0" --expected-sha256 "$CERTIFICATE_PIN" --previous-apk "$RUNNER_TEMP/previous-android-candidate/app-release.apk" --commit "$GITHUB_SHA" --report app/build/outputs/apk/release/android-candidate.json
-      - name: Test original-to-current APK update on Android 35
+      - name: Test original-to-current APK update on Android 16
+        timeout-minutes: 10
         shell: bash
         run: |
           set -euo pipefail
-          sdkmanager 'emulator' 'system-images;android-35;google_apis;x86_64'
-          printf 'no\n' | avdmanager create avd --force --name update-check --package 'system-images;android-35;google_apis;x86_64'
+          sdkmanager 'emulator' 'system-images;android-36;google_apis;x86_64'
+          printf 'no\n' | avdmanager create avd --force --name update-check --package 'system-images;android-36;google_apis;x86_64'
           sudo chmod a+rw /dev/kvm
           "$ANDROID_HOME/emulator/emulator" -avd update-check -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot > "$RUNNER_TEMP/emulator.log" 2>&1 &
-          trap 'adb emu kill || true' EXIT
-          adb wait-for-device
+          trap 'tail -n 100 "$RUNNER_TEMP/emulator.log"; adb emu kill || true' EXIT
+          timeout 180 adb wait-for-device
           timeout 240 bash -c 'until adb shell getprop sys.boot_completed | tr -d "\r" | grep -q "^1$"; do sleep 2; done'
           adb install "$RUNNER_TEMP/previous-android-candidate/app-release.apk"
           adb shell dumpsys package com.nsemomentum.paper.scanner | grep versionName
           adb install -r mobile/app/build/outputs/apk/release/app-release.apk
           adb shell dumpsys package com.nsemomentum.paper.scanner | grep versionName
           adb shell am start -W -n com.nsemomentum.paper.scanner/com.nsemomentum.paper.MainActivity
-          echo 'Original 0.9.0 to current APK update succeeded without uninstall on Android 35.'
+          echo 'Original 0.9.0 to current APK update succeeded without uninstall on Android 16.'
       - uses: actions/upload-artifact@v4
         with:
           name: android-permanent-signed-candidate
