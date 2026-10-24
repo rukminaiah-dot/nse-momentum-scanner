@@ -683,7 +683,7 @@ private fun Dashboard(
                 Text(scanStatus)
                 if (scanProgress.isNotBlank()) Text(scanProgress, style = MaterialTheme.typography.bodySmall)
                 Text(autoScanStatus, style = MaterialTheme.typography.bodySmall)
-                Text("Full-day mode checks each completed 15-minute candle and keeps a stock in today's qualified list after it first reaches 1.5×.", style = MaterialTheme.typography.bodySmall)
+                Text("Full-day mode refreshes indices every 5 minutes and checks stocks on completed 15-minute candles. It keeps a stock in today's qualified list after it first reaches 1.5×.", style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.height(8.dp))
                 if (autoScanActive) {
                     Button(onClick = onStopFullDayScan) { Text("Stop full-day scan") }

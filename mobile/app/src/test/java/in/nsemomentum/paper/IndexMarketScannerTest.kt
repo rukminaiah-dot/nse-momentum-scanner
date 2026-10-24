@@ -11,133 +11,90 @@ class IndexMarketScannerTest {
     private val date = LocalDate.parse("2026-10-23")
     private val today = regular(date)
     private val now = today.start.plusSeconds(3601)
-    private val holiday = date.minusDays(3)
-    private val allSessions = generateSequence(date) { it.minusDays(1) }
-        .filter { it.dayOfWeek.value <= 5 && it != holiday }.take(50).map { regular(it) }.toList()
-    private val historical = allSessions.flatMap { s -> s.slots().map { bar(it, 0.0) } }
     private class Store : CandleStore {
-        val data = mutableMapOf<String, List<Candle>>()
-        override fun bars(symbol: String) = data[symbol].orEmpty()
-        override fun save(symbol: String, bars: List<Candle>) {
-            data[symbol] = (data[symbol].orEmpty() + bars).associateBy { it.timestamp }.values.sortedBy { it.timestamp }
-        }
+        override fun bars(symbol: String) = emptyList<Candle>()
+        override fun save(symbol: String, bars: List<Candle>) { error("Index minutes must not contaminate the stock 15m cache") }
     }
-    private inner class Feed(var clock: Instant = now) : CandleFeed {
-        val paths = mutableListOf<String>()
-        val calendarCalls = mutableListOf<Pair<String, LocalDate>>()
-        var missingDate: LocalDate? = null
-        var duplicate = false
+    private fun minutes(s: MarketSession, count: Int = 375) = (0 until count).map {
+        val price = 100.0 + it
+        Candle(s.start.plusSeconds(it * 60L), price, price + 1, price - 1, price, 0.0)
+    }
+    private inner class Feed : CandleFeed {
+        var transform: (List<Candle>) -> List<Candle> = { it }
         var error: String? = null
         var hang = false
-        var missingCurrent = false
-        var includeFuture = false
-        var bseClosedToday = false
-        var failNseOnly = false
-        var flatFormingCandle = false
-        override suspend fun session(token: String, date: LocalDate): MarketSession? = session(token, date, "NSE")
-        override suspend fun session(token: String, date: LocalDate, exchange: String): MarketSession? {
-            calendarCalls += exchange to date
-            return if (date.dayOfWeek.value <= 5 && date != holiday && !(bseClosedToday && exchange == "BSE" && date == this@IndexMarketScannerTest.date)) regular(date) else null
-        }
-        override suspend fun candles(token: String, path: String): List<Candle> {
+        var bseClosed = false
+        var count = 61
+        val paths = mutableListOf<String>()
+        override suspend fun session(token: String, date: LocalDate) = session(token, date, "NSE")
+        override suspend fun session(token: String, date: LocalDate, exchange: String): MarketSession? =
+            if (date.dayOfWeek.value <= 5 && !(bseClosed && exchange == "BSE" && date == this@IndexMarketScannerTest.date)) regular(date) else null
+        override suspend fun candles(token: String, path: String): List<Candle> = error("Stock volume parser must not be used")
+        override suspend fun indexCandles(token: String, path: String): List<Candle> {
             paths += path
             if (hang) awaitCancellation()
             error?.let { throw IOException(it) }
-            if (failNseOnly && !path.contains("BSE_INDEX")) throw IOException("NETWORK_ERROR")
-            if (path.contains("intraday")) {
-                val complete = today.slots().filter { it <= clock }.map { timestamp ->
-                    if (flatFormingCandle && timestamp.plusSeconds(900) > clock) Candle(timestamp, 10.5, 10.5, 10.5, 10.5, 0.0) else bar(timestamp, 0.0)
-                }
-                val latestComplete = today.slots().lastOrNull { it.plusSeconds(900) <= clock }
-                return (if (missingCurrent) complete.filterNot { it.timestamp == latestComplete } else complete) +
-                    (if (includeFuture) listOf(bar(today.start.plusSeconds(10 * 900), 0.0)) else emptyList())
-            }
-            val from = LocalDate.parse(path.substringAfterLast('/'))
-            val to = LocalDate.parse(path.substringBeforeLast('/').substringAfterLast('/'))
-            assertTrue(java.time.temporal.ChronoUnit.DAYS.between(from, to) <= 27)
-            val selected = historical.filter { it.timestamp.atZone(MarketSession.ZONE).toLocalDate() in from..to }
-                .filterNot { it.timestamp.atZone(MarketSession.ZONE).toLocalDate() == missingDate }
-            return if (duplicate && selected.isNotEmpty()) selected + selected.first() else selected
+            return if (path.contains("intraday")) transform(minutes(today, count))
+                else minutes(regular(LocalDate.parse(path.substringAfterLast('/'))))
         }
     }
-    @Test fun threeFixedIndicesHaveIndependentPriceRulesWithoutAnyStockSelectionsOrVolume() = runBlocking {
-        val store = Store(); val feed = Feed()
-        val progress = mutableListOf<Int>()
-        val report = IndexMarketScanner(store, feed).scan("test", now) { completed, total, _ ->
-            assertEquals(3, total); progress += completed
-        }
+    @Test fun matchesWebThreeCloseDirectionAndDoesNotApplyStockFilters() {
+        val bars = minutes(today, 15)
+        val target = today.start.plusSeconds(600)
+        assertEquals("BULLISH", IndexDirectionStrategy.evaluate(bars, target))
+        val falling = bars.map { it.copy(open = 300 - it.open, high = 301 - it.open, low = 299 - it.open, close = 300 - it.close) }
+        assertEquals("BEARISH", IndexDirectionStrategy.evaluate(falling, target))
+        assertEquals("NEUTRAL", IndexDirectionStrategy.evaluate(bars.map { it.copy(open = 100.0, high = 101.0, low = 99.0, close = 100.0) }, target))
+        val mixed = bars.mapIndexed { i, b -> if (i == 9) b.copy(close = 99.5, low = 99.0) else b }
+        assertEquals("NEUTRAL", IndexDirectionStrategy.evaluate(mixed, target))
+        assertEquals("WAIT", IndexDirectionStrategy.evaluate(bars.drop(1), target))
+        assertEquals("WAIT", IndexDirectionStrategy.evaluate(bars + bars.first(), target))
+        assertEquals("BULLISH", IndexDirectionStrategy.evaluate(bars + bar(target.plusSeconds(300)), target))
+    }
+    @Test fun fixedIndicesUseOneMinuteOhlcAndIndependentExchangeCalendars() = runBlocking {
+        val feed = Feed(); val progress = mutableListOf<Int>()
+        val report = IndexMarketScanner(Store(), feed).scan("test", now) { done, total, _ -> assertEquals(3, total); progress += done }
         assertEquals(listOf(1, 2, 3), progress)
         assertEquals(StockCatalog.indices.map { it.symbol }, report.rows.map { it.symbol })
-        assertTrue(report.rows.all { it.state == IndexDataState.LIVE && it.candle?.volume == 0.0 })
-        report.rows.forEach { assertEquals(10.5, it.sma21!!, 1e-9); assertEquals(10.5, it.technicals!!.ema20, 1e-9) }
-        assertTrue(report.rows.all { it.signal == "WAIT" && it.reason == "NO_QUALIFYING_15M_SHIFT" })
-        assertEquals(setOf("NSE", "BSE"), feed.calendarCalls.map { it.first }.toSet())
-        assertEquals(feed.calendarCalls.size, feed.calendarCalls.toSet().size)
-        assertEquals(3, store.data.size)
+        assertTrue(report.rows.all { it.state == IndexDataState.LIVE && it.signal == "BULLISH" && it.dayChangePercent != null })
+        assertTrue(feed.paths.all { it.contains("/minutes/1") })
+        assertTrue(report.rows.all { it.technicals == null && it.sma21 == null })
+        feed.bseClosed = true
+        val closed = IndexMarketScanner(Store(), feed).scan("test", now).rows
+        assertEquals(IndexDataState.HISTORICAL, closed.single { it.symbol == "SENSEX" }.state)
+        assertEquals("WAIT", closed.single { it.symbol == "SENSEX" }.signal)
+        assertEquals("BULLISH", closed.single { it.symbol == "NIFTY50" }.signal)
     }
-    @Test fun exchangeClosuresAndErrorsDoNotMasqueradeAsOtherIndexData() = runBlocking {
-        val holidayFeed = Feed().apply { bseClosedToday = true }
-        val holidayReport = IndexMarketScanner(Store(), holidayFeed).scan("test", now)
-        assertEquals(IndexDataState.HISTORICAL, holidayReport.rows.single { it.symbol == "SENSEX" }.state)
-        assertTrue(holidayReport.rows.filter { it.symbol != "SENSEX" }.all { it.state == IndexDataState.LIVE })
-        val failed = IndexMarketScanner(Store(), Feed().apply { failNseOnly = true }).scan("test", now)
-        assertEquals(IndexDataState.LIVE, failed.rows.single { it.symbol == "SENSEX" }.state)
-        assertTrue(failed.rows.filter { it.symbol != "SENSEX" }.all { it.state == IndexDataState.UNAVAILABLE && it.signal == "WAIT" })
+    @Test fun gapsDuplicatesAndFutureCandlesCannotProduceDirection() = runBlocking {
+        val feed = Feed()
+        feed.transform = { it.filterIndexed { i, _ -> i != 46 } }
+        assertTrue(IndexMarketScanner(Store(), feed).scan("test", now).rows.all { it.signal == "WAIT" })
+        feed.transform = { it.filterIndexed { i, _ -> i != 59 } }
+        assertTrue(IndexMarketScanner(Store(), feed).scan("test", now).rows.all { it.state == IndexDataState.UNAVAILABLE })
+        feed.transform = { it + it.first() }
+        assertTrue(IndexMarketScanner(Store(), feed).scan("test", now).rows.all { it.reason == "INVALID_INDEX_CANDLE" })
+        feed.transform = { it + bar(now.plusSeconds(60)) }
+        assertTrue(IndexMarketScanner(Store(), feed).scan("test", now).rows.all { it.reason == "INVALID_INDEX_CANDLE" })
     }
-    @Test fun weekendUsesLastVerifiedSessionAndNeverCreatesALiveSignal() = runBlocking {
-        val saturday = date.plusDays(1).atTime(10, 0).atZone(MarketSession.ZONE).toInstant()
-        val feed = Feed(saturday)
-        val report = IndexMarketScanner(Store(), feed).scan("test", saturday)
+    @Test fun closedSessionsAreHistoricalAndSavedReadingsExpire() = runBlocking {
+        val report = IndexMarketScanner(Store(), Feed().apply { count = 375 }).scan("test", today.end.plusSeconds(1))
         assertTrue(report.rows.all { it.state == IndexDataState.HISTORICAL && it.signal == "WAIT" })
-        assertTrue(report.rows.all { it.candle?.timestamp == today.slots().last() })
-        assertFalse(feed.paths.any { it.contains("intraday") })
-        assertTrue(report.rows.all { it.reason == "HISTORICAL_CONTEXT_ONLY" })
+        val live = IndexReading("NIFTY50", IndexDataState.LIVE, bar(now.minusSeconds(301)), signal = "BULLISH")
+        assertEquals(IndexDataState.LIVE, live.at(now).state)
+        assertEquals(IndexDataState.STALE, live.at(now.plusSeconds(481)).state)
+        assertEquals("WAIT", live.at(now.plusSeconds(481)).signal)
+        assertEquals(IndexDataState.HISTORICAL, live.at(today.end).state)
+        assertEquals(IndexDataState.UNAVAILABLE, live.copy(candle = bar(now)).at(now).state)
+        val weekend = IndexMarketScanner(Store(), Feed()).scan("test", regular(date.plusDays(1)).start)
+        assertTrue(weekend.rows.all { it.state == IndexDataState.HISTORICAL })
     }
-    @Test fun premarketAndAfterCloseReadingsAreHistoricalOnly() = runBlocking {
-        for (clock in listOf(today.start.minusSeconds(600), today.end.plusSeconds(3600))) {
-            val report = IndexMarketScanner(Store(), Feed(clock)).scan("test", clock)
-            assertTrue(report.rows.all { it.state == IndexDataState.HISTORICAL && it.signal == "WAIT" })
-            assertTrue(report.rows.all { it.candle != null })
-        }
-    }
-    @Test fun missingVerifiedSessionCannotBeReplacedByOlderBarsAndDuplicatesFailClosed() = runBlocking {
-        for (feed in listOf(Feed().apply { missingDate = date.minusDays(1) }, Feed().apply { duplicate = true })) {
-            val report = IndexMarketScanner(Store(), feed).scan("test", now)
-            assertTrue(report.rows.all { it.state == IndexDataState.UNAVAILABLE && it.signal == "WAIT" })
-            assertTrue(report.rows.all { it.reason == "NO_VERIFIED_21_SESSION_HISTORY" })
-        }
-    }
-    @Test fun cachedHistoryCannotHideCurrentFeedGapsOrFutureCandles() = runBlocking {
-        val store = Store(); val feed = Feed(); val scanner = IndexMarketScanner(store, feed)
-        scanner.scan("test", now)
-        feed.missingCurrent = true
-        assertTrue(scanner.scan("test", now).rows.all { it.state == IndexDataState.UNAVAILABLE })
-        feed.missingCurrent = false; feed.includeFuture = true
-        assertTrue(scanner.scan("test", now).rows.all { it.reason == "INVALID_INDEX_CANDLE" })
-    }
-    @Test fun formingCandleIsIgnoredAndClosingTimeSuppressesAnyLiveSignal() = runBlocking {
-        val report = IndexMarketScanner(Store(), Feed().apply { flatFormingCandle = true }).scan("test", now)
-        assertTrue(report.rows.all { it.state == IndexDataState.LIVE && it.candle?.timestamp == today.start.plusSeconds(2700) })
-        val saved = report.rows.first().copy(signal = "PAPER_BUY")
-        val afterClose = saved.at(today.end.plusSeconds(1))
-        assertEquals(IndexDataState.HISTORICAL, afterClose.state); assertEquals("WAIT", afterClose.signal)
-    }
-    @Test fun authenticationAbortsAndUnknownErrorTextIsNeverDisplayed() = runBlocking {
+    @Test fun authenticationTimeoutAndCancellationFailClosedWithoutLeakingErrors() = runBlocking {
         val feed = Feed().apply { error = "UPSTOX_AUTH_REQUIRED" }
         try { IndexMarketScanner(Store(), feed).scan("test", now); fail() }
         catch (error: IOException) { assertEquals("UPSTOX_AUTH_REQUIRED", error.message) }
-        feed.error = "PRIVATE_PROVIDER_SENTINEL"
+        feed.error = "PRIVATE_SENTINEL"
         assertTrue(IndexMarketScanner(Store(), feed).scan("test", now).rows.all { it.reason == "INDEX_FETCH_FAILED" })
-    }
-    @Test fun freshSnapshotExpiresToWaitAndHistoricalSignalCannotBecomeLive() {
-        val live = IndexReading("NIFTY50", IndexDataState.LIVE, bar(now.minusSeconds(901), 0.0), signal = "PAPER_BUY")
-        val expired = live.at(now.plusSeconds(1100))
-        assertEquals(IndexDataState.STALE, expired.state); assertEquals("WAIT", expired.signal)
-        assertEquals("WAIT", live.copy(state = IndexDataState.HISTORICAL).at(now).signal)
-        assertEquals(IndexDataState.UNAVAILABLE, live.copy(candle = bar(now.plusSeconds(900), 0.0)).at(now).state)
-    }
-    @Test fun cancellationAndTimeoutCannotReturnAPartialReport() = runBlocking {
-        val feed = Feed().apply { hang = true }
+        feed.error = null; feed.hang = true
         try { IndexMarketScanner(Store(), feed, 30).scan("test", now); fail() }
         catch (_: TimeoutCancellationException) { }
         val job = async { IndexMarketScanner(Store(), feed).scan("test", now) }

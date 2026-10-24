@@ -18,7 +18,7 @@ class IndexSnapshotStoreTest {
         val prefs = context.getSharedPreferences("paper_preferences", 0)
         prefs.edit().clear().putString("token", "PRIVATE_TOKEN_SENTINEL").putStringSet("favourites", setOf("ICICIBANK", "MARUTI")).commit()
         val store = IndexSnapshotStore(context); store.clear()
-        val rows = StockCatalog.indices.map { IndexReading(it.symbol, IndexDataState.LIVE, bar(now.minusSeconds(901), 0.0), TechnicalContext(10.5, 10.5, 50.0, 50.0), 10.5, 0.0, "PAPER_BUY", "STOCH_RSI_CROSS_AND_TREND_FILTERS_PASSED") }
+        val rows = StockCatalog.indices.map { IndexReading(it.symbol, IndexDataState.LIVE, bar(now.minusSeconds(301), 0.0), TechnicalContext(10.5, 10.5, 50.0, 50.0), 10.5, 0.0, "BULLISH", "THREE_COMPLETED_5M_CLOSES") }
         store.write(IndexMarketReport(rows, now))
         assertEquals(rows, IndexSnapshotStore(context).read(now)!!.rows)
         assertTrue(IndexSnapshotStore(context).read(now.plusSeconds(1200))!!.rows.all { it.state == IndexDataState.STALE && it.signal == "WAIT" })

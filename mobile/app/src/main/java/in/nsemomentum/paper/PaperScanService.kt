@@ -70,6 +70,7 @@ class PaperScanService : Service() {
             val scanner = UpstoxPaperScanner(database, feed)
             val indices = IndexMarketScanner(database, feed)
             val indexStore = IndexSnapshotStore(applicationContext)
+            var lastStockRequest: String? = null
             while (true) {
                 val universe = readUniverse()
                 if (universe.size > StockCatalog.MAX_ACTIVE) {
@@ -85,8 +86,8 @@ class PaperScanService : Service() {
                     return
                 }
                 try {
-                    preferences.edit().putString(PREF_STATUS, "Scanning completed 15-minute NSE candles…").apply()
-                    showForeground("Checking completed 15-minute NSE candles…")
+                    preferences.edit().putString(PREF_STATUS, "Refreshing 5-minute indices and completed 15-minute stocks…").apply()
+                    showForeground("Checking index direction and stock candles…")
                     val indexReport = indices.scan(token)
                     indexStore.write(indexReport)
                     val localDate = Instant.now().atZone(zone).toLocalDate()
@@ -95,9 +96,14 @@ class PaperScanService : Service() {
                         stopSelf(startId)
                         return
                     }
-                    val report = if (universe.isNotEmpty()) scanner.scan(token, universe, selected) else
+                    val stockRequest = "${Instant.now().epochSecond / 900}:${universe.sortedBy { it.first }}:${selected.sorted()}"
+                    val scanStocks = universe.isNotEmpty() && stockRequest != lastStockRequest
+                    val report = if (scanStocks) scanner.scan(token, universe, selected) else
                         ScanReport(emptyList(), Instant.now().atZone(zone).toString(), 0, 0)
-                    if (universe.isNotEmpty()) database.recordScanReport(report)
+                    if (scanStocks) {
+                        database.recordScanReport(report)
+                        lastStockRequest = stockRequest
+                    }
                     val qualified = database.qualifiedStocks(report.scanTime.let {
                         java.time.ZonedDateTime.parse(it).toLocalDate()
                     }).size
@@ -158,9 +164,9 @@ class PaperScanService : Service() {
 
     private fun nextBoundary(after: Instant): Instant? {
         val date = after.atZone(zone).toLocalDate()
-        return (0..24).asSequence()
+        return (0..74).asSequence()
             .map { index ->
-                date.atTime(LocalTime.of(9, 30)).plusMinutes(index * 15L).atZone(zone).toInstant().plusSeconds(20)
+                date.atTime(LocalTime.of(9, 20)).plusMinutes(index * 5L).atZone(zone).toInstant().plusSeconds(20)
             }
             .firstOrNull { it.isAfter(after) && it.atZone(zone).toLocalTime() <= LocalTime.of(15, 30).plusSeconds(20) }
     }

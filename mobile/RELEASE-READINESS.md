@@ -124,3 +124,12 @@ Spot index candle parsing requires real validated OHLC but does not require a
 volume field. The shared candle model carries an unused zero placeholder for
 index volume; no index volume/RVOL is shown, ranked or interpreted. Equity
 parsing still rejects absent/invalid volume. Regression tests cover both paths.
+
+
+## 0.10.1 candidate: web index direction parity
+
+Home index cards now use the existing Vercel scanner's `five_minute_trend` rule: three consecutive complete five-minute closes rise = BULLISH, fall = BEARISH, otherwise NEUTRAL. One-minute OHLC is fetched and aggregated only after completion; index volume is unused. Missing required minutes show WAIT; duplicate, future or malformed feed data fails closed. Saved 15-minute snapshots are invalidated through index snapshot schema version 2. Stock selections, token, paper history and stock strategy are unchanged. Index minutes never enter the stock candle cache.
+
+Full-day service refreshes indices every five minutes, while deduplicating successful stock requests per 15-minute window and selection set. Historical sessions are explicitly labeled and never presented as live calls. Index close and daily percentage change use actual candle data; percentage is unavailable if the previous verified session close cannot be read.
+
+Android tests cover rising/falling/equal/mixed closes, missing/duplicate/future minutes, independent NSE/BSE calendars, historical sessions, snapshot expiry, cancellation and safe error handling. On-device update and real broker parity remain pending; automated tests cannot establish trading accuracy.

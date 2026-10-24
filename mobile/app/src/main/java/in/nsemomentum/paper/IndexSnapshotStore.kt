@@ -21,7 +21,7 @@ class IndexSnapshotStore(context: Context) {
             row.dayChangePercent?.let { json.put("change", it) }
             rows.put(json)
         }
-        val encoded = JSONObject().put("version", 1).put("checkedAt", report.checkedAt.toString()).put("rows", rows).toString()
+        val encoded = JSONObject().put("version", 2).put("checkedAt", report.checkedAt.toString()).put("rows", rows).toString()
         check(prefs.edit().putString("report", encoded).commit()) { "INDEX_SNAPSHOT_SAVE_FAILED" }
     }
     fun clear() { prefs.edit().remove("report").apply() }
@@ -29,7 +29,7 @@ class IndexSnapshotStore(context: Context) {
         val text = prefs.getString("report", null) ?: return null
         require(text.length <= 32_000)
         val root = JSONObject(text)
-        require(root.getInt("version") == 1)
+        require(root.getInt("version") == 2)
         val rows = root.getJSONArray("rows")
         require(rows.length() == 3)
         val decoded = (0 until rows.length()).map { i ->
@@ -48,11 +48,10 @@ class IndexSnapshotStore(context: Context) {
             require(sma == null || sma.isFinite() && sma > 0)
             require(change == null || change.isFinite())
             if (state in setOf(IndexDataState.LIVE, IndexDataState.HISTORICAL, IndexDataState.STALE)) {
-                require(candle != null && technicals != null && sma != null)
-                require(technicals.stochK in 0.0..100.0 && technicals.stochD in 0.0..100.0)
+                require(candle != null)
             }
             val signal = item.getString("signal")
-            require(signal in setOf("WAIT", "PAPER_BUY", "PAPER_SELL"))
+            require(signal in setOf("WAIT", "BULLISH", "BEARISH", "NEUTRAL"))
             IndexReading(symbol, state, candle, technicals, sma, change, signal, item.getString("reason")).at(now)
         }
         require(decoded.map { it.symbol }.toSet().size == 3)

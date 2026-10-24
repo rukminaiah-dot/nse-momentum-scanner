@@ -14,7 +14,7 @@ import java.util.Locale
 fun IndexOverview(report: IndexMarketReport?, enabled: Boolean, onRefresh: () -> Unit) {
     Text("Market indices", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
     Text("Nifty 50 · Sensex · Bank Nifty", style = MaterialTheme.typography.titleMedium)
-    Text("Separate index rules: EMA 20/50, 21-session closing average, Stochastic RSI and 15-minute candle confirmation. No RVOL filter. These do not use your 20 stock places.", style = MaterialTheme.typography.bodySmall)
+    Text("Web index rules: three rising 5-minute closes = Bullish; three falling closes = Bearish; otherwise Neutral. No RVOL filter. These do not use your 20 stock places.", style = MaterialTheme.typography.bodySmall)
     Button(enabled = enabled, onClick = onRefresh) { Text("Refresh index data") }
     val readings = report?.at(Instant.now())?.rows?.associateBy { it.symbol }.orEmpty()
     val names = mapOf("NIFTY50" to "Nifty 50 · NSE", "SENSEX" to "Sensex · BSE", "BANKNIFTY" to "Bank Nifty · NSE")
@@ -24,7 +24,7 @@ fun IndexOverview(report: IndexMarketReport?, enabled: Boolean, onRefresh: () ->
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text(names.getValue(index.symbol), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(when (row.state) {
-                    IndexDataState.LIVE -> "Fresh completed 15-minute candle"
+                    IndexDataState.LIVE -> "Fresh completed 5-minute candle"
                     IndexDataState.HISTORICAL -> "Historical context · no live signal"
                     IndexDataState.STALE -> "Saved snapshot · refresh needed"
                     IndexDataState.UNAVAILABLE -> "Data unavailable"
@@ -32,12 +32,7 @@ fun IndexOverview(report: IndexMarketReport?, enabled: Boolean, onRefresh: () ->
                 row.candle?.let { bar ->
                     val time = DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm 'IST'", Locale.US).withZone(MarketSession.ZONE).format(bar.timestamp)
                     Text("Candle start: $time", style = MaterialTheme.typography.bodySmall)
-                    Text("15m close: ${indexNumber(bar.close)} · Day change: ${indexNumber(row.dayChangePercent)}%")
-                }
-                row.technicals?.let { t ->
-                    Text("EMA 20: ${indexNumber(t.ema20)} · EMA 50: ${indexNumber(t.ema50)}", style = MaterialTheme.typography.bodySmall)
-                    Text("21-session close average: ${indexNumber(row.sma21)}", style = MaterialTheme.typography.bodySmall)
-                    Text("Stoch RSI K: ${indexNumber(t.stochK)} · D: ${indexNumber(t.stochD)}", style = MaterialTheme.typography.bodySmall)
+                    Text("5m close: ${indexNumber(bar.close)} · Day change: ${indexNumber(row.dayChangePercent)}%")
                 }
                 Text(if (row.state == IndexDataState.LIVE) row.signal else "WAIT", fontWeight = FontWeight.SemiBold)
                 Text(if (row.reason == "NO_INDEX_SCAN") "Save your token in Settings, then refresh index data." else row.reason.replace('_', ' ').lowercase(Locale.US), style = MaterialTheme.typography.bodySmall)
