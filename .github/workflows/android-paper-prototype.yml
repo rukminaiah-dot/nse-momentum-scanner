@@ -57,7 +57,7 @@ jobs:
         run: /tmp/gradle-8.9/bin/gradle --no-daemon :app:testDebugUnitTest
       - name: Build APK only after tests pass
         working-directory: mobile
-        run: /tmp/gradle-8.9/bin/gradle --no-daemon :app:assembleDebug
+        run: /tmp/gradle-8.9/bin/gradle --no-daemon :app:assembleDebug :updatecheck:assembleDebug
       - name: Verify release signing fails closed without private credentials
         working-directory: mobile
         shell: bash
@@ -78,5 +78,12 @@ jobs:
         with:
           name: nse-paper-scanner-debug-apk
           path: mobile/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scanner-update-diagnostic
+          path: mobile/updatecheck/build/outputs/apk/debug/updatecheck-debug.apk
           if-no-files-found: error
           retention-days: 7
