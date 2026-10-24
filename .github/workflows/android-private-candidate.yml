@@ -91,8 +91,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/android-avd"
+          export ANDROID_USER_HOME="$RUNNER_TEMP/android-user"
+          mkdir -p "$ANDROID_AVD_HOME" "$ANDROID_USER_HOME"
           sdkmanager 'emulator' 'system-images;android-36;google_apis;x86_64'
-          printf 'no\n' | avdmanager create avd --force --name update-check --package 'system-images;android-36;google_apis;x86_64'
+          printf 'no\n' | avdmanager create avd --force --name update-check --path "$ANDROID_AVD_HOME/update-check.avd" --package 'system-images;android-36;google_apis;x86_64'
           sudo chmod a+rw /dev/kvm
           "$ANDROID_HOME/emulator/emulator" -avd update-check -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot > "$RUNNER_TEMP/emulator.log" 2>&1 &
           trap 'tail -n 100 "$RUNNER_TEMP/emulator.log"; adb emu kill || true' EXIT

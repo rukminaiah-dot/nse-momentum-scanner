@@ -1,5 +1,8 @@
 package com.nsemomentum.paper
 
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import android.os.Bundle
 import android.Manifest
 import android.content.pm.PackageManager
@@ -62,6 +65,7 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -132,6 +136,24 @@ private fun PaperScannerApp() {
     var weeklySummary by remember { mutableStateOf(emptyList<DailyPaperSummary>()) }
     var weeklyOutcomes by remember { mutableStateOf(emptyList<PaperOutcome>()) }
     var tokenConfigured by remember { mutableStateOf(tokenStore.read() != null) }
+    val livePriceClient = remember { UpstoxLivePrices() }
+    var livePrices by remember { mutableStateOf(LivePriceState(status = "Save your Upstox token in Settings for live prices.")) }
+    var liveTokenRevision by remember { mutableStateOf(0) }
+    val priceLifecycle = LocalLifecycleOwner.current.lifecycle
+    val priceKeys = stocks.filter { it.symbol in favourites && "_EQ|" in it.instrumentKey }.map { it.instrumentKey }.toSet()
+    LaunchedEffect(priceKeys, tokenConfigured, liveTokenRevision, priceLifecycle) {
+        livePrices = LivePriceState(status = if (!tokenConfigured) "Save your Upstox token in Settings for live prices." else "Connecting to Upstox…")
+        if (priceKeys.isNotEmpty() && tokenConfigured) {
+            priceLifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                val savedToken = tokenStore.read()
+                if (!savedToken.isNullOrBlank()) {
+                    try { livePriceClient.stream(savedToken, priceKeys).collect { livePrices = it } }
+                    catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                    catch (_: Exception) { livePrices = LivePriceState(status = "Prices unavailable. Reopen the app to reconnect.") }
+                }
+            }
+        }
+    }
     val scope = rememberCoroutineScope()
     var scanJob by remember { mutableStateOf<Job?>(null) }
     var backupStatus by remember { mutableStateOf("") }
@@ -577,13 +599,19 @@ private fun PaperScannerApp() {
                         contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        item { Text("FAVOURITES · 15-MINUTE PAPER SIGNALS", fontWeight = FontWeight.Bold)
+                        item {
+                            Text("MY 20 · LIVE PRICES", fontWeight = FontWeight.Bold)
+                            Text(livePrices.status, style = MaterialTheme.typography.bodySmall)
+                            Text("Prices stream while this app is open. Last-trade times show quote freshness. Paper signals use completed 15-minute candles.", style = MaterialTheme.typography.bodySmall)
+                            Spacer(Modifier.height(12.dp))
+                            Text("15-MINUTE PAPER SIGNALS", fontWeight = FontWeight.Bold)
                             Text("These stock signals require RVOL ≥ 1.5× plus EMA, candle breakout and Stoch RSI confirmation. Nifty 50, Sensex and Bank Nifty are shown separately on Home with index rules.", style = MaterialTheme.typography.bodySmall) }
                         items(selectedStocks, key = { it.symbol }) { stock ->
                             val row = bySymbol[stock.symbol]
                             Card(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(16.dp)) {
                                     Text(stock.symbol, fontWeight = FontWeight.Bold)
+                                    LivePriceDisplay(stock, livePrices)
                                     Spacer(Modifier.height(6.dp))
                                     Text(row?.signal ?: "WAIT · NO VERIFIED SCAN")
                                     Text(
@@ -611,6 +639,7 @@ private fun PaperScannerApp() {
                     indexStore.clear(); indexReport = null
                     runCatching { tokenStore.save(token) }
                     tokenConfigured = tokenStore.read() != null
+                    liveTokenRevision++
                 },
                 onClearToken = {
                     scanJob?.cancel()
@@ -619,6 +648,7 @@ private fun PaperScannerApp() {
                     report = null
                     indexStore.clear(); indexReport = null
                     tokenStore.clear()
+                    liveTokenRevision++
                     tokenConfigured = false
                     scanStatus = "Token cleared from this device."
                 },

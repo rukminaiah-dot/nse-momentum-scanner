@@ -133,3 +133,12 @@ Home index cards now use the existing Vercel scanner's `five_minute_trend` rule:
 Full-day service refreshes indices every five minutes, while deduplicating successful stock requests per 15-minute window and selection set. Historical sessions are explicitly labeled and never presented as live calls. Index close and daily percentage change use actual candle data; percentage is unavailable if the previous verified session close cannot be read.
 
 Android tests cover rising/falling/equal/mixed closes, missing/duplicate/future minutes, independent NSE/BSE calendars, historical sessions, snapshot expiry, cancellation and safe error handling. On-device update and real broker parity remain pending; automated tests cannot establish trading accuracy.
+
+
+## 0.11.0 candidate: selected stock live prices
+
+My 20 displays direct Upstox V3 LTPC WebSocket quotes, previous-close rupee/percent change and last-trade time independently of paper scans. The subscription is restricted to the selected (maximum 20) NSE/BSE equity instrument keys. Add/remove or token changes replace the connection. The connection runs only while the app is in the foreground and reconnects with bounded backoff; 401/403 pauses until the token changes. No quote data is passed into candle strategies or persisted as candle history.
+
+V3 authorization uses GET /v3/feed/market-data-feed/authorize. Bearer credentials are sent only to the API endpoint. The returned one-time socket URL is restricted to secure upstox.com subdomains and is not logged; no token header is forwarded to the socket. Protobuf LTPC fields follow https://assets.upstox.com/feed/market-data-feed/v3/MarketDataFeed.proto. Market NORMAL_OPEN and recent trade/receipt times are required for LIVE labels. Closed, unknown, stale, disconnected and missing data are labeled separately; missing prior close does not fabricate percentage change.
+
+Tests cover protobuf decoding, signed percent calculations, missing/invalid values, future/out-of-order ticks, selection limits, status/freshness labels, authorized host checks, read-only authentication, redirects, safe error reporting and cancellation. On-phone open-market streaming remains pending.
