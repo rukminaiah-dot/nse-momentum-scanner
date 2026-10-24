@@ -100,7 +100,7 @@ class IndexMarketScanner(private val database: CandleStore, private val feed: Ca
             val history = mutableListOf<Candle>()
             while (end >= oldest) {
                 val start = maxOf(oldest, end.minusDays(27))
-                val downloaded = feed.candles(token, "/v3/historical-candle/$encoded/minutes/15/$end/$start")
+                val downloaded = feed.indexCandles(token, "/v3/historical-candle/$encoded/minutes/15/$end/$start")
                 if (downloaded.any { bar ->
                         val day = bar.timestamp.atZone(MarketSession.ZONE).toLocalDate()
                         day !in start..end || expectedSessions[day]?.slots()?.contains(bar.timestamp) != true || !PaperStrategy.validCandle(bar)
@@ -115,7 +115,7 @@ class IndexMarketScanner(private val database: CandleStore, private val feed: Ca
             cache = database.bars(key)
         }
         val complete = if (useIntraday) {
-            val raw = feed.candles(token, "/v3/historical-candle/intraday/$encoded/minutes/15")
+            val raw = feed.indexCandles(token, "/v3/historical-candle/intraday/$encoded/minutes/15")
             if (raw.any { it.timestamp !in current.slots() || it.timestamp > now || !PaperStrategy.validCandle(it) } ||
                 raw.map { it.timestamp }.distinct().size != raw.size) throw IOException("INVALID_INDEX_CANDLE")
             raw.filter { it.timestamp <= target }

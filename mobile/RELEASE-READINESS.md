@@ -119,3 +119,8 @@ and selected stocks separately. A token is still required inside app Settings.
 CI validates fixtures, lifecycle/storage boundaries and build/signing checks.
 Real Upstox index coverage, real-phone refresh and in-place update retention still
 need device verification. No profitable signal or market-hours validation is implied.
+
+Spot index candle parsing requires real validated OHLC but does not require a
+volume field. The shared candle model carries an unused zero placeholder for
+index volume; no index volume/RVOL is shown, ranked or interpreted. Equity
+parsing still rejects absent/invalid volume. Regression tests cover both paths.

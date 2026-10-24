@@ -34,4 +34,5 @@ interface CandleFeed {
         return session(token, date)
     }
     suspend fun candles(token: String, path: String): List<Candle>
+    suspend fun indexCandles(token: String, path: String): List<Candle> = candles(token, path)
 }

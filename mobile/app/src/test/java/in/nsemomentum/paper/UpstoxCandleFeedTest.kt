@@ -113,6 +113,20 @@ class UpstoxCandleFeedTest {
         } finally { server.shutdown() }
     }
 
+    @Test fun indexOhlcDoesNotRequireVolumeButStockVolumeRemainsMandatory() {
+        for (tail in listOf("", ",null")) {
+            val row = """["2026-10-22T09:15:00+05:30",10,11,9,10.5$tail]"""
+            val root = JSONObject("""{"data":{"candles":[$row]}}""")
+            val index = UpstoxCandleFeed.parseCandles(root, requireVolume = false).single()
+            assertEquals(10.5, index.close, 0.0)
+            try { UpstoxCandleFeed.parseCandles(root); fail("Stocks require verified volume") }
+            catch (error: IOException) { assertEquals("INVALID_CANDLE", error.message) }
+        }
+        val invalid = JSONObject("""{"data":{"candles":[["2026-10-22T09:15:00+05:30",10,9,11,10.5,null]]}}""")
+        try { UpstoxCandleFeed.parseCandles(invalid, requireVolume = false); fail("Index OHLC remains strict") }
+        catch (error: IOException) { assertEquals("INVALID_CANDLE", error.message) }
+    }
+
     @Test fun duplicateAndInvalidPayloadsAreRejected() {
         val row = """["2026-10-22T09:15:00+05:30",10,11,9,10.5,100]"""
         try {

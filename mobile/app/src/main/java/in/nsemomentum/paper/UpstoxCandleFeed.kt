@@ -108,6 +108,10 @@ class UpstoxCandleFeed(
 
     override suspend fun candles(token: String, path: String): List<Candle> = parseCandles(request(token, path))
 
+    // The shared Candle model needs a numeric field; zero is an unused placeholder for spot indices.
+    // Actual index OHLC is still mandatory. Stock volume parsing remains strict.
+    override suspend fun indexCandles(token: String, path: String): List<Candle> = parseCandles(request(token, path), requireVolume = false)
+
     override suspend fun session(token: String, date: LocalDate): MarketSession? = session(token, date, "NSE")
 
     override suspend fun session(token: String, date: LocalDate, exchange: String): MarketSession? {
@@ -123,13 +127,13 @@ class UpstoxCandleFeed(
     }
 
     companion object {
-        fun parseCandles(root: JSONObject): List<Candle> {
+        fun parseCandles(root: JSONObject, requireVolume: Boolean = true): List<Candle> {
             val rows = root.getJSONObject("data").getJSONArray("candles")
             val bars = (0 until rows.length()).map { i ->
                 try {
                     val row = rows.getJSONArray(i)
                     Candle(java.time.OffsetDateTime.parse(row.getString(0)).toInstant(),
-                        row.getDouble(1), row.getDouble(2), row.getDouble(3), row.getDouble(4), row.getDouble(5))
+                        row.getDouble(1), row.getDouble(2), row.getDouble(3), row.getDouble(4), if (requireVolume) row.getDouble(5) else 0.0)
                 } catch (_: Exception) { throw IOException("INVALID_CANDLE") }
             }
             if (bars.any { !PaperStrategy.validCandle(it) }) throw IOException("INVALID_CANDLE")
