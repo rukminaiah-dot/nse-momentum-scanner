@@ -715,9 +715,17 @@ private fun SettingsPage(
     var tokenInput by remember { mutableStateOf("") }
     val updateContext = LocalContext.current
     val updateScope = rememberCoroutineScope()
+    val installedVersion = remember {
+        runCatching {
+            @Suppress("DEPRECATION")
+            val info = updateContext.packageManager.getPackageInfo(updateContext.packageName, 0)
+            info.versionName ?: "Unavailable"
+        }.getOrDefault("Unavailable")
+    }
     var updating by remember { mutableStateOf(false) }
     var updateStatus by remember { mutableStateOf("Updates require a privately signed release. Existing app data is preserved.") }
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("App version: $installedVersion", style = MaterialTheme.typography.titleMedium)
         Text("App updates", style = MaterialTheme.typography.titleMedium)
         Button(enabled = !updating && backupEnabled, onClick = {
             updating = true
