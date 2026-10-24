@@ -658,7 +658,7 @@ class FivePageUiTests(unittest.TestCase):
         self.assertIn("if(valid.length<2)", self.html)
         self.assertIn("not a trained forecast", self.html)
         self.assertIn("No invented probability", self.html)
-        self.assertIn("renderAiPrediction();", self.html)
+        self.assertIn("renderSafely('Outlook',renderAiPrediction)", self.html)
 
 
 
