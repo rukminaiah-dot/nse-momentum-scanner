@@ -69,7 +69,7 @@ import java.util.Locale
 import kotlin.math.abs
 
 private enum class Page(val title: String) {
-    DASHBOARD("Home"), UNIVERSE("Instruments"), FAVOURITES("My 20"), SETTINGS("Settings")
+    DASHBOARD("Home"), UNIVERSE("Stocks"), FAVOURITES("My 20"), SETTINGS("Settings")
 }
 
 class MainActivity : ComponentActivity() {
@@ -109,9 +109,12 @@ private fun PaperScannerApp() {
     val sharedFeed = remember { UpstoxCandleFeed() }
     val scanner = remember { UpstoxPaperScanner(database, sharedFeed) }
     val selectionStore = remember { InstrumentSelectionStore(context, baseStocks) }
+    val indexScanner = remember { IndexMarketScanner(database, sharedFeed) }
+    val indexStore = remember { IndexSnapshotStore(context) }
+    var indexReport by remember { mutableStateOf(indexStore.read()) }
     val favourites = remember {
         mutableStateListOf<String>().apply {
-            addAll(preferences.getStringSet("favourites", emptySet()).orEmpty().take(20))
+            addAll(StockCatalog.stockSelections(preferences.getStringSet("favourites", emptySet()).orEmpty()).take(20))
         }
     }
     var page by remember { mutableStateOf(Page.DASHBOARD) }
@@ -203,7 +206,7 @@ private fun PaperScannerApp() {
                                     PaperBackupStore(context, database, baseStocks).restore(PaperBackup.encode(incoming))
                                 }
                                 stocks.clear(); stocks.addAll(baseStocks + merged.custom)
-                                favourites.clear(); favourites.addAll(merged.favourites.sorted())
+                                favourites.clear(); favourites.addAll(StockCatalog.stockSelections(merged.favourites).sorted())
                                 backupStatus = "Restore complete. Imported history is user-supplied paper data, not verified performance."
                                 pendingBackup = null
                             } catch (_: Exception) {
@@ -220,8 +223,6 @@ private fun PaperScannerApp() {
         if (tokenStore.read().isNullOrBlank()) {
             page = Page.SETTINGS
             autoScanStatus = "Add an Upstox token in Settings before starting the full-day scan."
-        } else if (favourites.isEmpty()) {
-            autoScanStatus = "Select at least one instrument in Instruments first."
         } else {
             val intent = Intent(context, PaperScanService::class.java).setAction(PaperScanService.ACTION_START)
             runCatching {
@@ -268,6 +269,7 @@ private fun PaperScannerApp() {
             val snapshotAge = persistedScanTime?.let { java.time.Duration.between(it, java.time.Instant.now()).seconds }
             if (persistedReport != null && snapshotAge != null && snapshotAge in 0..900 &&
                 persistedReport.rows.map { it.symbol }.toSet() == favourites.toSet()) report = persistedReport
+            indexReport = withContext(Dispatchers.IO) { indexStore.read() }
             qualifiedToday = snapshot.second
             weeklyOutcomes = snapshot.third
             weeklySummary = PaperOutcomeLogic.summarize(snapshot.third, today.minusDays(6), today)
@@ -309,6 +311,42 @@ private fun PaperScannerApp() {
             },
             onDismiss = { showInstrumentSearch = false }
         )
+    }
+
+    val refreshIndices = {
+        val token = tokenStore.read()
+        if (token.isNullOrBlank()) {
+            page = Page.SETTINGS
+            scanStatus = "Save your Upstox token in Settings to refresh index data."
+        } else if (!scanning && !autoScanActive && !backupBusy && pendingBackup == null) {
+            scanning = true
+            scanStatus = "Refreshing Nifty 50, Sensex and Bank Nifty using index rules…"
+            scanProgress = "Verifying index sessions and history…"
+            scanJob = scope.launch {
+                try {
+                    val result = withContext(Dispatchers.IO) {
+                        indexScanner.scan(token, onProgress = { completed, total, symbol ->
+                            withContext(Dispatchers.Main.immediate) { scanProgress = "Checked $completed / $total indices · $symbol" }
+                        }).also { indexStore.write(it) }
+                    }
+                    indexReport = result
+                    scanStatus = "Index refresh finished. Each card shows its own candle time and data status."
+                } catch (_: TimeoutCancellationException) {
+                    scanStatus = "Index refresh timed out. Saved readings are timestamped; retry later."
+                } catch (cancelled: CancellationException) {
+                    scanStatus = "Index refresh cancelled. Saved readings remain timestamped."
+                    throw cancelled
+                }
+                catch (error: Exception) {
+                    indexStore.clear(); indexReport = null
+                    scanStatus = when (error.message) {
+                        "UPSTOX_AUTH_REQUIRED" -> "Upstox rejected the token. Update it in Settings only."
+                        "LOCAL_RATE_BUDGET_EXHAUSTED" -> "Local API budget reached. Wait before refreshing again."
+                        else -> "Index refresh failed. Check connectivity and retry; no live signal is assigned."
+                    }
+                } finally { scanning = false }
+            }
+        }
     }
 
     val runScan = {
@@ -392,6 +430,9 @@ private fun PaperScannerApp() {
     ) { inset ->
         when (page) {
             Page.DASHBOARD -> Dashboard(
+                indexReport = indexReport,
+                onRefreshIndices = refreshIndices,
+                indexRefreshEnabled = !scanning && !autoScanActive && !backupBusy && pendingBackup == null,
                 stockCount = favourites.size,
                 favouriteCount = favourites.size,
                 customStockCount = stocks.count { it.isCustom },
@@ -433,7 +474,7 @@ private fun PaperScannerApp() {
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
                     )
-                    val filteredStocks = stocks.filter { it.symbol.contains(search.trim(), ignoreCase = true) }
+                    val filteredStocks = stocks.filter { !it.instrumentKey.contains("_INDEX|") && it.symbol.contains(search.trim(), ignoreCase = true) }
                     Text("Sort stocks", Modifier.padding(start = 16.dp, top = 4.dp))
                     Row(
                         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
@@ -448,7 +489,7 @@ private fun PaperScannerApp() {
                         }
                     }
                     val shown = StockListOrdering.sort(filteredStocks, bySymbol, stockSort)
-                    Text("${shown.size} of ${stocks.size} stocks · ${stocks.count { it.isCustom }} custom", Modifier.padding(horizontal = 16.dp))
+                    Text("${shown.size} stocks in catalogue · ${stocks.count { it.isCustom }} custom", Modifier.padding(horizontal = 16.dp))
                     LazyColumn(
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(16.dp),
@@ -537,7 +578,7 @@ private fun PaperScannerApp() {
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         item { Text("FAVOURITES · 15-MINUTE PAPER SIGNALS", fontWeight = FontWeight.Bold)
-                            Text("Equities require RVOL ≥ 1.5× plus EMA, candle breakout and Stoch RSI confirmation. Indices use the web index rules with a 21-session SMA and no RVOL. All signals are paper-only.", style = MaterialTheme.typography.bodySmall) }
+                            Text("These stock signals require RVOL ≥ 1.5× plus EMA, candle breakout and Stoch RSI confirmation. Nifty 50, Sensex and Bank Nifty are shown separately on Home with index rules.", style = MaterialTheme.typography.bodySmall) }
                         items(selectedStocks, key = { it.symbol }) { stock ->
                             val row = bySymbol[stock.symbol]
                             Card(Modifier.fillMaxWidth()) {
@@ -567,6 +608,7 @@ private fun PaperScannerApp() {
                     context.stopService(Intent(context, PaperScanService::class.java))
                     autoScanActive = false
                     report = null
+                    indexStore.clear(); indexReport = null
                     runCatching { tokenStore.save(token) }
                     tokenConfigured = tokenStore.read() != null
                 },
@@ -575,6 +617,7 @@ private fun PaperScannerApp() {
                     context.stopService(Intent(context, PaperScanService::class.java))
                     autoScanActive = false
                     report = null
+                    indexStore.clear(); indexReport = null
                     tokenStore.clear()
                     tokenConfigured = false
                     scanStatus = "Token cleared from this device."
@@ -608,6 +651,9 @@ private fun rowDetail(row: ScanRow): String {
 
 @Composable
 private fun Dashboard(
+    indexReport: IndexMarketReport?,
+    onRefreshIndices: () -> Unit,
+    indexRefreshEnabled: Boolean,
     stockCount: Int,
     favouriteCount: Int,
     customStockCount: Int,
@@ -628,6 +674,7 @@ private fun Dashboard(
 ) {
     val qualified = report?.rows?.count { (it.relativeVolume ?: 0.0) >= 1.5 } ?: 0
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        IndexOverview(indexReport, indexRefreshEnabled, onRefreshIndices)
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
             Column(Modifier.padding(18.dp)) {
                 Text("PAPER TRADING · NO ORDERS", fontWeight = FontWeight.Bold)
@@ -641,7 +688,7 @@ private fun Dashboard(
                 if (autoScanActive) {
                     Button(onClick = onStopFullDayScan) { Text("Stop full-day scan") }
                 } else {
-                    Button(onClick = onStartFullDayScan, enabled = !scanning && stockCount in 1..20) { Text("Start full-day scan") }
+                    Button(onClick = onStartFullDayScan, enabled = !scanning) { Text("Start full-day scan") }
                 }
                 Button(onClick = onRunScan, enabled = !scanning && !autoScanActive && stockCount in 1..20) {
                     Text(if (scanning) "Scanning…" else "Run one scan")
@@ -650,7 +697,7 @@ private fun Dashboard(
             }
         }
         InfoCard("Selected instrument scan", "$stockCount / 20 active instruments", "$customStockCount custom additions · $qualified stocks currently at or above 1.5× on the latest scan.")
-        InfoCard("Favourites", "$favouriteCount / 20 selected", "Every selected instrument receives technical checks. Indices use price-based rules without RVOL.")
+        InfoCard("Favourites", "$favouriteCount / 20 selected", "Selected stocks use the volume-first rules. The three index cards above use separate price-based rules.")
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Qualified today · ${qualifiedToday.size}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)

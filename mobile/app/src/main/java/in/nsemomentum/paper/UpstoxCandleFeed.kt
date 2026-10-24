@@ -102,7 +102,7 @@ class UpstoxCandleFeed(
         val normalized = InstrumentSearchRules.query(query)
         require(exchange in setOf("NSE", "BSE") && page in 1..100000)
         val encoded = java.net.URLEncoder.encode(normalized, "UTF-8")
-        val path = "/v2/instruments/search?query=$encoded&exchanges=$exchange&segments=EQ%2CINDEX&page_number=$page&records=30"
+        val path = "/v2/instruments/search?query=$encoded&exchanges=$exchange&segments=EQ&page_number=$page&records=30"
         return InstrumentSearchRules.parse(request(token, path), exchange, page)
     }
 

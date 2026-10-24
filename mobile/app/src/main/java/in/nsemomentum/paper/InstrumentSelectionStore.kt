@@ -8,7 +8,7 @@ class InstrumentSelectionStore(context: Context, private val base: List<Stock>) 
     data class Snapshot(val catalog: List<Stock>, val active: Set<String>)
     fun read(): Snapshot {
         val catalog = base + StockCatalog.decodeCustom(prefs.getString("custom_stocks", null), base)
-        val active = prefs.getStringSet("favourites", emptySet()).orEmpty().toSet()
+        val active = StockCatalog.stockSelections(prefs.getStringSet("favourites", emptySet()).orEmpty().toSet())
         StockCatalog.active(catalog, active)
         return Snapshot(catalog, active)
     }
@@ -25,6 +25,7 @@ class InstrumentSelectionStore(context: Context, private val base: List<Stock>) 
     }
     fun setActive(symbol: String, enabled: Boolean): Snapshot {
         val current = read()
+        require(StockCatalog.indices.none { it.symbol == symbol }) { "Indices are shown separately on Home." }
         require(current.catalog.any { it.symbol == symbol }) { "Unknown instrument." }
         return save(current.catalog, if (enabled) current.active + symbol else current.active - symbol)
     }

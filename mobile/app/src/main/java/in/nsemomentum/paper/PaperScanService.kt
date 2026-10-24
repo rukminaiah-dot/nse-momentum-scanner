@@ -59,17 +59,21 @@ class PaperScanService : Service() {
 
     private suspend fun runMarketDay(startId: Int) {
         val database = CandleDatabase(applicationContext)
+        try {
         val token = SecureTokenStore(applicationContext).read()
         if (token.isNullOrBlank()) {
             markStopped("Add an Upstox token in Settings before starting the paper scan.")
             stopSelf(startId)
             return
         }
-        val scanner = UpstoxPaperScanner(database)
+        val feed = UpstoxCandleFeed()
+        val scanner = UpstoxPaperScanner(database, feed)
+        val indices = IndexMarketScanner(database, feed)
+        val indexStore = IndexSnapshotStore(applicationContext)
         while (true) {
             val universe = readUniverse()
-            if (universe.isEmpty() || universe.size > StockCatalog.MAX_ACTIVE) {
-                markStopped("Select 1–20 valid instruments; scan was stopped.")
+            if (universe.size > StockCatalog.MAX_ACTIVE) {
+                markStopped("Stock list exceeds 20; scan was stopped.")
                 stopSelf(startId)
                 return
             }
@@ -83,8 +87,17 @@ class PaperScanService : Service() {
             try {
                 preferences.edit().putString(PREF_STATUS, "Scanning completed 15-minute NSE candles…").apply()
                 showForeground("Checking completed 15-minute NSE candles…")
-                val report = scanner.scan(token, universe, selected)
-                database.recordScanReport(report)
+                val indexReport = indices.scan(token)
+                indexStore.write(indexReport)
+                val localDate = Instant.now().atZone(zone).toLocalDate()
+                if (feed.session(token, localDate, "NSE") == null && feed.session(token, localDate, "BSE") == null) {
+                    markStopped("Markets are closed. Historical index context is saved on Home.")
+                    stopSelf(startId)
+                    return
+                }
+                val report = if (universe.isNotEmpty()) scanner.scan(token, universe, selected) else
+                    ScanReport(emptyList(), Instant.now().atZone(zone).toString(), 0, 0)
+                if (universe.isNotEmpty()) database.recordScanReport(report)
                 val qualified = database.qualifiedStocks(report.scanTime.let {
                     java.time.ZonedDateTime.parse(it).toLocalDate()
                 }).size
@@ -104,6 +117,7 @@ class PaperScanService : Service() {
                         return
                     }
                     "UPSTOX_AUTH_REQUIRED" -> {
+                        indexStore.clear()
                         markStopped("Upstox rejected the token. Update it in Settings.")
                         stopSelf(startId)
                         return
@@ -126,6 +140,7 @@ class PaperScanService : Service() {
             }
             delay(Duration.between(Instant.now(), next).toMillis().coerceAtLeast(1_000L))
         }
+        } finally { database.close() }
     }
 
     private fun readUniverse(): List<Pair<String, String>> = runCatching {
@@ -137,7 +152,7 @@ class PaperScanService : Service() {
         }
         val catalog = base + StockCatalog.indices
         val customs = StockCatalog.decodeCustom(preferences.getString("custom_stocks", null), catalog)
-        StockCatalog.active(catalog + customs, preferences.getStringSet("favourites", emptySet()).orEmpty())
+        StockCatalog.active(catalog + customs, StockCatalog.stockSelections(preferences.getStringSet("favourites", emptySet()).orEmpty()))
             .map { it.symbol to it.instrumentKey }
     }.getOrDefault(emptyList())
 

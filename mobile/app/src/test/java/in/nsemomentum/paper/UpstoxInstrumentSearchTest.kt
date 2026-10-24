@@ -27,7 +27,7 @@ class UpstoxInstrumentSearchTest {
             val url = request.requestUrl!!
             assertEquals("/v2/instruments/search", url.encodedPath)
             assertEquals("M&M & Industries", url.queryParameter("query"))
-            assertEquals("BSE", url.queryParameter("exchanges")); assertEquals("EQ,INDEX", url.queryParameter("segments"))
+            assertEquals("BSE", url.queryParameter("exchanges")); assertEquals("EQ", url.queryParameter("segments"))
             assertEquals("1", url.queryParameter("page_number")); assertEquals("30", url.queryParameter("records"))
             assertEquals("BSE_EQ|INE002A01018", result.instruments.single().instrumentKey)
             assertEquals(2, result.totalPages)

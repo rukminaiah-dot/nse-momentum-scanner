@@ -27,6 +27,8 @@ object StockCatalog {
         return catalog.filter { it.symbol in selected }
     }
 
+    fun stockSelections(selected: Set<String>): Set<String> = selected - indices.map { it.symbol }.toSet()
+
     const val MAX_CUSTOM_STOCKS = 20
     private val symbolPattern = Regex("^[A-Z0-9][A-Z0-9&._-]{0,29}$")
     private val keyPattern = Regex("^(NSE_EQ|BSE_EQ)\\|[A-Z0-9]+$")

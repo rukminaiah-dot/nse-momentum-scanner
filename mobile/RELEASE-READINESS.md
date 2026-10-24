@@ -93,3 +93,29 @@ live broker access, live candle coverage or financial performance.
 Official contract references:
 - https://upstox.com/developer/api-documentation/instrument-search/
 - https://upstox.com/developer/api-documentation/instruments/
+
+## 0.10.0 index/stock separation
+
+Home now has fixed Nifty 50 (NSE), Sensex (BSE) and Bank Nifty cards. They are
+outside the 20 selected stock places and outside the RVOL ranking and stock
+paper-outcome tables. Existing stock selections are retained. Legacy index
+selections are treated as fixed Home indices, not as stock selections.
+
+The index strategy retains EMA20/50, SMA of the previous 21 session closes,
+Stochastic RSI 14/14/3/3, strong-body/edge and prior-three-bar breakout conditions.
+There is no index RVOL requirement. The original web _paper_signal/evaluate_index
+functions were compared with production and their rule logic is identical; no
+production source was edited. Index reads verify the actual exchange calendar
+and exact 21 preceding sessions. Historical requests use bounded 28-day windows.
+
+Before the first completed current-session candle, on exchange-closed dates,
+and after hours, the last verified session can supply clearly labelled historical
+context. Historical and expired cached readings always display WAIT, never a live
+BUY/SELL. Missing sessions, duplicate bars, missing completed candles and invalid
+responses fail closed. Index snapshots persist separately and exclude credentials.
+Manual Refresh index data is available on Home; full-day mode refreshes indices
+and selected stocks separately. A token is still required inside app Settings.
+
+CI validates fixtures, lifecycle/storage boundaries and build/signing checks.
+Real Upstox index coverage, real-phone refresh and in-place update retention still
+need device verification. No profitable signal or market-hours validation is implied.

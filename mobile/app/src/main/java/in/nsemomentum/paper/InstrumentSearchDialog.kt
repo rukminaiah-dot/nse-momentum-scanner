@@ -40,9 +40,9 @@ fun InstrumentSearchDialog(
                 try {
                     val normalized = InstrumentSearchRules.query(query)
                     val result = withTimeout(45_000) { onSearch(normalized, exchange, number) }
-                    page = result
+                    page = result.copy(instruments = result.instruments.filterNot { it.isIndex })
                     fetchedNanos = System.nanoTime()
-                    status = if (result.instruments.isEmpty()) "No supported instruments on this page. Try a more specific name or the next page."
+                    status = if (result.instruments.none { !it.isIndex }) "No supported instruments on this page. Try a more specific name or the next page."
                         else "Select the company and exchange below. $activeCount / 20 active."
                 } catch (_: TimeoutCancellationException) { status = "Search timed out. Saved instruments are unchanged; retry." }
                 catch (cancelled: CancellationException) { status = "Search cancelled."; throw cancelled }

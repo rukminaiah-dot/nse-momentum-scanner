@@ -33,15 +33,23 @@ class InstrumentSelectionStoreTest {
         assertEquals("TOKEN_SENTINEL", context.getSharedPreferences("paper_preferences", 0).getString("token", null))
     }
     @Test fun failedSelectionDoesNotChangeSavedList() {
-        val store = store(); store.setActive("BANKNIFTY", true)
+        val store = store(); store.setActive("RELIANCE", true)
         val before = store.read()
         try { store.add(bse, 301); fail("Expected expiry rejection") } catch (_: IllegalArgumentException) { }
         assertEquals(before, store.read())
         try { store.deleteCustom("BANKNIFTY"); fail("Cannot delete built-in") } catch (_: IllegalArgumentException) { }
         assertEquals(before, store.read())
     }
-    @Test fun selectedBseAndIndexRoundTripThroughBackupRules() {
-        val store = store(); store.add(bse, 0); store.setActive("BANKNIFTY", true)
+    @Test fun legacyIndexSelectionsMoveOutOfStockQuotaWithoutLosingStocks() {
+        val context = RuntimeEnvironment.getApplication() as Context
+        val store = store()
+        context.getSharedPreferences("paper_preferences", 0).edit().putStringSet("favourites", setOf("BANKNIFTY", "SENSEX", "RELIANCE")).commit()
+        assertEquals(setOf("RELIANCE"), store.read().active)
+        try { store.setActive("BANKNIFTY", true); fail("Indices are separate") } catch (_: IllegalArgumentException) { }
+        assertEquals(setOf("RELIANCE"), store.read().active)
+    }
+    @Test fun selectedBseAndStockRoundTripThroughBackupRules() {
+        val store = store(); store.add(bse, 0); store.setActive("RELIANCE", true)
         val snapshot = store.read()
         val history = org.json.JSONObject().apply { PaperBackup.tables.keys.forEach { put(it, org.json.JSONArray()) } }
         val saved = PaperBackup.Snapshot(snapshot.active, snapshot.catalog.filter { it.isCustom }, history)

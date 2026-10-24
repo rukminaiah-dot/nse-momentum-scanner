@@ -56,6 +56,7 @@ object InstrumentSearchRules {
     /** No silent remapping: an existing instrument is found by key, never by company name. */
     fun select(instrument: SearchInstrument, catalog: List<Stock>, active: Set<String>, ageSeconds: Long): InstrumentSelection {
         require(ageSeconds in 0..300) { "Search results expired. Search again before adding." }
+        require(!instrument.isIndex) { "Indices are shown separately on Home and do not use stock places." }
         StockCatalog.active(catalog, active)
         val existing = catalog.singleOrNull { it.instrumentKey == instrument.instrumentKey }
         if (existing != null) {
