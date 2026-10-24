@@ -51,6 +51,8 @@ jobs:
           python -m pip install pytest fastapi
           python -m pytest tests -q
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
       - name: Install build tools
         run: |
           sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
