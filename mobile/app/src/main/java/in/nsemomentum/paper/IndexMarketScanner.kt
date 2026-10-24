@@ -23,6 +23,10 @@ data class IndexReading(
         val bar = candle ?: return copy(state = IndexDataState.UNAVAILABLE, signal = "WAIT")
         val age = java.time.Duration.between(bar.timestamp.plusSeconds(900), now).seconds
         if (age < 0 || !PaperStrategy.validCandle(bar)) return IndexReading(symbol, reason = "INVALID_INDEX_SNAPSHOT")
+        val local = now.atZone(MarketSession.ZONE)
+        if (state in setOf(IndexDataState.LIVE, IndexDataState.STALE) &&
+            (local.toLocalDate() > bar.timestamp.atZone(MarketSession.ZONE).toLocalDate() || local.toLocalTime() >= java.time.LocalTime.of(15, 30)))
+            return copy(state = IndexDataState.HISTORICAL, signal = "WAIT", reason = "HISTORICAL_CONTEXT_ONLY")
         if (state == IndexDataState.LIVE && age > 1080) return copy(state = IndexDataState.STALE, signal = "WAIT", reason = "INDEX_SNAPSHOT_EXPIRED")
         return if (state != IndexDataState.LIVE) copy(signal = "WAIT") else this
     }
@@ -57,7 +61,7 @@ class IndexMarketScanner(private val database: CandleStore, private val feed: Ca
                 val current = snapshotSession ?: throw IOException("UNVERIFIED_MARKET_CALENDAR")
                 val target = current.slots().lastOrNull { it.plusSeconds(900) <= now }
                     ?: throw IOException("NO_COMPLETED_MARKET_CANDLE")
-                val live = current.date == date && now <= current.end.plusSeconds(180)
+                val live = current.date == date && now < current.end
                 val prior = mutableListOf<MarketSession>()
                 cursor = current.date.minusDays(1)
                 repeat(90) {
@@ -112,7 +116,7 @@ class IndexMarketScanner(private val database: CandleStore, private val feed: Ca
         }
         val complete = if (useIntraday) {
             val raw = feed.candles(token, "/v3/historical-candle/intraday/$encoded/minutes/15")
-            if (raw.any { it.timestamp !in current.slots() || it.timestamp > now || !PaperStrategy.validCandle(it) || it.high <= it.low } ||
+            if (raw.any { it.timestamp !in current.slots() || it.timestamp > now || !PaperStrategy.validCandle(it) } ||
                 raw.map { it.timestamp }.distinct().size != raw.size) throw IOException("INVALID_INDEX_CANDLE")
             raw.filter { it.timestamp <= target }
         } else currentBars(cache)
@@ -125,10 +129,14 @@ class IndexMarketScanner(private val database: CandleStore, private val feed: Ca
         val sma21 = prior.map { s -> history.single { it.timestamp == s.slots().last() }.close }.average()
         val latest = complete.single { it.timestamp == target }
         val previousClose = history.single { it.timestamp == prior.first().slots().last() }.close
+        val change = (latest.close / previousClose - 1) * 100
+        if (!sma21.isFinite() || sma21 <= 0 || !change.isFinite() ||
+            listOf(technicals.ema20, technicals.ema50, technicals.stochK, technicals.stochD).any { !it.isFinite() })
+            throw IOException("INVALID_INDEX_HISTORY")
         val signal = if (live) IndexPaperStrategy.evaluate(bars, prior, now) else PaperSignal(reason = "HISTORICAL_CONTEXT_ONLY")
         database.save(key, complete)
         return IndexReading(instrument.symbol, if (live) IndexDataState.LIVE else IndexDataState.HISTORICAL,
-            latest, technicals, sma21, (latest.close / previousClose - 1) * 100,
+            latest, technicals, sma21, change,
             if (live) signal.signal else "WAIT", signal.reason)
     }
 

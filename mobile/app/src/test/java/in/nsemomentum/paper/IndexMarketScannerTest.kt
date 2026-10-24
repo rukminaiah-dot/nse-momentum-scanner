@@ -33,6 +33,7 @@ class IndexMarketScannerTest {
         var includeFuture = false
         var bseClosedToday = false
         var failNseOnly = false
+        var flatFormingCandle = false
         override suspend fun session(token: String, date: LocalDate): MarketSession? = session(token, date, "NSE")
         override suspend fun session(token: String, date: LocalDate, exchange: String): MarketSession? {
             calendarCalls += exchange to date
@@ -44,7 +45,9 @@ class IndexMarketScannerTest {
             error?.let { throw IOException(it) }
             if (failNseOnly && !path.contains("BSE_INDEX")) throw IOException("NETWORK_ERROR")
             if (path.contains("intraday")) {
-                val complete = today.slots().filter { it <= clock }.map { bar(it, 0.0) }
+                val complete = today.slots().filter { it <= clock }.map { timestamp ->
+                    if (flatFormingCandle && timestamp.plusSeconds(900) > clock) Candle(timestamp, 10.5, 10.5, 10.5, 10.5, 0.0) else bar(timestamp, 0.0)
+                }
                 val latestComplete = today.slots().lastOrNull { it.plusSeconds(900) <= clock }
                 return (if (missingCurrent) complete.filterNot { it.timestamp == latestComplete } else complete) +
                     (if (includeFuture) listOf(bar(today.start.plusSeconds(10 * 900), 0.0)) else emptyList())
@@ -111,6 +114,13 @@ class IndexMarketScannerTest {
         assertTrue(scanner.scan("test", now).rows.all { it.state == IndexDataState.UNAVAILABLE })
         feed.missingCurrent = false; feed.includeFuture = true
         assertTrue(scanner.scan("test", now).rows.all { it.reason == "INVALID_INDEX_CANDLE" })
+    }
+    @Test fun formingCandleIsIgnoredAndClosingTimeSuppressesAnyLiveSignal() = runBlocking {
+        val report = IndexMarketScanner(Store(), Feed().apply { flatFormingCandle = true }).scan("test", now)
+        assertTrue(report.rows.all { it.state == IndexDataState.LIVE && it.candle?.timestamp == today.start.plusSeconds(2700) })
+        val saved = report.rows.first().copy(signal = "PAPER_BUY")
+        val afterClose = saved.at(today.end.plusSeconds(1))
+        assertEquals(IndexDataState.HISTORICAL, afterClose.state); assertEquals("WAIT", afterClose.signal)
     }
     @Test fun authenticationAbortsAndUnknownErrorTextIsNeverDisplayed() = runBlocking {
         val feed = Feed().apply { error = "UPSTOX_AUTH_REQUIRED" }

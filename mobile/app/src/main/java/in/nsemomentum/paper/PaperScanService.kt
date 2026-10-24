@@ -60,86 +60,86 @@ class PaperScanService : Service() {
     private suspend fun runMarketDay(startId: Int) {
         val database = CandleDatabase(applicationContext)
         try {
-        val token = SecureTokenStore(applicationContext).read()
-        if (token.isNullOrBlank()) {
-            markStopped("Add an Upstox token in Settings before starting the paper scan.")
-            stopSelf(startId)
-            return
-        }
-        val feed = UpstoxCandleFeed()
-        val scanner = UpstoxPaperScanner(database, feed)
-        val indices = IndexMarketScanner(database, feed)
-        val indexStore = IndexSnapshotStore(applicationContext)
-        while (true) {
-            val universe = readUniverse()
-            if (universe.size > StockCatalog.MAX_ACTIVE) {
-                markStopped("Stock list exceeds 20; scan was stopped.")
+            val token = SecureTokenStore(applicationContext).read()
+            if (token.isNullOrBlank()) {
+                markStopped("Add an Upstox token in Settings before starting the paper scan.")
                 stopSelf(startId)
                 return
             }
-            val selected = preferences.getStringSet("favourites", emptySet()).orEmpty()
-            val now = Instant.now()
-            if (now.atZone(zone).toLocalTime() > LocalTime.of(15, 33)) {
-                markStopped("Market session scan finished.")
-                stopSelf(startId)
-                return
-            }
-            try {
-                preferences.edit().putString(PREF_STATUS, "Scanning completed 15-minute NSE candles…").apply()
-                showForeground("Checking completed 15-minute NSE candles…")
-                val indexReport = indices.scan(token)
-                indexStore.write(indexReport)
-                val localDate = Instant.now().atZone(zone).toLocalDate()
-                if (feed.session(token, localDate, "NSE") == null && feed.session(token, localDate, "BSE") == null) {
-                    markStopped("Markets are closed. Historical index context is saved on Home.")
+            val feed = UpstoxCandleFeed()
+            val scanner = UpstoxPaperScanner(database, feed)
+            val indices = IndexMarketScanner(database, feed)
+            val indexStore = IndexSnapshotStore(applicationContext)
+            while (true) {
+                val universe = readUniverse()
+                if (universe.size > StockCatalog.MAX_ACTIVE) {
+                    markStopped("Stock list exceeds 20; scan was stopped.")
                     stopSelf(startId)
                     return
                 }
-                val report = if (universe.isNotEmpty()) scanner.scan(token, universe, selected) else
-                    ScanReport(emptyList(), Instant.now().atZone(zone).toString(), 0, 0)
-                if (universe.isNotEmpty()) database.recordScanReport(report)
-                val qualified = database.qualifiedStocks(report.scanTime.let {
-                    java.time.ZonedDateTime.parse(it).toLocalDate()
-                }).size
-                val lastTime = report.rows.firstNotNullOfOrNull { it.candleTime } ?: "no verified candle"
-                showForeground("Scan saved · $qualified qualified today · $lastTime")
-                preferences.edit().putString(PREF_STATUS, "Last scan: $lastTime · $qualified stocks qualified today · ${report.failedRequests} feed errors").apply()
-            } catch (_: TimeoutCancellationException) {
-                preferences.edit().putString(PREF_STATUS, "Scan timed out; retrying at the next candle.").apply()
-                showForeground("Scan timed out; retrying at the next candle.")
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: IOException) {
-                when (error.message) {
-                    "MARKET_CLOSED" -> {
-                        markStopped("NSE session is closed. The scan has stopped.")
-                        stopSelf(startId)
-                        return
-                    }
-                    "UPSTOX_AUTH_REQUIRED" -> {
-                        indexStore.clear()
-                        markStopped("Upstox rejected the token. Update it in Settings.")
-                        stopSelf(startId)
-                        return
-                    }
-                    "NO_COMPLETED_MARKET_CANDLE" -> showForeground("Waiting for the next completed 15-minute candle…")
-                    "RATE_LIMITED", "LOCAL_RATE_BUDGET_EXHAUSTED" ->
-                        showForeground("Rate limit reached · will retry at the next 15-minute candle.")
-                    else -> showForeground("Temporary scan error · retrying at the next 15-minute candle.")
+                val selected = preferences.getStringSet("favourites", emptySet()).orEmpty()
+                val now = Instant.now()
+                if (now.atZone(zone).toLocalTime() > LocalTime.of(15, 33)) {
+                    markStopped("Market session scan finished.")
+                    stopSelf(startId)
+                    return
                 }
-                preferences.edit().putString(PREF_STATUS, error.message ?: "Temporary scan error").apply()
-            } catch (_: Exception) {
-                showForeground("Temporary scan error · retrying at the next 15-minute candle.")
-                preferences.edit().putString(PREF_STATUS, "Temporary scan error · next candle retry").apply()
+                try {
+                    preferences.edit().putString(PREF_STATUS, "Scanning completed 15-minute NSE candles…").apply()
+                    showForeground("Checking completed 15-minute NSE candles…")
+                    val indexReport = indices.scan(token)
+                    indexStore.write(indexReport)
+                    val localDate = Instant.now().atZone(zone).toLocalDate()
+                    if (feed.session(token, localDate, "NSE") == null && feed.session(token, localDate, "BSE") == null) {
+                        markStopped("Markets are closed. Historical index context is saved on Home.")
+                        stopSelf(startId)
+                        return
+                    }
+                    val report = if (universe.isNotEmpty()) scanner.scan(token, universe, selected) else
+                        ScanReport(emptyList(), Instant.now().atZone(zone).toString(), 0, 0)
+                    if (universe.isNotEmpty()) database.recordScanReport(report)
+                    val qualified = database.qualifiedStocks(report.scanTime.let {
+                        java.time.ZonedDateTime.parse(it).toLocalDate()
+                    }).size
+                    val lastTime = report.rows.firstNotNullOfOrNull { it.candleTime } ?: "no verified candle"
+                    showForeground("Scan saved · $qualified qualified today · $lastTime")
+                    preferences.edit().putString(PREF_STATUS, "Last scan: $lastTime · $qualified stocks qualified today · ${report.failedRequests} feed errors").apply()
+                } catch (_: TimeoutCancellationException) {
+                    preferences.edit().putString(PREF_STATUS, "Scan timed out; retrying at the next candle.").apply()
+                    showForeground("Scan timed out; retrying at the next candle.")
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: IOException) {
+                    when (error.message) {
+                        "MARKET_CLOSED" -> {
+                            markStopped("NSE session is closed. The scan has stopped.")
+                            stopSelf(startId)
+                            return
+                        }
+                        "UPSTOX_AUTH_REQUIRED" -> {
+                            indexStore.clear()
+                            markStopped("Upstox rejected the token. Update it in Settings.")
+                            stopSelf(startId)
+                            return
+                        }
+                        "NO_COMPLETED_MARKET_CANDLE" -> showForeground("Waiting for the next completed 15-minute candle…")
+                        "RATE_LIMITED", "LOCAL_RATE_BUDGET_EXHAUSTED" ->
+                            showForeground("Rate limit reached · will retry at the next 15-minute candle.")
+                        else -> showForeground("Temporary scan error · retrying at the next 15-minute candle.")
+                    }
+                    preferences.edit().putString(PREF_STATUS, error.message ?: "Temporary scan error").apply()
+                } catch (_: Exception) {
+                    showForeground("Temporary scan error · retrying at the next 15-minute candle.")
+                    preferences.edit().putString(PREF_STATUS, "Temporary scan error · next candle retry").apply()
+                }
+                val next = nextBoundary(Instant.now())
+                if (next == null) {
+                    markStopped("Market session scan finished.")
+                    stopSelf(startId)
+                    return
+                }
+                delay(Duration.between(Instant.now(), next).toMillis().coerceAtLeast(1_000L))
             }
-            val next = nextBoundary(Instant.now())
-            if (next == null) {
-                markStopped("Market session scan finished.")
-                stopSelf(startId)
-                return
-            }
-            delay(Duration.between(Instant.now(), next).toMillis().coerceAtLeast(1_000L))
-        }
         } finally { database.close() }
     }
 
