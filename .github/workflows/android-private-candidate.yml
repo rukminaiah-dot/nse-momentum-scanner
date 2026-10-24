@@ -6,6 +6,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
 jobs:
   signing-status:
     if: github.ref == 'refs/heads/experiment/android-paper-scanner'
@@ -36,7 +37,7 @@ jobs:
     if: needs.signing-status.outputs.configured == 'true'
     environment: android-experimental-signing
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -61,6 +62,13 @@ jobs:
       - name: Run all Android unit tests
         working-directory: mobile
         run: '"$RUNNER_TEMP/gradle-8.9/bin/gradle" --no-daemon :app:testDebugUnitTest'
+      - name: Download original installed candidate for update compatibility checks
+        uses: actions/download-artifact@v4
+        with:
+          name: android-permanent-signed-candidate
+          run-id: 40055400498
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/previous-android-candidate
       - name: Build and verify privately signed candidate
         working-directory: mobile
         shell: bash
@@ -77,7 +85,24 @@ jobs:
           trap 'rm -f "$ANDROID_SIGNING_STORE_FILE"' EXIT
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$ANDROID_SIGNING_STORE_FILE"
           "$RUNNER_TEMP/gradle-8.9/bin/gradle" --no-daemon :app:assembleRelease
-          python tools/verify_signed_apk.py app/build/outputs/apk/release/app-release.apk --build-tools "$ANDROID_HOME/build-tools/35.0.0" --expected-sha256 "$CERTIFICATE_PIN" --commit "$GITHUB_SHA" --report app/build/outputs/apk/release/android-candidate.json
+          python tools/verify_signed_apk.py app/build/outputs/apk/release/app-release.apk --build-tools "$ANDROID_HOME/build-tools/35.0.0" --expected-sha256 "$CERTIFICATE_PIN" --previous-apk "$RUNNER_TEMP/previous-android-candidate/app-release.apk" --commit "$GITHUB_SHA" --report app/build/outputs/apk/release/android-candidate.json
+      - name: Test original-to-current APK update on Android 35
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager 'emulator' 'system-images;android-35;google_apis;x86_64'
+          printf 'no\n' | avdmanager create avd --force --name update-check --package 'system-images;android-35;google_apis;x86_64'
+          sudo chmod a+rw /dev/kvm
+          "$ANDROID_HOME/emulator/emulator" -avd update-check -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot > "$RUNNER_TEMP/emulator.log" 2>&1 &
+          trap 'adb emu kill || true' EXIT
+          adb wait-for-device
+          timeout 240 bash -c 'until adb shell getprop sys.boot_completed | tr -d "\r" | grep -q "^1$"; do sleep 2; done'
+          adb install "$RUNNER_TEMP/previous-android-candidate/app-release.apk"
+          adb shell dumpsys package com.nsemomentum.paper.scanner | grep versionName
+          adb install -r mobile/app/build/outputs/apk/release/app-release.apk
+          adb shell dumpsys package com.nsemomentum.paper.scanner | grep versionName
+          adb shell am start -W -n com.nsemomentum.paper.scanner/com.nsemomentum.paper.MainActivity
+          echo 'Original 0.9.0 to current APK update succeeded without uninstall on Android 35.'
       - uses: actions/upload-artifact@v4
         with:
           name: android-permanent-signed-candidate
