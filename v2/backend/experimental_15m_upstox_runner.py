@@ -154,6 +154,7 @@ def run(*, limit=5, now=None, api=None):
         _HISTORICAL_CACHE_DATE = now.date()
         _HISTORICAL_CACHE = {}
     stock_bars, historical_bars, errors, stock_context, data_quality = {}, {}, {}, {}, {}
+    selected, excluded = [], {}
     for symbol, key in list(NIFTY_200.items())[:limit]:
         try:
             stock_bars[symbol], historical_bars[symbol] = fetch_symbol(
@@ -175,6 +176,11 @@ def run(*, limit=5, now=None, api=None):
                 if daily_change_pct is not None and isfinite(daily_change_pct) else None,
                 "candle_time": latest["timestamp"].isoformat() if latest else None,
             }
+            # Analyze one symbol at a time; retain output, not the full universe history.
+            one = screen_universe({symbol: stock_bars[symbol]},
+                                  {symbol: historical_bars[symbol]}, now=now)
+            selected.extend(one["selected"])
+            excluded.update(one["excluded"])
             history = historical_bars[symbol]
             open_slot = datetime.combine(now.date(), datetime.min.time()) + timedelta(minutes=555)
             open_slot_count = len({
@@ -193,6 +199,7 @@ def run(*, limit=5, now=None, api=None):
             }
         except Exception as exc:
             errors[symbol] = _safe_error_label(exc)
+            excluded[symbol] = "FETCH_FAILED"
             stock_context[symbol] = {
                 "symbol": symbol, "last_price": None, "previous_close": None,
                 "daily_change_pct": None, "candle_time": None,
@@ -202,7 +209,16 @@ def run(*, limit=5, now=None, api=None):
                 "open_slot_sessions": 0, "open_slot_baseline_verified": False,
                 "completed_intraday_candles": 0,
             }
-    result = screen_universe(stock_bars, historical_bars, now=now)
+        finally:
+            stock_bars.pop(symbol, None)
+            historical_bars.pop(symbol, None)
+            while len(_HISTORICAL_CACHE) > 8:
+                _HISTORICAL_CACHE.pop(next(iter(_HISTORICAL_CACHE)))
+    selected.sort(key=lambda row: (-row["relative_volume"], row["symbol"]))
+    result = {"mode": "PAPER", "universe_count": limit,
+              "selected_count": len(selected), "selected": selected,
+              "strong_volume_count": sum(row["volume_tier"] == "STRONG" for row in selected),
+              "excluded": excluded, "min_rvol": 1.5}
     result["fetch_errors"] = errors
     result["stock_context"] = stock_context
     result["data_quality"] = data_quality
