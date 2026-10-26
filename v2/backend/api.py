@@ -44,7 +44,7 @@ def get_index_trend_changes():
 
 from .background_snapshot import BackgroundSnapshot
 _index_research_snapshot = BackgroundSnapshot(60)
-_stock_research_snapshot = BackgroundSnapshot(300)
+_stock_research_snapshot = BackgroundSnapshot(900)
 
 
 @app.get("/api/v2/experimental/15m-index-trends")

@@ -26,4 +26,5 @@ class PreloadedIndexPublicationTests(unittest.TestCase):
         env['publish_preloaded_price']('INDEX')
         self.assertEqual(len(calls),2)
         startup=source.split('if __name__ == "__main__":',1)[1]
-        self.assertLess(startup.index('publish_preloaded_price(key)'),startup.index('for key in INDICES.values():'))
+        self.assertIn('Thread(target=warm_startup_universe, daemon=True).start()', startup)
+        self.assertIn('publish_preloaded_price(key)', source.split('def warm_startup_instrument(key):',1)[1].split('def warm_startup_universe',1)[0])

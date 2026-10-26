@@ -78,7 +78,7 @@ class ScannerCloseGateTests(unittest.TestCase):
         tree = ast.parse(SCANNER.read_text(encoding="utf-8"))
         preload = next(node for node in tree.body
                        if isinstance(node, ast.FunctionDef)
-                       and node.name == "preload_history")
+                       and node.name == "install_startup_history")
         calls = [
             node for node in ast.walk(preload)
             if isinstance(node, ast.Call)

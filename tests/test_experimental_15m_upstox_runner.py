@@ -129,7 +129,8 @@ class TestUpstoxPaperRunner(unittest.TestCase):
         with patch.object(runner, 'screen_universe', side_effect=checked), patch.object(runner, '_REQUEST_PAUSE_SECONDS', 0):
             result = runner.run(limit=12, now=now, api=api)
         self.assertEqual(sizes, [(1, 1)] * 12)
-        self.assertLessEqual(len(runner._HISTORICAL_CACHE), 8)
+        self.assertLessEqual(len(runner._HISTORICAL_CACHE), 200)
+        self.assertTrue(all(isinstance(x, bytes) for x in runner._HISTORICAL_CACHE.data.values()))
         self.assertEqual(result['universe_count'], 12)
         self.assertEqual(len(result['stock_context']), 12)
 
