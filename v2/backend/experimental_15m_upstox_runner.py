@@ -144,11 +144,8 @@ def run(*, limit=5, now=None, api=None):
     if now.tzinfo is not None:
         now = now.astimezone(IST).replace(tzinfo=None)
     if api is None:
-        import upstox_client
-        token = os.environ["UPSTOX_ACCESS_TOKEN"]
-        config = upstox_client.Configuration()
-        config.access_token = token
-        api = upstox_client.HistoryV3Api(upstox_client.ApiClient(config))
+        from .history_transport import history_api
+        api = history_api()
     global _HISTORICAL_CACHE_DATE, _HISTORICAL_CACHE
     if _HISTORICAL_CACHE_DATE != now.date():
         _HISTORICAL_CACHE_DATE = now.date()

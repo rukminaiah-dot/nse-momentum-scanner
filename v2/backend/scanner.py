@@ -48,9 +48,8 @@ _recovery_worker = None
 
 def fetch_recovery_rows(key):
     """Fetch Upstox intraday rows off the websocket callback thread."""
-    config = upstox_client.Configuration()
-    config.access_token = os.environ["UPSTOX_ACCESS_TOKEN"]
-    api = upstox_client.HistoryV3Api(upstox_client.ApiClient(config))
+    from .history_transport import history_api
+    api = history_api()
     response = api.get_intra_day_candle_data(key, "minutes", "1")
     return response.data.candles or []
 
@@ -273,9 +272,8 @@ def write_candle_quality():
 
 
 def preload_history(key):
-    config = upstox_client.Configuration()
-    config.access_token = os.environ["UPSTOX_ACCESS_TOKEN"]
-    api = upstox_client.HistoryV3Api(upstox_client.ApiClient(config))
+    from .history_transport import history_api
+    api = history_api()
 
     from datetime import datetime, timedelta
     from zoneinfo import ZoneInfo
