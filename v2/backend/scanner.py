@@ -823,6 +823,24 @@ def on_tick(key, data):
         analyse(key)
 
 
+def publish_preloaded_price(key):
+    """Publish real completed history immediately, with no live trade signal."""
+    if key not in INDICES.values() and key not in NIFTY_200.values():
+        return
+    history, _ = candles.snapshot(key)
+    if len(history) < 20:
+        return
+    closes = [item.close for item in history]
+    is_index = key in INDICES.values()
+    save_scan_result(
+        instrument_symbols.get(key, key), closes[-1],
+        ema(closes, 9), ema(closes, 20), momentum(closes),
+        "PREVIOUS SESSION" if is_index else "HISTORICAL_PRELOAD",
+        None if is_index else five_minute_trend(history), "WAITING",
+        previous_closes.get(key) if is_index else None,
+    )
+
+
 if __name__ == "__main__":
     init_db()
     load_stock_setup_states()
@@ -842,18 +860,7 @@ if __name__ == "__main__":
                 market_regimes["NIFTY 50"] = index_signal(closes[-1], ema(closes, 9), ema(closes, 20), None)
                 print("INITIAL NIFTY 50 REGIME:", market_regimes["NIFTY 50"])
 
-            # Preserve actual previous-session stock prices for validation when
-            # the market is closed. Never turn preloaded history into a BUY.
-            if key in NIFTY_200.values() and loaded >= 20:
-                history, _ = candles.snapshot(key)
-                closes = [item.close for item in history]
-                if hasattr(history[-1], "timestamp"):
-                    save_scan_result(
-                        instrument_symbols.get(key, key), closes[-1],
-                        ema(closes, 9), ema(closes, 20), momentum(closes),
-                        "HISTORICAL_PRELOAD", five_minute_trend(history),
-                        "WAITING", None,
-                    )
+            publish_preloaded_price(key)
 
             if loaded >= 20:
                 print("PRELOAD READY:", key, loaded, "/20 candles")
