@@ -1,17 +1,39 @@
+from io import BytesIO
+import json
 import unittest
-from types import SimpleNamespace
-from v2.backend.history_transport import BoundedHistoryApi
+from unittest.mock import patch
+from urllib.error import HTTPError
+from v2.backend.history_transport import HistoryApi, HistoryRequestError
 
 
 class HistoryTransportTests(unittest.TestCase):
-    def test_both_history_methods_receive_connection_and_read_deadlines(self):
+    def test_both_endpoints_encode_keys_and_bound_response_reads(self):
         calls = []
-        def request(*args, **kwargs):
-            calls.append((args, kwargs))
-            return 'response'
-        api = BoundedHistoryApi(SimpleNamespace(get_historical_candle_data1=request,
-                                               get_intra_day_candle_data=request))
-        self.assertEqual(api.get_historical_candle_data1('KEY','minutes',15,'2026-10-25','2026-10-01'), 'response')
-        self.assertEqual(api.get_intra_day_candle_data('KEY','minutes',15), 'response')
-        self.assertEqual([call[1]['_request_timeout'] for call in calls], [(5,15),(5,15)])
-        self.assertEqual(calls[0][0][-2:], ('2026-10-25','2026-10-01'))
+        def open_request(request, **kwargs):
+            calls.append((request, kwargs))
+            return BytesIO(json.dumps({'data':{'candles':[['STAMP',1,2,1,2,10]]}}).encode())
+        api = HistoryApi('fake-test-token')
+        with patch('v2.backend.history_transport.urlopen', side_effect=open_request):
+            historical = api.get_historical_candle_data1('NSE_INDEX|Nifty 50','minutes',15,'2026-10-25','2026-10-01')
+            current = api.get_intra_day_candle_data('NSE_INDEX|Nifty 50','minutes',15)
+        self.assertEqual(historical.data.candles, current.data.candles)
+        self.assertTrue(calls[0][0].full_url.endswith('/NSE_INDEX%7CNifty%2050/minutes/15/2026-10-25/2026-10-01'))
+        self.assertIn('/intraday/NSE_INDEX%7CNifty%2050/', calls[1][0].full_url)
+        self.assertEqual([call[1]['timeout'] for call in calls], [20,20])
+        self.assertNotIn('fake-test-token', calls[0][0].full_url)
+
+    def test_provider_error_exposes_status_without_headers_or_body(self):
+        with patch('v2.backend.history_transport.urlopen', side_effect=HTTPError('url',401,'secret',{},None)):
+            with self.assertRaises(HistoryRequestError) as caught:
+                HistoryApi('fake').get_intra_day_candle_data('KEY','minutes',15)
+        self.assertEqual(caught.exception.status,401)
+        self.assertNotIn('secret',str(caught.exception))
+
+    def test_oversized_and_invalid_responses_are_rejected(self):
+        for payload in [b'{"data":{}}',b'xxx']:
+            with patch('v2.backend.history_transport.urlopen', return_value=BytesIO(payload)):
+                with self.assertRaises(ValueError):
+                    HistoryApi('fake').get_intra_day_candle_data('KEY','minutes',15)
+        with patch('v2.backend.history_transport.MAX_HISTORY_BYTES', 2), patch('v2.backend.history_transport.urlopen', return_value=BytesIO(b'abc')):
+            with self.assertRaises(ValueError):
+                HistoryApi('fake').get_intra_day_candle_data('KEY','minutes',15)
