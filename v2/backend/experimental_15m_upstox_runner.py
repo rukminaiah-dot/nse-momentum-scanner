@@ -10,6 +10,8 @@ import argparse
 import json
 import os
 import time
+import zlib
+from collections.abc import MutableMapping
 from datetime import datetime, timedelta
 from math import isfinite
 from zoneinfo import ZoneInfo
@@ -19,13 +21,38 @@ from .experimental_15m_volume import verified_15m_same_slot_average
 from .stock_universe import NIFTY_200
 
 IST = ZoneInfo("Asia/Kolkata")
+class CompressedHistoryCache(MutableMapping):
+    """Keep the daily history of all 200 instruments as compact compressed bytes."""
+    def __init__(self):
+        self.data = {}
+    def __getitem__(self, key):
+        rows = json.loads(zlib.decompress(self.data[key]))
+        for row in rows:
+            row['timestamp'] = datetime.fromisoformat(row['timestamp'])
+        return rows
+    def __setitem__(self, key, value):
+        self.data[key] = zlib.compress(json.dumps(value, default=lambda x:x.isoformat()).encode())
+        while len(self.data) > 200:
+            del self.data[next(iter(self.data))]
+    def __delitem__(self, key):
+        del self.data[key]
+    def __iter__(self):
+        return iter(self.data)
+    def __len__(self):
+        return len(self.data)
+    def __contains__(self, key):
+        return key in self.data
+
+
 _HISTORICAL_CACHE_DATE = None
-_HISTORICAL_CACHE = {}
+_HISTORICAL_CACHE = CompressedHistoryCache()
 _REQUEST_PAUSE_SECONDS = 0.12
 _MAX_REQUEST_ATTEMPTS = 3
 
 
 def _is_retryable_api_error(exc):
+    if getattr(exc, "retry_after", 0) > 0:
+        return False
     status = getattr(exc, "status", getattr(exc, "status_code", None))
     try:
         status = int(status)
@@ -149,7 +176,7 @@ def run(*, limit=5, now=None, api=None):
     global _HISTORICAL_CACHE_DATE, _HISTORICAL_CACHE
     if _HISTORICAL_CACHE_DATE != now.date():
         _HISTORICAL_CACHE_DATE = now.date()
-        _HISTORICAL_CACHE = {}
+        _HISTORICAL_CACHE = CompressedHistoryCache()
     stock_bars, historical_bars, errors, stock_context, data_quality = {}, {}, {}, {}, {}
     selected, excluded = [], {}
     for symbol, key in list(NIFTY_200.items())[:limit]:
@@ -209,8 +236,6 @@ def run(*, limit=5, now=None, api=None):
         finally:
             stock_bars.pop(symbol, None)
             historical_bars.pop(symbol, None)
-            while len(_HISTORICAL_CACHE) > 8:
-                _HISTORICAL_CACHE.pop(next(iter(_HISTORICAL_CACHE)))
     selected.sort(key=lambda row: (-row["relative_volume"], row["symbol"]))
     result = {"mode": "PAPER", "universe_count": limit,
               "selected_count": len(selected), "selected": selected,

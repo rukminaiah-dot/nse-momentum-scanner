@@ -365,7 +365,7 @@ def preload_history(key):
         except Exception as exc:
             print("INTRADAY PRELOAD FAILED:", key, type(exc).__name__, flush=True)
 
-    candles.preload_completed(key, loaded)
+    install_startup_history(key, loaded)
     _log_process_memory("after_intraday_preload", key)
     print("PRELOAD:", key, len(loaded), "historical candles")
 
@@ -839,56 +839,64 @@ def publish_preloaded_price(key):
     )
 
 
-if __name__ == "__main__":
-    init_db()
-    load_stock_setup_states()
-    reset_scanner_results()
+def install_startup_history(key, loaded):
+    """Merge startup history without replacing candles already received live."""
+    _, active = candles.snapshot(key)
+    if active is None:
+        try:
+            candles.preload_completed(key, loaded)
+            return
+        except RuntimeError:
+            _, active = candles.snapshot(key)
+    if active is not None:
+        candles.merge_verified_recovery(key, {bar.timestamp:bar for bar in loaded}, active)
 
+
+def warm_startup_instrument(key):
+    try:
+        preload_history(key)
+        time.sleep(0.15)
+        loaded = len(candles.snapshot(key)[0])
+        if key == INDICES["NIFTY 50"] and loaded >= 20:
+            closes = [c.close for c in candles.snapshot(key)[0]]
+            market_regimes["NIFTY 50"] = index_signal(closes[-1], ema(closes, 9), ema(closes, 20), None)
+            print("INITIAL NIFTY 50 REGIME:", market_regimes["NIFTY 50"])
+        publish_preloaded_price(key)
+        if loaded >= 20:
+            print("PRELOAD READY:", key, loaded, "/20 candles")
+        else:
+            print("PRELOAD: live candle warmup for", key, "starting at", loaded, "/20")
+        return True
+    except Exception as e:
+        print("PRELOAD ERROR:", key, str(e))
+        print("PRELOAD: live candle warmup for", key)
+    return False
+
+def warm_startup_universe():
     preload_keys = list(INDICES.values()) + list(NIFTY_200.values())
     _log_process_memory("before_all_preloads")
 
-    for key in preload_keys:
-        try:
-            preload_history(key)
-            time.sleep(0.15)
-            loaded = len(candles.snapshot(key)[0])
+    pending = preload_keys
+    for attempt in range(6):
+        failed = []
+        for key in pending:
+            if warm_startup_instrument(key):
+                continue
+            failed.append(key)
+        if not failed:
+            return
+        pending = failed
+        time.sleep(min(60 * (2 ** attempt), 300))
+    print("PRELOAD_INCOMPLETE:", len(pending), flush=True)
 
-            if key == INDICES["NIFTY 50"] and loaded >= 20:
-                closes = [c.close for c in candles.snapshot(key)[0]]
-                market_regimes["NIFTY 50"] = index_signal(closes[-1], ema(closes, 9), ema(closes, 20), None)
-                print("INITIAL NIFTY 50 REGIME:", market_regimes["NIFTY 50"])
 
-            publish_preloaded_price(key)
 
-            if loaded >= 20:
-                print("PRELOAD READY:", key, loaded, "/20 candles")
-            else:
-                print("PRELOAD: live candle warmup for", key, "starting at", loaded, "/20")
-
-        except Exception as e:
-            print("PRELOAD ERROR:", key, str(e))
-            print("PRELOAD: live candle warmup for", key)
-
-    for key in INDICES.values():
-        if len(candles.snapshot(key)[0]) >= 20:
-            analyse(key)
-    # Display last available index values before live candles arrive.
-    # These are informational only; do not run trading analysis here.
-    for key in INDICES.values():
-        history, _ = candles.snapshot(key)
-        if len(history) >= 20:
-            closes = [c.close for c in history]
-            save_scan_result(
-                instrument_symbols.get(key, key),
-                closes[-1],
-                ema(closes, 9),
-                ema(closes, 20),
-                momentum(closes),
-                "PREVIOUS SESSION",
-                None,
-                "WAITING",
-                previous_closes.get(key),
-            )
+if __name__ == "__main__":
+    from threading import Thread
+    init_db()
+    load_stock_setup_states()
+    reset_scanner_results()
+    Thread(target=warm_startup_universe, daemon=True).start()
 
     # Double opt-in: never turn recovery on in existing production settings.
     # Staging operator must explicitly set both values.

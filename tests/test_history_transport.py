@@ -1,5 +1,7 @@
 from io import BytesIO
 import json
+import tempfile
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 from urllib.error import HTTPError
@@ -7,6 +9,27 @@ from v2.backend.history_transport import HistoryApi, HistoryRequestError
 
 
 class HistoryTransportTests(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        patcher = patch('v2.backend.history_transport.COOLDOWN_PATH', Path(temp.name)/'cooldown')
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_rate_limit_cooldown_prevents_subsequent_network_calls(self):
+        api = HistoryApi('fake')
+        with patch('v2.backend.history_transport.urlopen', side_effect=HTTPError('url',429,'limit',{'Retry-After':'90'},None)) as request:
+            for _ in range(3):
+                with self.assertRaises(HistoryRequestError) as caught:
+                    api.get_intra_day_candle_data('KEY','minutes',15)
+                self.assertEqual(caught.exception.status,429)
+                self.assertGreater(caught.exception.retry_after,0)
+            self.assertEqual(request.call_count,1)
+            other_process_client = HistoryApi('fake')
+            with self.assertRaises(HistoryRequestError):
+                other_process_client.get_intra_day_candle_data('KEY','minutes',15)
+            self.assertEqual(request.call_count,1)
+
     def test_both_endpoints_encode_keys_and_bound_response_reads(self):
         calls = []
         def open_request(request, **kwargs):
