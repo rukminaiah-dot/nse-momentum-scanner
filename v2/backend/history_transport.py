@@ -2,6 +2,7 @@
 from functools import lru_cache
 import json
 import os
+import re
 import time
 from pathlib import Path
 from threading import Lock
@@ -15,10 +16,11 @@ MAX_HISTORY_BYTES = 8 * 1024 * 1024
 
 
 class HistoryRequestError(RuntimeError):
-    def __init__(self, status, retry_after=0):
+    def __init__(self, status, retry_after=0, provider_code=None):
         self.status = status
         self.retry_after = retry_after
-        super().__init__(f'Upstox history HTTP {status}')
+        self.provider_code = provider_code
+        super().__init__(f'Upstox history HTTP {status}' + (f' [{provider_code}]' if provider_code else ''))
 
 
 class HistoryApi:
@@ -42,14 +44,14 @@ class HistoryApi:
                 time.sleep(pause)
             self._last_request = time.monotonic()
 
-    def _cool_down(self, headers):
+    def _cool_down(self, headers, minimum=60):
         try:
             seconds = float(headers.get('Retry-After', 60))
             if not 0 < seconds < 86400:
                 seconds = 60
         except (TypeError, ValueError):
             seconds = 60
-        seconds = max(60, seconds)
+        seconds = max(minimum, seconds)
         self._blocked_until = time.time() + seconds
         path = COOLDOWN_PATH
         tmp = path.with_name(path.name + '.' + str(os.getpid()) + '.tmp')
@@ -70,7 +72,18 @@ class HistoryApi:
             with urlopen(request, timeout=20) as response:
                 raw = response.read(MAX_HISTORY_BYTES + 1)
         except HTTPError as exc:
-            raise HistoryRequestError(exc.code, self._cool_down(exc.headers) if exc.code == 429 else 0) from None
+            # Retain only a strict provider error identifier; never log arbitrary bodies.
+            provider_code = None
+            try:
+                error = json.loads(exc.read(16384))
+                errors = error.get('errors', []) if isinstance(error, dict) else []
+                code = errors[0].get('errorCode') if errors and isinstance(errors[0], dict) else None
+                if isinstance(code, str) and re.fullmatch(r'UDAPI[0-9]{1,12}', code):
+                    provider_code = code
+            except (ValueError, TypeError, OSError):
+                pass
+            cooldown = self._cool_down(exc.headers, 300 if exc.code == 403 else 60) if exc.code in (403, 429) else 0
+            raise HistoryRequestError(exc.code, cooldown, provider_code) from None
         if len(raw) > MAX_HISTORY_BYTES:
             raise ValueError('history response exceeds size limit')
         payload = json.loads(raw)
