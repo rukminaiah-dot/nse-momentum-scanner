@@ -116,6 +116,23 @@ class TestUpstoxPaperRunner(unittest.TestCase):
         self.assertTrue(quality["open_slot_baseline_verified"])
         self.assertEqual(quality["completed_intraday_candles"], 1)
 
+    def test_universe_history_is_processed_one_symbol_at_a_time_and_cache_is_bounded(self):
+        from unittest.mock import patch
+        from v2.backend import experimental_15m_upstox_runner as runner
+        now = datetime(2026, 10, 21, 10, 8)
+        api = FakeApi([row(datetime(2026, 10, 20, 15, 15))], [])
+        original = runner.screen_universe
+        sizes = []
+        def checked(bars, history, **kwargs):
+            sizes.append((len(bars), len(history)))
+            return original(bars, history, **kwargs)
+        with patch.object(runner, 'screen_universe', side_effect=checked), patch.object(runner, '_REQUEST_PAUSE_SECONDS', 0):
+            result = runner.run(limit=12, now=now, api=api)
+        self.assertEqual(sizes, [(1, 1)] * 12)
+        self.assertLessEqual(len(runner._HISTORICAL_CACHE), 8)
+        self.assertEqual(result['universe_count'], 12)
+        self.assertEqual(len(result['stock_context']), 12)
+
     def test_run_does_not_need_live_broker(self):
         now = datetime(2026, 10, 21, 10, 8)
         result = run(limit=1, now=now, api=FakeApi([], []))
