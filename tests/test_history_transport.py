@@ -30,6 +30,19 @@ class HistoryTransportTests(unittest.TestCase):
                 other_process_client.get_intra_day_candle_data('KEY','minutes',15)
             self.assertEqual(request.call_count,1)
 
+    def test_forbidden_cools_down_and_exposes_only_allowlisted_error_code(self):
+        body = BytesIO(json.dumps({'errors':[{'errorCode':'UDAPI100050','message':'secret'}]}).encode())
+        with patch('v2.backend.history_transport.urlopen', side_effect=HTTPError('url',403,'secret',{},body)) as request:
+            api = HistoryApi('fake')
+            with self.assertRaises(HistoryRequestError) as caught:
+                api.get_intra_day_candle_data('KEY','minutes',15)
+            self.assertEqual(caught.exception.provider_code, 'UDAPI100050')
+            self.assertGreaterEqual(caught.exception.retry_after, 300)
+            self.assertNotIn('secret', str(caught.exception))
+            with self.assertRaises(HistoryRequestError):
+                api.get_intra_day_candle_data('KEY','minutes',15)
+            self.assertEqual(request.call_count, 1)
+
     def test_both_endpoints_encode_keys_and_bound_response_reads(self):
         calls = []
         def open_request(request, **kwargs):
