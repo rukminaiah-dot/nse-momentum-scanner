@@ -270,10 +270,8 @@ def run(*, now=None, api=None, lookback_days=90):
         raise ValueError("now must be timezone-aware")
     now = now.astimezone(IST)
     if api is None:
-        import upstox_client
-        configuration = upstox_client.Configuration()
-        configuration.access_token = os.environ["UPSTOX_ACCESS_TOKEN"]
-        api = upstox_client.HistoryV3Api(upstox_client.ApiClient(configuration))
+        from .history_transport import history_api
+        api = history_api()
     to_date = (now.date() - timedelta(days=1)).isoformat()
     from_date = (now.date() - timedelta(days=lookback_days + 1)).isoformat()
     results, errors = [], {}
