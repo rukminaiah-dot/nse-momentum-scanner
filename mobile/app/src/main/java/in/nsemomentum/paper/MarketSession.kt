@@ -25,6 +25,9 @@ data class MarketSession(val date: LocalDate, val start: Instant, val end: Insta
 interface CandleStore {
     fun save(symbol: String, bars: List<Candle>)
     fun bars(symbol: String): List<Candle>
+    fun qualifiedOn(symbol: String, date: LocalDate): Boolean = false
+    fun hasActivePaperBuy(symbol: String): Boolean = false
+    fun recordedPaperSignal(symbol: String, candleStart: Instant): String? = null
 }
 
 interface CandleFeed {

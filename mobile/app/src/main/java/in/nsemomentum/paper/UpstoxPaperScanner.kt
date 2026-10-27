@@ -136,7 +136,15 @@ class UpstoxPaperScanner(
         if (!isIndex && rvol == null) return ScanRow(symbol, reason = "INVALID_VOLUME")
         val context = if (symbol in favourites) PaperStrategy.context(ordered) else null
         val result = if (isIndex) IndexPaperStrategy.evaluate(ordered, sessions, now)
-        else if (symbol in favourites) PaperStrategy.evaluate(ordered, now, baseline) else PaperSignal(
+        else if (symbol in favourites) {
+            val evaluated = PaperStrategy.evaluate(ordered, now, baseline,
+                qualifiedToday = database.qualifiedOn(symbol, today.date),
+                hasActiveBuy = database.hasActivePaperBuy(symbol))
+            val recorded = database.recordedPaperSignal(symbol, target)
+            if (recorded != null && evaluated.reason in setOf("UPTREND_BULLISH_CROSS", "BEARISH_CROSS_EXIT", "BUY_ACTIVE_WAITING_BEARISH_CROSS", "EMA_TREND_NOT_UP", "NO_BULLISH_CROSS", "NOT_SHORTLISTED_TODAY"))
+                evaluated.copy(signal = recorded, reason = if (recorded == "PAPER_BUY") "UPTREND_BULLISH_CROSS" else "BEARISH_CROSS_EXIT")
+            else evaluated
+        } else PaperSignal(
             signal = if ((rvol ?: 0.0) >= 1.5) "VOLUME_QUALIFIED" else "WAIT",
             reason = if ((rvol ?: 0.0) >= 1.5) "FAVOURITE_ONLY_FOR_TECHNICALS" else "VOLUME_BELOW_THRESHOLD")
         val previousCloseTime = sessions.first().slots().last()

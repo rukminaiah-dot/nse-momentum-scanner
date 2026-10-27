@@ -11,11 +11,12 @@ object PaperBackup {
     val tables = linkedMapOf(
         "daily_qualifications" to listOf("session_date", "symbol", "first_seen", "last_seen", "peak_rvol", "last_price", "last_volume", "average_slot_volume"),
         "pending_paper_signals" to listOf("symbol", "direction", "signal_time"),
-        "paper_outcomes" to listOf("symbol", "signal_time", "direction", "entry_time", "entry_price", "exit_price", "return_percent")
+        "paper_outcomes" to listOf("symbol", "signal_time", "direction", "entry_time", "entry_price", "exit_price", "return_percent"),
+        "paper_signal_events" to listOf("symbol", "signal_time", "direction", "price")
     )
     data class Snapshot(val favourites: Set<String>, val custom: List<Stock>, val history: JSONObject)
     fun encode(snapshot: Snapshot): String = JSONObject()
-        .put("format", "nse-paper-backup").put("version", 1)
+        .put("format", "nse-paper-backup").put("version", 2)
         .put("favourites", JSONArray(snapshot.favourites.sorted()))
         .put("custom", JSONArray(StockCatalog.encodeCustom(snapshot.custom)))
         .put("history", snapshot.history).toString().also {
@@ -26,7 +27,7 @@ object PaperBackup {
         require(text.toByteArray(Charsets.UTF_8).size <= MAX_BYTES)
         val root = JSONObject(text)
         require(root.keys().asSequence().toSet() == setOf("format", "version", "favourites", "custom", "history"))
-        require(root.getString("format") == "nse-paper-backup" && root.get("version") == 1)
+        require(root.getString("format") == "nse-paper-backup" && root.get("version") is Int && root.getInt("version") in 1..2)
         val customRows = root.getJSONArray("custom")
         require(customRows.length() <= StockCatalog.MAX_CUSTOM_STOCKS)
         val custom = mutableListOf<Stock>()
@@ -42,7 +43,9 @@ object PaperBackup {
         require(favourites.size <= StockCatalog.MAX_ACTIVE && favourites.distinct().size == favourites.size)
         require(favourites.all { symbol -> (base + custom).any { it.symbol == symbol } })
         val history = root.getJSONObject("history")
-        require(history.keys().asSequence().toSet() == tables.keys)
+        val expectedTables = if (root.getInt("version") == 1) tables.keys - "paper_signal_events" else tables.keys
+        require(history.keys().asSequence().toSet() == expectedTables)
+        if (root.getInt("version") == 1) history.put("paper_signal_events", JSONArray())
         var count = 0
         tables.forEach { (table, columns) ->
             val rows = history.getJSONArray(table)
@@ -65,14 +68,14 @@ object PaperBackup {
                             else {
                                 require(value is Number && value.toDouble().isFinite())
                                 if (column != "return_percent") require(value.toDouble() >= 0)
-                                if (column in setOf("entry_price", "exit_price", "last_price")) require(value.toDouble() > 0)
+                                if (column in setOf("entry_price", "exit_price", "last_price", "price")) require(value.toDouble() > 0)
                             }
                         }
                     }
                 }
                 val identity = row.getString("symbol") + when (table) {
                     "daily_qualifications" -> row.getString("session_date")
-                    "paper_outcomes" -> row.getString("signal_time")
+                    "paper_outcomes", "paper_signal_events" -> row.getString("signal_time")
                     else -> ""
                 }
                 require(identities.add(identity))

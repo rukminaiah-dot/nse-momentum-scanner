@@ -611,7 +611,7 @@ private fun PaperScannerApp() {
                             Text("Prices stream while this app is open. Last-trade times show quote freshness. Paper signals use completed 15-minute candles.", style = MaterialTheme.typography.bodySmall)
                             Spacer(Modifier.height(12.dp))
                             Text("15-MINUTE PAPER SIGNALS", fontWeight = FontWeight.Bold)
-                            Text("These stock signals require RVOL ≥ 1.5× plus EMA, candle breakout and Stoch RSI confirmation. Nifty 50, Sensex and Bank Nifty are shown separately on Home with index rules.", style = MaterialTheme.typography.bodySmall) }
+                            Text("Volume qualifies stocks once for the day. BUY: EMA20 above EMA50 and K crosses above D. SELL after BUY: K crosses below D. Completed 15-minute candles only; K−D distance is context, not a filter. Indices keep their separate rules.", style = MaterialTheme.typography.bodySmall) }
                         items(selectedStocks, key = { it.symbol }) { stock ->
                             val row = bySymbol[stock.symbol]
                             Card(Modifier.fillMaxWidth()) {
@@ -680,7 +680,7 @@ private fun rowDetail(row: ScanRow): String {
     val candle = row.candle?.let { "\n15m O ${it.open} · H ${it.high} · L ${it.low} · C ${it.close} · V ${it.volume.toLong()}" }.orEmpty()
     val technical = row.technicals?.let {
         "\nEMA 20 ${"%.2f".format(it.ema20)} · EMA 50 ${"%.2f".format(it.ema50)}" +
-            "\nStoch RSI (14,14,3,3) K ${"%.2f".format(it.stochK)} · D ${"%.2f".format(it.stochD)}"
+            "\nStoch RSI (14,14,3,3) K ${"%.2f".format(it.stochK)} · D ${"%.2f".format(it.stochD)}" + "\n" + stochasticGapDisplay(it)
     }.orEmpty()
     return "$time · $rvol · ${row.reason}$candle$technical"
 }
@@ -752,7 +752,10 @@ private fun Dashboard(
                     catalog.singleOrNull { it.symbol == stock.symbol }?.let { instrument -> LivePriceDisplay(instrument, livePrices) }
                     Text("Peak RVOL ${formatPrice(stock.peakRelativeVolume)}× · latest scan RVOL ${row?.relativeVolume?.let { "${formatPrice(it)}×" } ?: "unavailable"}")
                     Text(paperSignalDisplay(row), fontWeight = FontWeight.SemiBold)
-                    row?.technicals?.let { Text("Stoch RSI K ${formatPrice(it.stochK)} / D ${formatPrice(it.stochD)}", style = MaterialTheme.typography.bodySmall) }
+                    row?.technicals?.let {
+                        Text("Stoch RSI K ${formatPrice(it.stochK)} / D ${formatPrice(it.stochD)}", style = MaterialTheme.typography.bodySmall)
+                        Text(stochasticGapDisplay(it), style = MaterialTheme.typography.bodySmall)
+                    }
                     HorizontalDivider()
                 }
             }
