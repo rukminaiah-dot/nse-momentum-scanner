@@ -12,7 +12,7 @@ sealed interface StockInputResult {
 }
 
 object StockCatalog {
-    const val MAX_ACTIVE = 20
+    const val MAX_ACTIVE = 40
     val indices = listOf(
         Stock("NIFTY50", "NSE_INDEX|Nifty 50"),
         Stock("SENSEX", "BSE_INDEX|SENSEX"),
@@ -29,7 +29,7 @@ object StockCatalog {
 
     fun stockSelections(selected: Set<String>): Set<String> = selected - indices.map { it.symbol }.toSet()
 
-    const val MAX_CUSTOM_STOCKS = 20
+    const val MAX_CUSTOM_STOCKS = 40
     private val symbolPattern = Regex("^[A-Z0-9][A-Z0-9&._-]{0,29}$")
     private val keyPattern = Regex("^(NSE_EQ|BSE_EQ)\\|[A-Z0-9]+$")
 

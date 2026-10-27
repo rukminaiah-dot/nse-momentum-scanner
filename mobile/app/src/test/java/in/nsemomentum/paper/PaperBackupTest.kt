@@ -107,7 +107,7 @@ class PaperBackupTest {
         val incoming = snapshot()
         assertEquals(incoming.custom, PaperBackup.merge(incoming, incoming.favourites, incoming.custom, base).custom)
         rejects { PaperBackup.merge(incoming, emptySet(), listOf(custom.copy(instrumentKey = "NSE_EQ|OTHER")), base) }
-        rejects { PaperBackup.merge(incoming, (1..20).map { "S$it" }.toSet(), emptyList(), base) }
+        rejects { PaperBackup.merge(incoming, (1..40).map { "S$it" }.toSet(), emptyList(), base) }
     }
     @Test fun databaseImportRollsBackOnFailureAndPreservesExistingRows() {
         val context = RuntimeEnvironment.getApplication() as Context

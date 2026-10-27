@@ -28,7 +28,7 @@ object PaperBackup {
         require(root.keys().asSequence().toSet() == setOf("format", "version", "favourites", "custom", "history"))
         require(root.getString("format") == "nse-paper-backup" && root.get("version") == 1)
         val customRows = root.getJSONArray("custom")
-        require(customRows.length() <= 20)
+        require(customRows.length() <= StockCatalog.MAX_CUSTOM_STOCKS)
         val custom = mutableListOf<Stock>()
         for (i in 0 until customRows.length()) {
             val row = customRows.getJSONObject(i)
@@ -39,7 +39,7 @@ object PaperBackup {
         }
         val favRows = root.getJSONArray("favourites")
         val favourites = (0 until favRows.length()).map { favRows.getString(it) }
-        require(favourites.size <= 20 && favourites.distinct().size == favourites.size)
+        require(favourites.size <= StockCatalog.MAX_ACTIVE && favourites.distinct().size == favourites.size)
         require(favourites.all { symbol -> (base + custom).any { it.symbol == symbol } })
         val history = root.getJSONObject("history")
         require(history.keys().asSequence().toSet() == tables.keys)
@@ -92,7 +92,7 @@ object PaperBackup {
             }
         }
         val favs = favourites + incoming.favourites
-        require(favs.size <= 20)
+        require(favs.size <= StockCatalog.MAX_ACTIVE)
         return incoming.copy(favourites = favs, custom = combined)
     }
 }

@@ -10,9 +10,9 @@ class ActiveInstrumentsTest {
         assertEquals(selected, StockCatalog.active(catalog, selected).map { it.symbol }.toSet())
         assertTrue(StockCatalog.active(catalog, emptySet()).isEmpty())
     }
-    @Test fun twentyAllowedButTwentyOneRejected() {
-        assertEquals(20, StockCatalog.active(catalog, catalog.take(20).map { it.symbol }.toSet()).size)
-        try { StockCatalog.active(catalog, catalog.take(21).map { it.symbol }.toSet()); fail() }
+    @Test fun fortyAllowedButFortyOneRejected() {
+        assertEquals(40, StockCatalog.active(catalog, catalog.take(40).map { it.symbol }.toSet()).size)
+        try { StockCatalog.active(catalog, catalog.take(41).map { it.symbol }.toSet()); fail() }
         catch (_: IllegalArgumentException) { }
     }
     @Test fun unknownSelectionNeverSilentlyDropped() {
