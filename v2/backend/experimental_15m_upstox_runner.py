@@ -161,7 +161,7 @@ def fetch_symbol(api, key, *, now, lookback_days=30, historical_cache=None, slee
                 bar["timestamp"] + timedelta(minutes=15) <= now]
     # Historical API data must never be used as same-day live evidence.
     # Retain enough previous-session candles for EMA50 and Stoch RSI.
-    return (history[-100:] + complete), history
+    return (history + complete), history
 
 
 def run(*, limit=5, now=None, api=None):
