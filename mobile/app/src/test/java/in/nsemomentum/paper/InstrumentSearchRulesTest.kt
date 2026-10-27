@@ -56,11 +56,11 @@ class InstrumentSearchRulesTest {
     }
     @Test fun rejectsExpiredResultsFullListAndSymbolCollisionWithoutMutation() {
         val candidate = InstrumentSearchRules.parse(body(row()), "NSE", 1).instruments.single()
-        val base = (1..20).map { Stock("STOCK$it", "NSE_EQ|KEY$it") }
+        val base = (1..40).map { Stock("STOCK$it", "NSE_EQ|KEY$it") }
         val active = base.map { it.symbol }.toSet()
         rejects { InstrumentSearchRules.select(candidate, base, active, 0) }
         rejects { InstrumentSearchRules.select(candidate, emptyList(), emptySet(), 301) }
         rejects { InstrumentSearchRules.select(candidate, listOf(Stock("RELIANCE", "NSE_EQ|OTHER")), emptySet(), 0) }
-        assertEquals(20, active.size); assertEquals(20, base.size)
+        assertEquals(40, active.size); assertEquals(40, base.size)
     }
 }

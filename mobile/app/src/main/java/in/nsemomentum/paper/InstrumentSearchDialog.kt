@@ -43,7 +43,7 @@ fun InstrumentSearchDialog(
                     page = result.copy(instruments = result.instruments.filterNot { it.isIndex })
                     fetchedNanos = System.nanoTime()
                     status = if (result.instruments.none { !it.isIndex }) "No supported instruments on this page. Try a more specific name or the next page."
-                        else "Select the company and exchange below. $activeCount / 20 active."
+                        else "Select the company and exchange below. $activeCount / 40 active."
                 } catch (_: TimeoutCancellationException) { status = "Search timed out. Saved instruments are unchanged; retry." }
                 catch (cancelled: CancellationException) { status = "Search cancelled."; throw cancelled }
                 catch (error: Exception) {

@@ -5,6 +5,8 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.conflate
 import okhttp3.*
 import okio.ByteString
 import okio.ByteString.Companion.toByteString
@@ -98,14 +100,23 @@ object LivePriceDecoder {
             uri.port in setOf(-1, 443) && uri.fragment == null
     }.getOrDefault(false)
     fun subscription(keys: Set<String>): ByteString {
-        require(keys.isNotEmpty() && keys.size <= 20 && keys.all { it.matches(Regex("(?:NSE|BSE)_EQ\\|[^\\s,]{1,100}")) })
+        require(keys.isNotEmpty() && keys.size <= StockCatalog.MAX_ACTIVE && keys.all { it.matches(Regex("(?:NSE|BSE)_EQ\\|[^\\s,]{1,100}")) })
         return JSONObject().put("guid", java.util.UUID.randomUUID().toString()).put("method", "sub")
             .put("data", JSONObject().put("mode", "ltpc").put("instrumentKeys", JSONArray(keys.sorted())))
             .toString().toByteArray(Charsets.UTF_8).toByteString()
     }
-    fun merge(previous: Map<String, LiveQuote>, incoming: Map<String, LiveQuote>): Map<String, LiveQuote> = previous + incoming.filter { (key, quote) ->
-        previous[key]?.let { quote.tradedAt >= it.tradedAt } ?: true
+    fun merge(previous: Map<String, LiveQuote>, incoming: Map<String, LiveQuote>): Map<String, LiveQuote> {
+        val merged = previous.toMutableMap()
+        for ((key, quote) in incoming) {
+            val old = previous[key]
+            if (old != null && quote.tradedAt < old.tradedAt) continue
+            val sameSession = old != null && old.tradedAt.atZone(MarketSession.ZONE).toLocalDate() ==
+                quote.tradedAt.atZone(MarketSession.ZONE).toLocalDate()
+            merged[key] = if (quote.previousClose == null && sameSession) quote.copy(previousClose = old?.previousClose) else quote
+        }
+        return merged
     }
+
 }
 
 class UpstoxLivePrices(
@@ -146,10 +157,10 @@ class UpstoxLivePrices(
         data class Data(val bytes: ByteArray) : Event()
         data class End(val auth: Boolean = false) : Event()
     }
-    fun stream(token: String, keys: Set<String>): Flow<LivePriceState> = flow {
+    fun stream(token: String, keys: Set<String>, initialQuotes: Map<String, LiveQuote> = emptyMap()): Flow<LivePriceState> = flow {
         val subscription = LivePriceDecoder.subscription(keys)
         require(token.isNotBlank())
-        var state = LivePriceState()
+        var state = LivePriceState(quotes = initialQuotes.filterKeys { it in keys })
         var failures = 0
         while (currentCoroutineContext().isActive) {
             emit(state.copy(status = if (failures == 0) "Connecting to Upstox…" else "Reconnecting to Upstox…", connected = false))
@@ -171,7 +182,7 @@ class UpstoxLivePrices(
                     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) { events.trySend(Event.End(response?.code in setOf(401, 403))) }
                 })
                 while (currentCoroutineContext().isActive) {
-                    when (val event = withTimeout(90_000) { events.receive() }) {
+                    when (val event = withTimeout(30_000) { events.receive() }) {
                         Event.Open -> { state = state.copy(status = "Connected · waiting for market data", connected = true, markets = emptyMap()); emit(state) }
                         is Event.Data -> {
                             val frame = LivePriceDecoder.decode(event.bytes, keys, Instant.now())
@@ -197,5 +208,5 @@ class UpstoxLivePrices(
             delay((1000L shl failures.coerceAtMost(5)).coerceAtMost(30_000))
             failures++
         }
-    }
+    }.flowOn(Dispatchers.IO).conflate()
 }

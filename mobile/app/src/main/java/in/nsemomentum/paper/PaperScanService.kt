@@ -74,7 +74,7 @@ class PaperScanService : Service() {
             while (true) {
                 val universe = readUniverse()
                 if (universe.size > StockCatalog.MAX_ACTIVE) {
-                    markStopped("Stock list exceeds 20; scan was stopped.")
+                    markStopped("Stock list exceeds 40; scan was stopped.")
                     stopSelf(startId)
                     return
                 }

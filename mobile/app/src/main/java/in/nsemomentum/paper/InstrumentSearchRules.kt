@@ -60,10 +60,10 @@ object InstrumentSearchRules {
         StockCatalog.active(catalog, active)
         val existing = catalog.singleOrNull { it.instrumentKey == instrument.instrumentKey }
         if (existing != null) {
-            require(existing.symbol in active || active.size < StockCatalog.MAX_ACTIVE) { "Remove one instrument before adding another; maximum 20." }
+            require(existing.symbol in active || active.size < StockCatalog.MAX_ACTIVE) { "Remove one instrument before adding another; maximum 40." }
             return InstrumentSelection(catalog, active + existing.symbol, existing)
         }
-        require(active.size < StockCatalog.MAX_ACTIVE) { "Remove one instrument before adding another; maximum 20." }
+        require(active.size < StockCatalog.MAX_ACTIVE) { "Remove one instrument before adding another; maximum 40." }
         require(!instrument.isIndex) { "Unsupported index." }
         // Distinct persistent labels allow both exchange listings of the same company.
         val label = if (instrument.exchange == "BSE") instrument.symbol.take(26) + "_BSE" else instrument.symbol

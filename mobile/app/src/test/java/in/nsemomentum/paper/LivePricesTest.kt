@@ -70,9 +70,23 @@ class LivePricesTest {
         val root = JSONObject(LivePriceDecoder.subscription(setOf(key)).utf8())
         assertEquals("sub", root.getString("method")); assertEquals("ltpc", root.getJSONObject("data").getString("mode"))
         assertEquals(1, root.getJSONObject("data").getJSONArray("instrumentKeys").length())
-        for (keys in listOf(emptySet(), setOf("NSE_INDEX|Nifty 50"), (1..21).map { "NSE_EQ|TEST$it" }.toSet())) {
+        for (keys in listOf(emptySet(), setOf("NSE_INDEX|Nifty 50"), (1..41).map { "NSE_EQ|TEST$it" }.toSet())) {
             try { LivePriceDecoder.subscription(keys); fail("Invalid subscription accepted") } catch (_: IllegalArgumentException) {}
         }
+    }
+    @Test fun fortySelectedEquitiesCanSubscribeTogether() {
+        val keys = (1..40).map { "NSE_EQ|TEST$it" }.toSet()
+        val root = JSONObject(LivePriceDecoder.subscription(keys).utf8())
+        assertEquals(40, root.getJSONObject("data").getJSONArray("instrumentKeys").length())
+    }
+    @Test fun partialTickKeepsSameSessionCloseButNeverCarriesItIntoAnotherDay() {
+        val previous = LiveQuote(key, 110.0, 100.0, now, now)
+        val update = previous.copy(price = 112.0, previousClose = null, tradedAt = now.plusSeconds(1))
+        val merged = LivePriceDecoder.merge(mapOf(key to previous), mapOf(key to update)).getValue(key)
+        assertEquals(112.0, merged.price, 0.0)
+        assertEquals(12.0, merged.changePercent!!, 0.000001)
+        val nextDay = update.copy(tradedAt = now.plusSeconds(86400))
+        assertNull(LivePriceDecoder.merge(mapOf(key to previous), mapOf(key to nextDay)).getValue(key).previousClose)
     }
     @Test fun onlyAcceptsSecureAuthorizedUpstoxSockets() {
         assertTrue(LivePriceDecoder.authorizedSocket("wss://feed.upstox.com/market-data-feeder/v3/test?code=private"))

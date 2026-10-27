@@ -36,6 +36,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -73,7 +74,7 @@ import java.util.Locale
 import kotlin.math.abs
 
 private enum class Page(val title: String) {
-    DASHBOARD("Home"), UNIVERSE("Stocks"), FAVOURITES("My 20"), SETTINGS("Settings")
+    DASHBOARD("Home"), UNIVERSE("Stocks"), FAVOURITES("My 40"), SETTINGS("Settings")
 }
 
 class MainActivity : ComponentActivity() {
@@ -118,7 +119,7 @@ private fun PaperScannerApp() {
     var indexReport by remember { mutableStateOf(indexStore.read()) }
     val favourites = remember {
         mutableStateListOf<String>().apply {
-            addAll(StockCatalog.stockSelections(preferences.getStringSet("favourites", emptySet()).orEmpty()).take(20))
+            addAll(StockCatalog.stockSelections(preferences.getStringSet("favourites", emptySet()).orEmpty()).take(StockCatalog.MAX_ACTIVE))
         }
     }
     var page by remember { mutableStateOf(Page.DASHBOARD) }
@@ -142,12 +143,12 @@ private fun PaperScannerApp() {
     val priceLifecycle = LocalLifecycleOwner.current.lifecycle
     val priceKeys = stocks.filter { it.symbol in favourites && "_EQ|" in it.instrumentKey }.map { it.instrumentKey }.toSet()
     LaunchedEffect(priceKeys, tokenConfigured, liveTokenRevision, priceLifecycle) {
-        livePrices = LivePriceState(status = if (!tokenConfigured) "Save your Upstox token in Settings for live prices." else "Connecting to Upstox…")
+        livePrices = LivePriceState(quotes = if (tokenConfigured) livePrices.quotes.filterKeys { it in priceKeys } else emptyMap(), status = if (!tokenConfigured) "Save your Upstox token in Settings for live prices." else "Connecting to Upstox…")
         if (priceKeys.isNotEmpty() && tokenConfigured) {
             priceLifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 val savedToken = tokenStore.read()
                 if (!savedToken.isNullOrBlank()) {
-                    try { livePriceClient.stream(savedToken, priceKeys).collect { livePrices = it } }
+                    try { livePriceClient.stream(savedToken, priceKeys, livePrices.quotes).collect { livePrices = it } }
                     catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
                     catch (_: Exception) { livePrices = LivePriceState(status = "Prices unavailable. Reopen the app to reconnect.") }
                 }
@@ -232,7 +233,7 @@ private fun PaperScannerApp() {
                                 backupStatus = "Restore complete. Imported history is user-supplied paper data, not verified performance."
                                 pendingBackup = null
                             } catch (_: Exception) {
-                                backupStatus = "Restore not completed. Check stock conflicts, 20-stock limits, and free storage. Existing data is kept; retry is safe."
+                                backupStatus = "Restore not completed. Check stock conflicts, 40-stock limits, and free storage. Existing data is kept; retry is safe."
                             } finally { backupBusy = false }
                         }
                     } else backupStatus = "Stop all scans before restoring."
@@ -327,7 +328,7 @@ private fun PaperScannerApp() {
                     stocks.clear(); stocks.addAll(saved.catalog)
                     favourites.clear(); favourites.addAll(saved.active.sorted())
                     report = null
-                    customStockMessage = "${instrument.symbol} · ${instrument.exchange} added. ${saved.active.size} / 20 active."
+                    customStockMessage = "${instrument.symbol} · ${instrument.exchange} added. ${saved.active.size} / 40 active."
                     customStockMessage
                 }.getOrElse { it.message ?: "Could not save selection. Nothing was added." }
             },
@@ -465,6 +466,10 @@ private fun PaperScannerApp() {
                 autoScanActive = autoScanActive,
                 autoScanStatus = autoScanStatus,
                 qualifiedToday = qualifiedToday,
+                catalog = stocks.toList(),
+                livePrices = livePrices,
+                onRefreshPrices = { liveTokenRevision++ },
+                pricesRefreshEnabled = tokenConfigured && priceKeys.isNotEmpty(),
                 weeklySummary = weeklySummary,
                 weeklyOutcomes = weeklyOutcomes,
                 onStartFullDayScan = requestFullDayScan,
@@ -479,12 +484,12 @@ private fun PaperScannerApp() {
                 Column(Modifier.fillMaxSize().padding(inset)) {
                     Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("My scan · ${favourites.size} / 20 active", fontWeight = FontWeight.SemiBold)
+                            Text("My scan · ${favourites.size} / 40 active", fontWeight = FontWeight.SemiBold)
                             Button(onClick = { showInstrumentSearch = true },
                                 enabled = !scanning && !autoScanActive && !backupBusy && pendingBackup == null) {
                                 Text("Search company · NSE / BSE")
                             }
-                            Text("Choose a company and exchange. Upstox supplies its instrument key automatically. Remove a selection to free a place when your list reaches 20.",
+                            Text("Choose a company and exchange. Upstox supplies its instrument key automatically. Remove a selection to free a place when your list reaches 40.",
                                 style = MaterialTheme.typography.bodySmall)
                             if (customStockMessage.isNotBlank()) Text(customStockMessage, style = MaterialTheme.typography.bodySmall)
                         }
@@ -566,7 +571,7 @@ private fun PaperScannerApp() {
                                                         customStockMessage = if (selected) "${stock.symbol} removed from scan. History kept." else "${stock.symbol} added to scan."
                                                     }.onFailure { customStockMessage = it.message ?: "Could not save selection." }
                                             },
-                                            enabled = !scanning && !autoScanActive && !backupBusy && (selected || favourites.size < 20)
+                                            enabled = !scanning && !autoScanActive && !backupBusy && (selected || favourites.size < StockCatalog.MAX_ACTIVE)
                                         ) { Text(if (selected) "Remove from scan" else "Add to scan") }
                                         if (stock.isCustom) TextButton(onClick = {
                                             runCatching { selectionStore.deleteCustom(stock.symbol) }
@@ -590,7 +595,7 @@ private fun PaperScannerApp() {
                 if (selectedStocks.isEmpty()) {
                     MessagePage(
                         "My active instruments",
-                        "Select up to 20 instruments in Instruments. Only these are scanned, with technical checks for every selection.",
+                        "Select up to 40 instruments in Instruments. Only these are scanned, with technical checks for every selection.",
                         Modifier.padding(inset)
                     )
                 } else {
@@ -600,8 +605,9 @@ private fun PaperScannerApp() {
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         item {
-                            Text("MY 20 · LIVE PRICES", fontWeight = FontWeight.Bold)
+                            Text("MY 40 · LIVE PRICES", fontWeight = FontWeight.Bold)
                             Text(livePrices.status, style = MaterialTheme.typography.bodySmall)
+                            Button(onClick = { liveTokenRevision++ }, enabled = tokenConfigured && priceKeys.isNotEmpty()) { Text("Refresh prices") }
                             Text("Prices stream while this app is open. Last-trade times show quote freshness. Paper signals use completed 15-minute candles.", style = MaterialTheme.typography.bodySmall)
                             Spacer(Modifier.height(12.dp))
                             Text("15-MINUTE PAPER SIGNALS", fontWeight = FontWeight.Bold)
@@ -613,7 +619,7 @@ private fun PaperScannerApp() {
                                     Text(stock.symbol, fontWeight = FontWeight.Bold)
                                     LivePriceDisplay(stock, livePrices)
                                     Spacer(Modifier.height(6.dp))
-                                    Text(row?.signal ?: "WAIT · NO VERIFIED SCAN")
+                                    Text(paperSignalDisplay(row))
                                     Text(
                                         row?.let { rowDetail(it) } ?: "Candle time, RVOL, EMA trend and Stochastic RSI appear after a successful read-only scan.",
                                         style = MaterialTheme.typography.bodySmall
@@ -694,6 +700,10 @@ private fun Dashboard(
     autoScanActive: Boolean,
     autoScanStatus: String,
     qualifiedToday: List<QualifiedStock>,
+    catalog: List<Stock>,
+    livePrices: LivePriceState,
+    onRefreshPrices: () -> Unit,
+    pricesRefreshEnabled: Boolean,
     weeklySummary: List<DailyPaperSummary>,
     weeklyOutcomes: List<PaperOutcome>,
     onStartFullDayScan: () -> Unit,
@@ -720,21 +730,30 @@ private fun Dashboard(
                 } else {
                     Button(onClick = onStartFullDayScan, enabled = !scanning) { Text("Start full-day scan") }
                 }
-                Button(onClick = onRunScan, enabled = !scanning && !autoScanActive && stockCount in 1..20) {
+                Button(onClick = onRunScan, enabled = !scanning && !autoScanActive && stockCount in 1..StockCatalog.MAX_ACTIVE) {
                     Text(if (scanning) "Scanning…" else "Run one scan")
                 }
                 if (scanning) Button(onClick = onCancelScan) { Text("Cancel one scan") }
             }
         }
-        InfoCard("Selected instrument scan", "$stockCount / 20 active instruments", "$customStockCount custom additions · $qualified stocks currently at or above 1.5× on the latest scan.")
-        InfoCard("Favourites", "$favouriteCount / 20 selected", "Selected stocks use the volume-first rules. The three index cards above use separate price-based rules.")
+        InfoCard("Selected instrument scan", "$stockCount / 40 active instruments", "$customStockCount custom additions · $qualified stocks currently at or above 1.5× on the latest scan.")
+        InfoCard("Favourites", "$favouriteCount / 40 selected", "Selected stocks use the volume-first rules. The three index cards above use separate price-based rules.")
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Qualified today · ${qualifiedToday.size}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text("A stock stays here after qualifying once during today's market session, even if its later RVOL falls.", style = MaterialTheme.typography.bodySmall)
+                Text(livePrices.status, style = MaterialTheme.typography.bodySmall)
+                Button(onClick = onRefreshPrices, enabled = pricesRefreshEnabled) { Text("Refresh prices") }
+                Text("Prices update from the live stream; BUY/SELL checks use completed 15-minute candles.", style = MaterialTheme.typography.bodySmall)
                 if (qualifiedToday.isEmpty()) Text("No stock has qualified in a verified scan today.", style = MaterialTheme.typography.bodySmall)
                 qualifiedToday.forEach { stock ->
-                    Text("${stock.symbol} · peak RVOL ${formatPrice(stock.peakRelativeVolume)}× · last price ${stock.lastPrice?.let { "₹${formatPrice(it)}" } ?: "unavailable"}")
+                    val row = report?.rows?.singleOrNull { it.symbol == stock.symbol }
+                    Text(stock.symbol, fontWeight = FontWeight.Bold)
+                    catalog.singleOrNull { it.symbol == stock.symbol }?.let { instrument -> LivePriceDisplay(instrument, livePrices) }
+                    Text("Peak RVOL ${formatPrice(stock.peakRelativeVolume)}× · latest scan RVOL ${row?.relativeVolume?.let { "${formatPrice(it)}×" } ?: "unavailable"}")
+                    Text(paperSignalDisplay(row), fontWeight = FontWeight.SemiBold)
+                    row?.technicals?.let { Text("Stoch RSI K ${formatPrice(it.stochK)} / D ${formatPrice(it.stochD)}", style = MaterialTheme.typography.bodySmall) }
+                    HorizontalDivider()
                 }
             }
         }

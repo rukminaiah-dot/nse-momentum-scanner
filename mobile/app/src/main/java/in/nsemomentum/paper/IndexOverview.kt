@@ -14,7 +14,7 @@ import java.util.Locale
 fun IndexOverview(report: IndexMarketReport?, enabled: Boolean, onRefresh: () -> Unit) {
     Text("Market indices", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
     Text("Nifty 50 · Sensex · Bank Nifty", style = MaterialTheme.typography.titleMedium)
-    Text("Web index rules: three rising 5-minute closes = Bullish; three falling closes = Bearish; otherwise Neutral. No RVOL filter. These do not use your 20 stock places.", style = MaterialTheme.typography.bodySmall)
+    Text("Web index rules: three rising 5-minute closes = Bullish; three falling closes = Bearish; otherwise Neutral. No RVOL filter. These do not use your 40 stock places.", style = MaterialTheme.typography.bodySmall)
     Button(enabled = enabled, onClick = onRefresh) { Text("Refresh index data") }
     val readings = report?.at(Instant.now())?.rows?.associateBy { it.symbol }.orEmpty()
     val names = mapOf("NIFTY50" to "Nifty 50 · NSE", "SENSEX" to "Sensex · BSE", "BANKNIFTY" to "Bank Nifty · NSE")
