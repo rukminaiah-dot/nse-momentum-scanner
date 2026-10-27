@@ -16,7 +16,19 @@ data class Candle(
     val volume: Double
 )
 
-data class TechnicalContext(val ema20: Double, val ema50: Double, val stochK: Double, val stochD: Double)
+data class TechnicalContext(val ema20: Double, val ema50: Double, val stochK: Double, val stochD: Double,
+                            val previousGap: Double? = null) {
+    val gap: Double get() = stochK - stochD
+    val momentum: String get() {
+        val previous = previousGap ?: return if (gap > 0) "Upward momentum" else if (gap < 0) "Downward momentum" else "K and D together"
+        if (gap > 0 && previous <= 0) return "New upward crossover"
+        if (gap < 0 && previous >= 0) return "New downward crossover"
+        if (gap == 0.0) return "K and D together"
+        val change = abs(gap) - abs(previous)
+        val strength = if (change > 0.01) "strengthening" else if (change < -0.01) "weakening" else "steady"
+        return (if (gap > 0) "Upward" else "Downward") + " momentum " + strength
+    }
+}
 
 data class PaperSignal(
     val signal: String = "WAIT",
@@ -57,19 +69,19 @@ object PaperStrategy {
         if (bars.size < 52 || bars.any { !validCandle(it) }) return null
         val closes = bars.map { it.close }
         val (k, d) = stochRsi(closes)
-        return TechnicalContext(ema(closes, 20).last(), ema(closes, 50).last(), k.last(), d.last())
+        return TechnicalContext(ema(closes, 20).last(), ema(closes, 50).last(), k.last(), d.last(), k[k.lastIndex - 1] - d[d.lastIndex - 1])
     }
 
     fun relativeVolume(currentVolume: Double, baseline: Double): Double? =
         if (currentVolume >= 0 && baseline > 0 && currentVolume.isFinite() && baseline.isFinite())
             currentVolume / baseline else null
 
-    /** Experimental momentum filters; indicators use the full verified history. Paper labels only. */
-    fun evaluate(bars: List<Candle>, now: Instant, sameSlotAverageVolume: Double?): PaperSignal {
+    /** Simple paper-only crossover strategy after volume qualification, using full verified history. */
+    fun evaluate(bars: List<Candle>, now: Instant, sameSlotAverageVolume: Double?,
+                 qualifiedToday: Boolean = false, hasActiveBuy: Boolean = false): PaperSignal {
         fun wait(reason: String) = PaperSignal(reason = reason)
-        val required = maxOf(52, 14 + 14 + 3 + 3 + 2, 4)
-        if (bars.size < required) return wait("INSUFFICIENT_15M_HISTORY")
-        val recent = bars.takeLast(required)
+        if (bars.size < 52) return wait("INSUFFICIENT_15M_HISTORY")
+        val recent = bars.takeLast(52)
         if (recent.map { it.timestamp }.toSet().size != recent.size) return wait("DUPLICATE_15M_CANDLE")
         for ((a, b) in recent.zipWithNext()) {
             val gap = ChronoUnit.MINUTES.between(a.timestamp, b.timestamp)
@@ -78,43 +90,32 @@ object PaperStrategy {
             if (sameDate && gap != 15L) return wait("NONCONTIGUOUS_15M_CANDLES")
         }
         val latest = recent.last()
-        val currentDay = latest.timestamp.atZone(marketZone).toLocalDate()
-        if (recent.takeLast(4).any { it.timestamp.atZone(marketZone).toLocalDate() != currentDay })
-            return wait("INSUFFICIENT_SAME_SESSION_BREAKOUT_BARS")
         val candleAge = ChronoUnit.SECONDS.between(latest.timestamp.plus(15, ChronoUnit.MINUTES), now) / 60.0
-        if (candleAge < 0 || candleAge > 18) return wait("STALE_OR_INCOMPLETE_15M_CANDLE")
-        if (sameSlotAverageVolume == null || !sameSlotAverageVolume.isFinite() || sameSlotAverageVolume <= 0)
-            return wait("MISSING_VERIFIED_20_SESSION_VOLUME_BASELINE")
-        if (recent.any { !it.close.isFinite() || it.close <= 0 }) return wait("INVALID_PRICE")
-        if (listOf(latest.open, latest.high, latest.low, latest.close, latest.volume).any { !it.isFinite() } ||
-            latest.high <= latest.low || latest.volume < 0) return wait("INVALID_CANDLE")
-        val rvol = relativeVolume(latest.volume, sameSlotAverageVolume) ?: return wait("INVALID_VOLUME_BASELINE")
-        if (rvol < 1.5) return wait("VOLUME_BELOW_THRESHOLD")
-        val body = abs(latest.close - latest.open) / (latest.high - latest.low)
-        if (body < 0.5) return wait("WEAK_CANDLE_BODY")
-
+        if (candleAge < 0 || candleAge > 18 || latest.timestamp.atZone(marketZone).toLocalDate() != now.atZone(marketZone).toLocalDate())
+            return wait("STALE_OR_INCOMPLETE_15M_CANDLE")
+        if (bars.any { !validCandle(it) }) return wait("INVALID_CANDLE")
+        val rvol = sameSlotAverageVolume?.let { relativeVolume(latest.volume, it) }
+        if (!qualifiedToday && !hasActiveBuy && (rvol == null || rvol < 1.5)) return wait("NOT_SHORTLISTED_TODAY")
         val closes = bars.map { it.close }
-        val fast = ema(closes, 20).lastOrNull() ?: return wait("INSUFFICIENT_EMA_HISTORY")
-        val slow = ema(closes, 50).lastOrNull() ?: return wait("INSUFFICIENT_EMA_HISTORY")
+        val fast = ema(closes, 20).last()
+        val slow = ema(closes, 50).last()
         val (k, d) = stochRsi(closes)
         if (k.size < 2 || d.size < 2) return wait("INSUFFICIENT_STOCH_RSI_HISTORY")
-        val bullishCross = k[k.lastIndex - 1] <= d[d.lastIndex - 1] && k.last() > d.last() && k.last() <= 20.0
-        val bearishCross = k[k.lastIndex - 1] >= d[d.lastIndex - 1] && k.last() < d.last() && k.last() >= 80.0
-        val prior = recent.takeLast(4).dropLast(1)
-        val range = latest.high - latest.low
-        val buy = fast > slow && latest.close > latest.open &&
-            latest.close >= latest.high - 0.25 * range &&
-            latest.close > prior.maxOf { it.high } && bullishCross
-        val sell = fast < slow && latest.close < latest.open &&
-            latest.close <= latest.low + 0.25 * range &&
-            latest.close < prior.minOf { it.low } && bearishCross
-        return PaperSignal(
-            signal = if (buy) "PAPER_BUY" else if (sell) "PAPER_SELL" else "WAIT",
-            reason = if (buy || sell) "15M_FILTERS_PASSED" else "NO_QUALIFYING_SETUP",
-            relativeVolume = (rvol * 1000).toInt() / 1000.0,
-            stochK = (k.last() * 100).toInt() / 100.0,
-            stochD = (d.last() * 100).toInt() / 100.0
-        )
+        val decision = crossoverSignal(fast, slow, k[k.lastIndex - 1], d[d.lastIndex - 1], k.last(), d.last(), hasActiveBuy)
+        return decision.copy(relativeVolume = rvol, stochK = k.last(), stochD = d.last())
+    }
+
+    internal fun crossoverSignal(ema20: Double, ema50: Double, previousK: Double, previousD: Double,
+                                 k: Double, d: Double, hasActiveBuy: Boolean): PaperSignal {
+        val bullishCross = previousK <= previousD && k > d
+        val bearishCross = previousK >= previousD && k < d
+        return when {
+            hasActiveBuy && bearishCross -> PaperSignal("PAPER_SELL", "BEARISH_CROSS_EXIT")
+            hasActiveBuy -> PaperSignal("PAPER_HOLD", "BUY_ACTIVE_WAITING_BEARISH_CROSS")
+            ema20 > ema50 && bullishCross -> PaperSignal("PAPER_BUY", "UPTREND_BULLISH_CROSS")
+            ema20 <= ema50 -> PaperSignal(reason = "EMA_TREND_NOT_UP")
+            else -> PaperSignal(reason = "NO_BULLISH_CROSS")
+        }
     }
 
     internal fun ema(values: List<Double>, period: Int): List<Double> {

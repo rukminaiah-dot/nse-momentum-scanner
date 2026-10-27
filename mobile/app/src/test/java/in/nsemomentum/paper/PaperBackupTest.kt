@@ -17,6 +17,9 @@ class PaperBackupTest {
     private val custom = Stock("CUSTOM", "NSE_EQ|CUSTOM", true)
     private fun history() = JSONObject().apply {
         PaperBackup.tables.keys.forEach { put(it, JSONArray()) }
+        getJSONArray("paper_signal_events").put(JSONObject()
+            .put("symbol", "BASE").put("signal_time", "2026-10-22T04:15:00Z")
+            .put("direction", 1).put("price", 100.0))
         getJSONArray("paper_outcomes").put(JSONObject()
             .put("symbol", "BASE").put("signal_time", "2026-10-22T04:00:00Z")
             .put("direction", 1).put("entry_time", "2026-10-22T04:15:00Z")
@@ -89,9 +92,16 @@ class PaperBackupTest {
             assertEquals(before, store.export())
         }
     }
+    @Test fun olderBackupsRemainReadableWithoutInventingActiveBuys() {
+        val legacy = JSONObject(PaperBackup.encode(snapshot())).put("version",1)
+        legacy.getJSONObject("history").remove("paper_signal_events")
+        val restored = PaperBackup.decode(legacy.toString(), base)
+        assertEquals(0,restored.history.getJSONArray("paper_signal_events").length())
+        assertEquals(1,restored.history.getJSONArray("daily_qualifications").length())
+    }
     @Test fun invalidAndFutureFilesAreRejectedBeforeImport() {
         val valid = PaperBackup.encode(snapshot())
-        rejects { PaperBackup.decode(JSONObject(valid).put("version", 2).toString(), base) }
+        rejects { PaperBackup.decode(JSONObject(valid).put("version", 99).toString(), base) }
         rejects { PaperBackup.decode(JSONObject(valid).put("token", "not-allowed").toString(), base) }
         rejects { PaperBackup.decode(JSONObject(valid).put("favourites", JSONArray(listOf("BASE", "BASE"))).toString(), base) }
         rejects { PaperBackup.decode(" ".repeat(PaperBackup.MAX_BYTES + 1), base) }

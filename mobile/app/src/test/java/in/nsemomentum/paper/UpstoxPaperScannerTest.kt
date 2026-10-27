@@ -21,10 +21,27 @@ class UpstoxPaperScannerTest {
 
     private class MemoryStore : CandleStore {
         val data = mutableMapOf<String, List<Candle>>()
+        var qualified = false
+        var activeBuy = false
+        override fun qualifiedOn(symbol: String, date: LocalDate) = qualified
+        override fun hasActivePaperBuy(symbol: String) = activeBuy
         override fun bars(symbol: String) = data[symbol].orEmpty()
         override fun save(symbol: String, bars: List<Candle>) {
             data[symbol] = (data[symbol].orEmpty() + bars).associateBy { it.timestamp }.values.sortedBy { it.timestamp }
         }
+    }
+    @Test fun qualifiedStockCanBuyOnFirstCandleDespiteLowLatestVolume() = runBlocking {
+        val store = MemoryStore().apply { qualified = true }
+        val feed = Feed().apply { intradayBars = listOf(bar(today.start,50.0).copy(close=10.8)) }
+        val report = UpstoxPaperScanner(store,feed).scan("test",listOf(universe.first()),setOf("ONE"),today.start.plusSeconds(901))
+        assertEquals("PAPER_BUY",report.rows.single().signal)
+        assertEquals(.5,report.rows.single().relativeVolume!!,0.0)
+    }
+    @Test fun activeBuyCanExitOnBearishCrossWithoutAnotherVolumeQualification() = runBlocking {
+        val store = MemoryStore().apply { activeBuy = true }
+        val feed = Feed().apply { intradayBars = listOf(bar(today.start,50.0).copy(close=10.2)) }
+        val report = UpstoxPaperScanner(store,feed).scan("test",listOf(universe.first()),setOf("ONE"),today.start.plusSeconds(901))
+        assertEquals("PAPER_SELL",report.rows.single().signal)
     }
     private inner class Feed : CandleFeed {
         val paths = mutableListOf<String>()

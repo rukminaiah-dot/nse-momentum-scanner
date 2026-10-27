@@ -8,16 +8,27 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZonedDateTime
 
-class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candles.db", null, 3), CandleStore {
+class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candles.db", null, 4), CandleStore {
     override fun onCreate(db: SQLiteDatabase) {
         createCandles(db)
         createHistoryAttempts(db)
         createAnalytics(db)
+        createSignalEvents(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 2) createHistoryAttempts(db)
         if (oldVersion < 3) createAnalytics(db)
+        if (oldVersion < 4) {
+            createSignalEvents(db)
+            val existing = mutableSetOf<String>()
+            db.rawQuery("PRAGMA table_info(latest_scan_rows)", null).use { cursor ->
+                while (cursor.moveToNext()) existing += cursor.getString(1)
+            }
+            for (column in listOf("ema20", "ema50", "stoch_k", "stoch_d", "previous_gap")) {
+                if (column !in existing) db.execSQL("ALTER TABLE latest_scan_rows ADD COLUMN $column REAL")
+            }
+        }
     }
 
     private fun createCandles(db: SQLiteDatabase) {
@@ -92,10 +103,47 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
                 high REAL,
                 low REAL,
                 close REAL,
-                volume REAL
+                volume REAL,
+                ema20 REAL, ema50 REAL, stoch_k REAL, stoch_d REAL, previous_gap REAL
             )"""
         )
         db.execSQL("CREATE INDEX IF NOT EXISTS paper_outcome_time ON paper_outcomes(signal_time)")
+    }
+
+    private fun createSignalEvents(db: SQLiteDatabase) {
+        db.execSQL("""CREATE TABLE IF NOT EXISTS paper_signal_events(
+            symbol TEXT NOT NULL, signal_time TEXT NOT NULL, direction INTEGER NOT NULL,
+            price REAL NOT NULL, PRIMARY KEY(symbol, signal_time))""")
+    }
+
+    override fun qualifiedOn(symbol: String, date: LocalDate): Boolean = readableDatabase.rawQuery(
+        "SELECT 1 FROM daily_qualifications WHERE symbol=? AND session_date=? LIMIT 1",
+        arrayOf(symbol, date.toString())
+    ).use { it.moveToFirst() }
+
+    override fun hasActivePaperBuy(symbol: String): Boolean = lastSignal(readableDatabase, symbol)?.second == 1
+
+    override fun recordedPaperSignal(symbol: String, candleStart: Instant): String? = readableDatabase.rawQuery(
+        "SELECT direction FROM paper_signal_events WHERE symbol=? AND signal_time=?", arrayOf(symbol, candleStart.plusSeconds(900).toString())
+    ).use { if (it.moveToFirst()) (if (it.getInt(0) == 1) "PAPER_BUY" else "PAPER_SELL") else null }
+
+    private fun lastSignal(db: SQLiteDatabase, symbol: String): Pair<Instant, Int>? = db.rawQuery(
+        "SELECT signal_time,direction FROM paper_signal_events WHERE symbol=? ORDER BY signal_time DESC LIMIT 1", arrayOf(symbol)
+    ).use { if (it.moveToFirst()) Instant.parse(it.getString(0)) to it.getInt(1) else null }
+
+    private fun recordSignalEvent(db: SQLiteDatabase, row: ScanRow) {
+        val candle = row.candle ?: return
+        if (StockCatalog.indices.any { it.symbol == row.symbol }) return
+        val direction = when (row.signal) { "PAPER_BUY" -> 1; "PAPER_SELL" -> -1; else -> return }
+        val time = candle.timestamp.plusSeconds(900)
+        val last = lastSignal(db, row.symbol)
+        if (last != null && time <= last.first) return
+        if (direction == -1 && last?.second != 1 || direction == 1 && last?.second == 1) return
+        val values = ContentValues().apply {
+            put("symbol", row.symbol); put("signal_time", time.toString())
+            put("direction", direction); put("price", candle.close)
+        }
+        db.insertWithOnConflict("paper_signal_events", null, values, SQLiteDatabase.CONFLICT_IGNORE)
     }
 
     override fun save(symbol: String, bars: List<Candle>) {
@@ -143,7 +191,10 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
                 if (candle != null && row.relativeVolume != null && row.relativeVolume >= 1.5) {
                     upsertQualification(db, sessionDate, row, scannedAt)
                 }
-                if (candle != null) advancePaperOutcome(db, row)
+                if (candle != null) {
+                    recordSignalEvent(db, row)
+                    advancePaperOutcome(db, row)
+                }
             }
             db.setTransactionSuccessful()
         } finally {
@@ -252,7 +303,7 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
         db.query(
             "latest_scan_rows",
             arrayOf("symbol", "candle_time", "signal", "reason", "relative_volume", "average_slot_volume",
-                "daily_change_percent", "open", "high", "low", "close", "volume"),
+                "daily_change_percent", "open", "high", "low", "close", "volume", "ema20", "ema50", "stoch_k", "stoch_d", "previous_gap"),
             null, null, null, null, "symbol ASC"
         ).use { cursor ->
             while (cursor.moveToNext()) {
@@ -269,7 +320,10 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
                     relativeVolume = if (cursor.isNull(4)) null else cursor.getDouble(4),
                     candle = candle,
                     averageSlotVolume = if (cursor.isNull(5)) null else cursor.getDouble(5),
-                    dailyChangePercent = if (cursor.isNull(6)) null else cursor.getDouble(6)
+                    dailyChangePercent = if (cursor.isNull(6)) null else cursor.getDouble(6),
+                    technicals = if ((12..15).any { cursor.isNull(it) }) null else TechnicalContext(
+                        cursor.getDouble(12), cursor.getDouble(13), cursor.getDouble(14), cursor.getDouble(15),
+                        if (cursor.isNull(16)) null else cursor.getDouble(16))
                 )
             }
         }
@@ -352,7 +406,7 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
 
     fun clearAll() {
         val db = writableDatabase
-        listOf("candles", "history_attempts", "daily_qualifications", "pending_paper_signals", "paper_outcomes", "latest_scan_rows")
+        listOf("candles", "history_attempts", "daily_qualifications", "pending_paper_signals", "paper_outcomes", "latest_scan_rows", "paper_signal_events")
             .forEach { db.delete(it, null, null) }
     }
 
@@ -368,6 +422,10 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
         row.relativeVolume?.let { put("relative_volume", it) }
         row.averageSlotVolume?.let { put("average_slot_volume", it) }
         row.dailyChangePercent?.let { put("daily_change_percent", it) }
+        row.technicals?.let {
+            put("ema20", it.ema20); put("ema50", it.ema50); put("stoch_k", it.stochK); put("stoch_d", it.stochD)
+            it.previousGap?.let { gap -> put("previous_gap", gap) }
+        }
         row.candle?.let { put("open", it.open); put("high", it.high); put("low", it.low); put("close", it.close); put("volume", it.volume) }
     }
 }
