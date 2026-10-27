@@ -700,6 +700,7 @@ class FivePageUiTests(unittest.TestCase):
         root = pathlib.Path(__file__).resolve().parents[1]
         config = json.loads((root / "v2/frontend/vercel.json").read_text(encoding="utf-8"))
         expected = {
+            "/api/v2/daily-shortlist": "https://nse-momentum-scanner-api.onrender.com/api/v2/daily-shortlist",
             "/api/v2/scanner": "https://nse-momentum-scanner-api.onrender.com/api/v2/scanner",
             "/api/v2/top-momentum-setups": "https://nse-momentum-scanner-api.onrender.com/api/v2/top-momentum-setups",
             "/api/v2/top-volume-surge": "https://nse-momentum-scanner-api.onrender.com/api/v2/top-volume-surge",
