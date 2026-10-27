@@ -2,6 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
+      "source": "/api/v2/daily-shortlist",
+      "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/daily-shortlist"
+    },
+    {
       "source": "/api/v2/decision-learning",
       "destination": "https://nse-momentum-scanner-api.onrender.com/api/v2/decision-learning"
     },
