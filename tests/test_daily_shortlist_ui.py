@@ -24,3 +24,9 @@ renderPaperStockScreen();console.log(JSON.stringify({table:elements['paper-stock
     assert '18.00 / 17.00' in data['table']
     assert 'DONE' in data['completed'] and 'No prior BUY recorded' in data['completed']
     assert 'Not applicable' in data['completed']
+
+
+def test_daily_shortlist_browser_route_reaches_the_backend():
+    config=json.loads(Path('v2/frontend/vercel.json').read_text())
+    route=next(row for row in config['rewrites'] if row['source']=='/api/v2/daily-shortlist')
+    assert route['destination']=='https://nse-momentum-scanner-api.onrender.com/api/v2/daily-shortlist'
