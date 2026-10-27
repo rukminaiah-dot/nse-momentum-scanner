@@ -100,7 +100,7 @@ def evaluate(bars, *, now, same_slot_average_volume, settings=Settings()):
     if (not isinstance(same_slot_average_volume, (int, float)) or not isfinite(same_slot_average_volume) or same_slot_average_volume <= 0):
         return wait("MISSING_VERIFIED_20_SESSION_VOLUME_BASELINE")
     try:
-        values = [float(bar["close"]) for bar in recent]
+        values = [float(bar["close"]) for bar in bars]
         if not all(isfinite(x) and x > 0 for x in values):
             return wait("INVALID_PRICE")
         high, low, opn, close = (float(latest[key]) for key in ("high", "low", "open", "close"))

@@ -1310,3 +1310,33 @@ def quality_ratings():
     return output
 
 
+
+
+_daily_shortlist_service = None
+
+@app.on_event("startup")
+def start_daily_shortlist():
+    global _daily_shortlist_service
+    from .daily_shortlist import DailyShortlist
+    _daily_shortlist_service = DailyShortlist()
+    _daily_shortlist_service.start()
+
+@app.on_event("shutdown")
+def stop_daily_shortlist():
+    if _daily_shortlist_service is not None:
+        _daily_shortlist_service.stop.set()
+
+@app.get("/api/v2/daily-shortlist")
+def daily_shortlist(session_date: str = None):
+    if session_date is not None:
+        from datetime import date
+        from fastapi import HTTPException
+        try:
+            session_date = date.fromisoformat(session_date).isoformat()
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Use an ISO session date: YYYY-MM-DD")
+    if _daily_shortlist_service is None:
+        from .daily_shortlist import empty_day, IST
+        from datetime import datetime
+        return empty_day(datetime.now(IST).date())
+    return _daily_shortlist_service.snapshot(session_date=session_date)
