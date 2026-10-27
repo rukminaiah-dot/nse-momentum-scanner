@@ -13,6 +13,10 @@ import org.robolectric.annotation.Config
 @Config(sdk = [28])
 class PaperSignalPersistenceTest {
     private val start = LocalDate.parse("2026-10-27").atTime(9,15).atZone(MarketSession.ZONE).toInstant()
+    private fun withDatabase(context: Context, block: (CandleDatabase) -> Unit) {
+        val db = CandleDatabase(context)
+        try { block(db) } finally { db.close() }
+    }
     private fun row(signal: String, offset: Long = 0) = ScanRow("TEST", signal = signal, reason = "TEST", relativeVolume = 2.0,
         candle = Candle(start.plusSeconds(offset),100.0,102.0,99.0,101.0,200.0),
         technicals = TechnicalContext(110.0,100.0,60.0,50.0,5.0))
@@ -21,14 +25,14 @@ class PaperSignalPersistenceTest {
     @Test fun restartDuplicateScansAndSellPreserveExactlyOneBuyAndOneSell() {
         val context = RuntimeEnvironment.getApplication() as Context
         context.deleteDatabase("paper_candles.db")
-        CandleDatabase(context).use { db ->
+        withDatabase(context) { db ->
             save(db,row("PAPER_BUY"));save(db,row("PAPER_BUY"))
             assertTrue(db.hasActivePaperBuy("TEST"))
             assertEquals(1,db.exportPaperHistory().getJSONArray("paper_signal_events").length())
             assertEquals(10.0,db.latestScanReport()!!.rows.single().technicals!!.gap,0.0)
             assertEquals(5.0,db.latestScanReport()!!.rows.single().technicals!!.previousGap!!,0.0)
         }
-        CandleDatabase(context).use { db ->
+        withDatabase(context) { db ->
             assertTrue(db.hasActivePaperBuy("TEST"))
             save(db,row("PAPER_SELL",900));save(db,row("PAPER_SELL",900))
             assertFalse(db.hasActivePaperBuy("TEST"))
@@ -41,7 +45,7 @@ class PaperSignalPersistenceTest {
     @Test fun aSellWithoutBuyDoesNotCreateAnExitRecord() {
         val context = RuntimeEnvironment.getApplication() as Context
         context.deleteDatabase("paper_candles.db")
-        CandleDatabase(context).use { db ->
+        withDatabase(context) { db ->
             save(db,row("PAPER_SELL"))
             assertEquals(0,db.exportPaperHistory().getJSONArray("paper_signal_events").length())
         }
@@ -55,7 +59,7 @@ class PaperSignalPersistenceTest {
             old.execSQL("CREATE TABLE latest_scan_rows(symbol TEXT PRIMARY KEY,scanned_at TEXT,candle_time TEXT,signal TEXT,reason TEXT,relative_volume REAL,average_slot_volume REAL,daily_change_percent REAL,open REAL,high REAL,low REAL,close REAL,volume REAL)")
             old.version=3
         }
-        CandleDatabase(context).use { db ->
+        withDatabase(context) { db ->
             assertTrue(db.qualifiedOn("TEST",LocalDate.parse("2026-10-27")))
             assertFalse(db.hasActivePaperBuy("TEST"))
             assertNotNull(db.writableDatabase)
