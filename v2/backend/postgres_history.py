@@ -7,7 +7,7 @@ def init_history():
         print("DATABASE_URL not set; PostgreSQL history skipped")
         return
 
-    with psycopg.connect(url) as con:
+    with psycopg.connect(url, connect_timeout=5, options='-c statement_timeout=5000') as con:
         con.execute("""
             CREATE TABLE IF NOT EXISTS daily_trade_history (
                 id BIGSERIAL PRIMARY KEY,
@@ -108,7 +108,7 @@ def init_active_trade_backup():
         print("Active trade backup skipped: DATABASE_URL missing")
         return
 
-    with psycopg.connect(url) as con:
+    with psycopg.connect(url, connect_timeout=5, options='-c statement_timeout=5000') as con:
         con.execute("""
             CREATE TABLE IF NOT EXISTS active_trade_backup (
                 trade_uuid TEXT PRIMARY KEY,
