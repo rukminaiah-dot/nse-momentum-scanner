@@ -97,15 +97,13 @@ object PaperStrategy {
         val rvol = sameSlotAverageVolume?.let { relativeVolume(latest.volume, it) }
         if (!qualifiedToday && !hasActiveBuy && (rvol == null || rvol < 1.5)) return wait("NOT_SHORTLISTED_TODAY")
         val closes = bars.map { it.close }
-        val fast = ema(closes, 20).last()
-        val slow = ema(closes, 50).last()
         val (k, d) = stochRsi(closes)
         if (k.size < 2 || d.size < 2) return wait("INSUFFICIENT_STOCH_RSI_HISTORY")
-        val decision = crossoverSignal(fast, slow, k[k.lastIndex - 1], d[d.lastIndex - 1], k.last(), d.last(), hasActiveBuy)
+        val decision = crossoverSignal( k[k.lastIndex - 1], d[d.lastIndex - 1], k.last(), d.last(), hasActiveBuy)
         return decision.copy(relativeVolume = rvol, stochK = k.last(), stochD = d.last())
     }
 
-    internal fun crossoverSignal(ema20: Double, ema50: Double, previousK: Double, previousD: Double,
+    internal fun crossoverSignal(previousK: Double, previousD: Double,
                                  k: Double, d: Double, hasActiveBuy: Boolean): PaperSignal {
         val bullishCross = previousK <= previousD && k > d
         return when {
