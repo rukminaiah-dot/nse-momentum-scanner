@@ -28,7 +28,11 @@ class SimpleCrossoverTest {
         assertEquals("PAPER_SELL", PaperStrategy.crossoverSignal(110.0,100.0,70.0,65.0,60.0,65.0,true).signal)
         assertEquals("WAIT", PaperStrategy.crossoverSignal(110.0,100.0,70.0,65.0,60.0,65.0,false).signal)
         assertEquals("PAPER_HOLD", PaperStrategy.crossoverSignal(110.0,100.0,30.0,35.0,40.0,35.0,true).signal)
-        assertEquals("WAIT", PaperStrategy.crossoverSignal(90.0,100.0,30.0,35.0,40.0,35.0,false).signal)
+        assertEquals("PAPER_BUY", PaperStrategy.crossoverSignal(90.0,100.0,30.0,35.0,40.0,35.0,false).signal)
+    }
+    @Test fun missedBearishCrossStillClosesActiveBuy() {
+        assertEquals("PAPER_SELL", PaperStrategy.crossoverSignal(90.0,100.0,10.0,30.0,2.74,23.30,true).signal)
+        assertEquals("WAIT", PaperStrategy.crossoverSignal(90.0,100.0,10.0,30.0,2.74,23.30,false).signal)
     }
     @Test fun incompleteOrStaleCandlesStillCannotBuy() {
         val bars = candles(200.0)

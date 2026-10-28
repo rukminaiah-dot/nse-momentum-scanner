@@ -121,6 +121,14 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
         arrayOf(symbol, date.toString())
     ).use { it.moveToFirst() }
 
+    fun paperTradeHistory(): List<PaperTrade> {
+        val events = mutableListOf<PaperTradeEvent>()
+        readableDatabase.rawQuery("SELECT symbol,signal_time,direction,price FROM paper_signal_events ORDER BY signal_time", null).use { cursor ->
+            while (cursor.moveToNext()) events += PaperTradeEvent(cursor.getString(0), Instant.parse(cursor.getString(1)), cursor.getInt(2), cursor.getDouble(3))
+        }
+        return paperTrades(events)
+    }
+
     override fun hasActivePaperBuy(symbol: String): Boolean = lastSignal(readableDatabase, symbol)?.second == 1
 
     override fun recordedPaperSignal(symbol: String, candleStart: Instant): String? = readableDatabase.rawQuery(

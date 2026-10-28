@@ -141,8 +141,8 @@ class UpstoxPaperScanner(
                 qualifiedToday = database.qualifiedOn(symbol, today.date),
                 hasActiveBuy = database.hasActivePaperBuy(symbol))
             val recorded = database.recordedPaperSignal(symbol, target)
-            if (recorded != null && evaluated.reason in setOf("UPTREND_BULLISH_CROSS", "BEARISH_CROSS_EXIT", "BUY_ACTIVE_WAITING_BEARISH_CROSS", "EMA_TREND_NOT_UP", "NO_BULLISH_CROSS", "NOT_SHORTLISTED_TODAY"))
-                evaluated.copy(signal = recorded, reason = if (recorded == "PAPER_BUY") "UPTREND_BULLISH_CROSS" else "BEARISH_CROSS_EXIT")
+            if (recorded != null && evaluated.reason in setOf("BULLISH_CROSS", "BEARISH_CROSS_EXIT", "BUY_ACTIVE_WAITING_BEARISH_CROSS", "EMA_TREND_NOT_UP", "NO_BULLISH_CROSS", "NOT_SHORTLISTED_TODAY"))
+                evaluated.copy(signal = recorded, reason = if (recorded == "PAPER_BUY") "BULLISH_CROSS" else "BEARISH_CROSS_EXIT")
             else evaluated
         } else PaperSignal(
             signal = if ((rvol ?: 0.0) >= 1.5) "VOLUME_QUALIFIED" else "WAIT",

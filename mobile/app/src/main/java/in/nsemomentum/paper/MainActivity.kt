@@ -134,6 +134,9 @@ private fun PaperScannerApp() {
     var autoScanActive by remember { mutableStateOf(preferences.getBoolean(PaperScanService.PREF_ACTIVE, false)) }
     var autoScanStatus by remember { mutableStateOf(preferences.getString(PaperScanService.PREF_STATUS, "Full-day scan is off.") ?: "Full-day scan is off.") }
     var qualifiedToday by remember { mutableStateOf(emptyList<QualifiedStock>()) }
+    var liveStochastic by remember { mutableStateOf(emptyMap<String, LiveStochastic>()) }
+    var paperTrades by remember { mutableStateOf(emptyList<PaperTrade>()) }
+    var previewSampledAt by remember { mutableStateOf(java.time.Instant.now()) }
     var weeklySummary by remember { mutableStateOf(emptyList<DailyPaperSummary>()) }
     var weeklyOutcomes by remember { mutableStateOf(emptyList<PaperOutcome>()) }
     var tokenConfigured by remember { mutableStateOf(tokenStore.read() != null) }
@@ -297,6 +300,26 @@ private fun PaperScannerApp() {
             weeklyOutcomes = snapshot.third
             weeklySummary = PaperOutcomeLogic.summarize(snapshot.third, today.minusDays(6), today)
             delay(15_000)
+        }
+    }
+    LaunchedEffect(Unit) {
+        priceLifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                val now = java.time.Instant.now()
+                val state = livePrices
+                val instruments = stocks.filter { stock -> qualifiedToday.any { it.symbol == stock.symbol } && stock.symbol in favourites }
+                val snapshot = withContext(Dispatchers.IO) {
+                    instruments.mapNotNull { stock ->
+                        LiveStochasticPreview.calculate(database.bars(stock.instrumentKey), state.quotes[stock.instrumentKey], now,
+                            state.connected, state.markets[stock.instrumentKey.substringBefore('|')] == true)
+                            ?.let { stock.symbol to it }
+                    }.toMap() to database.paperTradeHistory()
+                }
+                liveStochastic = snapshot.first
+                paperTrades = snapshot.second
+                previewSampledAt = now
+                delay(10_000)
+            }
         }
     }
     LaunchedEffect(report) {
@@ -468,6 +491,9 @@ private fun PaperScannerApp() {
                 qualifiedToday = qualifiedToday,
                 catalog = stocks.toList(),
                 livePrices = livePrices,
+                liveStochastic = liveStochastic,
+                paperTrades = paperTrades,
+                previewSampledAt = previewSampledAt,
                 onRefreshPrices = { liveTokenRevision++ },
                 pricesRefreshEnabled = tokenConfigured && priceKeys.isNotEmpty(),
                 weeklySummary = weeklySummary,
@@ -611,7 +637,7 @@ private fun PaperScannerApp() {
                             Text("Prices stream while this app is open. Last-trade times show quote freshness. Paper signals use completed 15-minute candles.", style = MaterialTheme.typography.bodySmall)
                             Spacer(Modifier.height(12.dp))
                             Text("15-MINUTE PAPER SIGNALS", fontWeight = FontWeight.Bold)
-                            Text("Volume qualifies stocks once for the day. BUY: EMA20 above EMA50 and K crosses above D. SELL after BUY: K crosses below D. Completed 15-minute candles only; K−D distance is context, not a filter. Indices keep their separate rules.", style = MaterialTheme.typography.bodySmall) }
+                            Text("Volume qualifies stocks once for the day. BUY: K crosses above D, without an EMA filter. SELL after BUY: K is below D (including a missed crossover). Completed 15-minute candles only; K−D distance is context, not a filter. Indices keep their separate rules.", style = MaterialTheme.typography.bodySmall) }
                         items(selectedStocks, key = { it.symbol }) { stock ->
                             val row = bySymbol[stock.symbol]
                             Card(Modifier.fillMaxWidth()) {
@@ -702,6 +728,9 @@ private fun Dashboard(
     qualifiedToday: List<QualifiedStock>,
     catalog: List<Stock>,
     livePrices: LivePriceState,
+    liveStochastic: Map<String, LiveStochastic>,
+    paperTrades: List<PaperTrade>,
+    previewSampledAt: java.time.Instant,
     onRefreshPrices: () -> Unit,
     pricesRefreshEnabled: Boolean,
     weeklySummary: List<DailyPaperSummary>,
@@ -752,14 +781,29 @@ private fun Dashboard(
                     catalog.singleOrNull { it.symbol == stock.symbol }?.let { instrument -> LivePriceDisplay(instrument, livePrices) }
                     Text("Peak RVOL ${formatPrice(stock.peakRelativeVolume)}× · latest scan RVOL ${row?.relativeVolume?.let { "${formatPrice(it)}×" } ?: "unavailable"}")
                     Text(paperSignalDisplay(row), fontWeight = FontWeight.SemiBold)
+                    val preview = liveStochastic[stock.symbol]
+                    val instrument = catalog.singleOrNull { it.symbol == stock.symbol }
+                    val quote = instrument?.let { livePrices.quotes[it.instrumentKey] }
+                    val previewFresh = preview != null && quote != null && livePrices.connected &&
+                        livePrices.markets[quote.instrumentKey.substringBefore('|')] == true &&
+                        java.time.Duration.between(preview.sampledAt, java.time.Instant.now()).seconds in 0..20 &&
+                        java.time.Duration.between(quote.tradedAt, java.time.Instant.now()).seconds in 0..30
+                    if (previewFresh) {
+                        Text("Live Stoch RSI · forming 15m candle · provisional", fontWeight = FontWeight.SemiBold)
+                        Text("K ${formatPrice(preview!!.context.stochK)} / D ${formatPrice(preview.context.stochD)} · ${clockTime(preview.sampledAt)}", style = MaterialTheme.typography.bodySmall)
+                        Text(stochasticGapDisplay(preview.context), style = MaterialTheme.typography.bodySmall)
+                    } else Text("Live Stoch RSI unavailable · waiting for fresh quote / completed history", style = MaterialTheme.typography.bodySmall)
                     row?.technicals?.let {
-                        Text("Stoch RSI K ${formatPrice(it.stochK)} / D ${formatPrice(it.stochD)}", style = MaterialTheme.typography.bodySmall)
+                        Text("Confirmed 15m Stoch RSI K ${formatPrice(it.stochK)} / D ${formatPrice(it.stochD)} · candle ${row.candle?.timestamp?.plusSeconds(900)?.let(::clockTime) ?: "unavailable"}", style = MaterialTheme.typography.bodySmall)
                         Text(stochasticGapDisplay(it), style = MaterialTheme.typography.bodySmall)
                     }
+                    PaperTradesTable(paperTrades.filter { it.symbol == stock.symbol }, quote?.price,
+                        quote?.label(previewSampledAt, livePrices.connected, instrument?.let { livePrices.markets[it.instrumentKey.substringBefore('|')] } == true))
                     HorizontalDivider()
                 }
             }
         }
+        PaperTradesTable(paperTrades, null, null, allTrades = true)
         PaperWeeklyChart(weeklySummary, weeklyOutcomes)
     }
 }
