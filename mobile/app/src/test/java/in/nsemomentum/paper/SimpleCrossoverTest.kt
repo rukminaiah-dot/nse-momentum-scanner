@@ -25,10 +25,14 @@ class SimpleCrossoverTest {
         assertEquals("PAPER_BUY", PaperStrategy.evaluate(bars, now, 100.0, qualifiedToday = true).signal)
     }
     @Test fun sellRequiresExistingBuyAndDoesNotRequireOverboughtOrDownwardEmaTrend() {
-        assertEquals("PAPER_SELL", PaperStrategy.crossoverSignal(110.0,100.0,70.0,65.0,60.0,65.0,true).signal)
-        assertEquals("WAIT", PaperStrategy.crossoverSignal(110.0,100.0,70.0,65.0,60.0,65.0,false).signal)
-        assertEquals("PAPER_HOLD", PaperStrategy.crossoverSignal(110.0,100.0,30.0,35.0,40.0,35.0,true).signal)
-        assertEquals("WAIT", PaperStrategy.crossoverSignal(90.0,100.0,30.0,35.0,40.0,35.0,false).signal)
+        assertEquals("PAPER_SELL", PaperStrategy.crossoverSignal(70.0,65.0,60.0,65.0,true).signal)
+        assertEquals("WAIT", PaperStrategy.crossoverSignal(70.0,65.0,60.0,65.0,false).signal)
+        assertEquals("PAPER_HOLD", PaperStrategy.crossoverSignal(30.0,35.0,40.0,35.0,true).signal)
+        assertEquals("PAPER_BUY", PaperStrategy.crossoverSignal(30.0,35.0,40.0,35.0,false).signal)
+    }
+    @Test fun missedBearishCrossStillClosesActiveBuy() {
+        assertEquals("PAPER_SELL", PaperStrategy.crossoverSignal(10.0,30.0,2.74,23.30,true).signal)
+        assertEquals("WAIT", PaperStrategy.crossoverSignal(10.0,30.0,2.74,23.30,false).signal)
     }
     @Test fun incompleteOrStaleCandlesStillCannotBuy() {
         val bars = candles(200.0)
@@ -40,6 +44,6 @@ class SimpleCrossoverTest {
         assertEquals("Upward momentum weakening", TechnicalContext(110.0,100.0,60.0,50.0,15.0).momentum)
         assertEquals("Downward momentum strengthening", TechnicalContext(110.0,100.0,40.0,50.0,-5.0).momentum)
         assertEquals("New upward crossover", TechnicalContext(110.0,100.0,51.0,50.0,-1.0).momentum)
-        assertEquals("PAPER_BUY", PaperStrategy.crossoverSignal(110.0,100.0,49.0,50.0,50.01,50.0,false).signal)
+        assertEquals("PAPER_BUY", PaperStrategy.crossoverSignal(49.0,50.0,50.01,50.0,false).signal)
     }
 }
