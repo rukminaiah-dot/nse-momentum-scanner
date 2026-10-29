@@ -13,7 +13,7 @@ class IndexMarketScannerTest {
     private val now = today.start.plusSeconds(3601)
     private class Store : CandleStore {
         override fun bars(symbol: String) = emptyList<Candle>()
-        override fun save(symbol: String, bars: List<Candle>) { error("Index minutes must not contaminate the stock 15m cache") }
+        override fun save(symbol: String, bars: List<Candle>) { assertTrue("5m history must be isolated from stock 15m cache", symbol.startsWith("index5:")) }
     }
     private fun minutes(s: MarketSession, count: Int = 375) = (0 until count).map {
         val price = 100.0 + it

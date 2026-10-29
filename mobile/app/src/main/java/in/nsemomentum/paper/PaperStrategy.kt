@@ -105,11 +105,11 @@ object PaperStrategy {
 
     internal fun crossoverSignal(previousK: Double, previousD: Double,
                                  k: Double, d: Double, hasActiveBuy: Boolean): PaperSignal {
-        val bullishCross = previousK <= previousD && k > d
+        val bullishCross = k > d
         return when {
             hasActiveBuy && k < d -> PaperSignal("PAPER_SELL", "BEARISH_CROSS_EXIT")
             hasActiveBuy -> PaperSignal("PAPER_HOLD", "BUY_ACTIVE_WAITING_BEARISH_CROSS")
-            bullishCross -> PaperSignal("PAPER_BUY", "BULLISH_CROSS")
+            bullishCross -> PaperSignal("PAPER_BUY", "BULLISH_ALIGNMENT")
             else -> PaperSignal(reason = "NO_BULLISH_CROSS")
         }
     }

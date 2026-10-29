@@ -183,7 +183,7 @@ class UpstoxLivePrices(
                 })
                 while (currentCoroutineContext().isActive) {
                     when (val event = withTimeout(30_000) { events.receive() }) {
-                        Event.Open -> { state = state.copy(status = "Connected · waiting for market data", connected = true, markets = emptyMap()); emit(state) }
+                        Event.Open -> { DiagnosticLog.event("LIVE_STREAM","CONNECTED"); state = state.copy(status = "Connected · waiting for market data", connected = true, markets = emptyMap()); emit(state) }
                         is Event.Data -> {
                             val frame = LivePriceDecoder.decode(event.bytes, keys, Instant.now())
                             state = state.copy(status = "Upstox price stream connected", connected = true,
@@ -203,6 +203,7 @@ class UpstoxLivePrices(
                 emit(LivePriceState(status = "Upstox rejected the token. Update it in Settings."))
                 awaitCancellation()
             }
+            DiagnosticLog.event("LIVE_STREAM",if (authenticationFailed) "AUTH_REQUIRED" else "RECONNECTING")
             state = state.copy(status = "Price connection interrupted · retrying", connected = false, markets = emptyMap())
             emit(state)
             delay((1000L shl failures.coerceAtMost(5)).coerceAtMost(30_000))

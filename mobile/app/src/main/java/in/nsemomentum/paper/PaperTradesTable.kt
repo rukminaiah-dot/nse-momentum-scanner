@@ -53,3 +53,24 @@ fun PaperTradesTable(trades: List<PaperTrade>, mark: Double?, markLabel: String?
 
 @Composable
 private fun TradeCell(value: String) { Text(value, Modifier.width(150.dp).padding(6.dp), style = MaterialTheme.typography.bodySmall) }
+
+@Composable
+fun CompletedTradeSummary(trades: List<PaperTrade>) {
+    val today = java.time.LocalDate.now(MarketSession.ZONE)
+    val closed = trades.filter { it.soldAt?.atZone(MarketSession.ZONE)?.toLocalDate()?.let { date -> date in today.minusDays(6)..today } == true && it.sell != null }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text("BUY → SELL performance · last 7 days", fontWeight=FontWeight.Bold)
+            Text("Completed recorded pairs only · gross before charges / slippage · one share per trade")
+            val wins = closed.count { it.gross(null)!! > 0 }
+            val losses = closed.count { it.gross(null)!! < 0 }
+            val flat = closed.size - wins - losses
+            Text(if (closed.isEmpty()) "No completed BUY-to-SELL trades" else
+                "${closed.size} completed · $wins wins / $losses losses / $flat flat · %.2f%% wins".format(wins * 100.0 / closed.size))
+            Text("Gross P&L (one share each): ₹${money(closed.sumOf { it.gross(null)!! })}")
+            val average = closed.mapNotNull { it.percent(null) }.average()
+            Text(if (closed.isEmpty()) "Average return: —" else "Average return: ${money(average)}%")
+            PaperTradesTable(closed,null,null,true)
+        }
+    }
+}

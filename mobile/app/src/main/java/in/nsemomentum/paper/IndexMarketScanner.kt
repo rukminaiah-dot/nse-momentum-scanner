@@ -17,7 +17,11 @@ data class IndexReading(
     val sma21: Double? = null,
     val dayChangePercent: Double? = null,
     val signal: String = "WAIT",
-    val reason: String = "NO_INDEX_SCAN"
+    val reason: String = "NO_INDEX_SCAN",
+    val refreshedAt: Instant? = null,
+    val lastError: String? = null,
+    val previousDirection: String? = null,
+    val changedAt: Instant? = null
 ) {
     fun at(now: Instant): IndexReading {
         val bar = candle ?: return copy(state = IndexDataState.UNAVAILABLE, signal = "WAIT")
@@ -53,6 +57,7 @@ object IndexDirectionStrategy {
 
 /** Independent web-compatible index direction; never applies stock volume rules. */
 class IndexMarketScanner(private val database: CandleStore, private val feed: CandleFeed = UpstoxCandleFeed(), private val timeoutMillis: Long = 240_000) {
+    private val previousHistory = synchronized(historyCaches) { historyCaches.getOrPut(feed) { java.util.concurrent.ConcurrentHashMap() } }
     suspend fun scan(token: String, now: Instant = Instant.now(), onProgress: suspend (Int, Int, String) -> Unit = { _, _, _ -> }): IndexMarketReport = withTimeout(timeoutMillis) {
         require(token.isNotBlank())
         val calendars = mutableMapOf<Pair<String, LocalDate>, MarketSession?>()
@@ -91,8 +96,9 @@ class IndexMarketScanner(private val database: CandleStore, private val feed: Ca
                 var previous: MarketSession? = null
                 cursor = market.date.minusDays(1)
                 repeat(90) { if (previous == null) { previous = session(exchange, cursor); cursor = cursor.minusDays(1) } }
+                var previousMinutes = emptyList<Candle>()
                 val previousClose = previous?.let { s ->
-                    try { download(s).singleOrNull { it.timestamp == s.end.minusSeconds(60) }?.close }
+                    try { previousMinutes = previousHistory[instrument.instrumentKey to s.date] ?: download(s).also { previousHistory[instrument.instrumentKey to s.date] = it }; previousMinutes.singleOrNull { it.timestamp == s.end.minusSeconds(60) }?.close }
                     catch (cancelled: CancellationException) { throw cancelled }
                     catch (error: Exception) {
                         if (error.message in setOf("UPSTOX_AUTH_REQUIRED", "LOCAL_RATE_BUDGET_EXHAUSTED")) throw error
@@ -102,18 +108,37 @@ class IndexMarketScanner(private val database: CandleStore, private val feed: Ca
                 val change = previousClose?.let { ((latest.close / it - 1) * 100).takeIf { value -> value.isFinite() } }
                 val live = market.date == date && now < market.end
                 val direction = IndexDirectionStrategy.evaluate(minutes, target)
+                val fiveHistory = (previousMinutes + minutes).groupBy { bar ->
+                    val t = bar.timestamp.atZone(MarketSession.ZONE)
+                    t.toLocalDate().atStartOfDay(MarketSession.ZONE).toInstant().plusSeconds(((t.hour * 60 + t.minute) / 5) * 300L)
+                }.toSortedMap().mapNotNull { (start, bars) ->
+                    val sorted = bars.sortedBy { it.timestamp }
+                    if (start > target || sorted.map { it.timestamp } != (0 until 5).map { start.plusSeconds(it * 60L) }) null
+                    else Candle(start, sorted.first().open, sorted.maxOf { it.high }, sorted.minOf { it.low }, sorted.last().close, 0.0)
+                }
+                database.save("index5:" + instrument.instrumentKey, fiveHistory)
                 rows += IndexReading(instrument.symbol, if (live) IndexDataState.LIVE else IndexDataState.HISTORICAL,
-                    candle = latest, dayChangePercent = change, signal = if (live) direction else "WAIT",
+                    candle = latest, technicals = PaperStrategy.context(fiveHistory), refreshedAt = Instant.now(), dayChangePercent = change, signal = if (live) direction else "WAIT",
                     reason = if (!live) "HISTORICAL_CONTEXT_ONLY" else if (direction == "WAIT") "NEED_THREE_COMPLETE_CONSECUTIVE_5M_CANDLES" else "THREE_COMPLETED_5M_CLOSES")
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) {
                 if (error.message in setOf("UPSTOX_AUTH_REQUIRED", "LOCAL_RATE_BUDGET_EXHAUSTED")) throw error
+                val fiveHistory = (previousMinutes + minutes).groupBy { bar ->
+                    val t = bar.timestamp.atZone(MarketSession.ZONE)
+                    t.toLocalDate().atStartOfDay(MarketSession.ZONE).toInstant().plusSeconds(((t.hour * 60 + t.minute) / 5) * 300L)
+                }.toSortedMap().mapNotNull { (start, bars) ->
+                    val sorted = bars.sortedBy { it.timestamp }
+                    if (start > target || sorted.map { it.timestamp } != (0 until 5).map { start.plusSeconds(it * 60L) }) null
+                    else Candle(start, sorted.first().open, sorted.maxOf { it.high }, sorted.minOf { it.low }, sorted.last().close, 0.0)
+                }
+                database.save("index5:" + instrument.instrumentKey, fiveHistory)
                 rows += IndexReading(instrument.symbol, reason = safeReason(error))
             }
             onProgress(rows.size, StockCatalog.indices.size, instrument.symbol)
         }
         IndexMarketReport(rows, now)
     }
+    companion object { private val historyCaches = java.util.WeakHashMap<CandleFeed, java.util.concurrent.ConcurrentHashMap<Pair<String, LocalDate>, List<Candle>>>() }
     private fun safeReason(error: Exception): String = error.message?.takeIf {
         it in setOf("UNSUPPORTED_SPECIAL_SESSION", "UNVERIFIED_MARKET_CALENDAR", "NO_COMPLETED_MARKET_CANDLE",
             "MISSING_COMPLETED_INDEX_CANDLE", "INVALID_INDEX_CANDLE", "NETWORK_ERROR", "RATE_LIMITED",

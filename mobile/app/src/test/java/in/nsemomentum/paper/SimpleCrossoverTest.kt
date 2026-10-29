@@ -30,6 +30,11 @@ class SimpleCrossoverTest {
         assertEquals("PAPER_HOLD", PaperStrategy.crossoverSignal(30.0,35.0,40.0,35.0,true).signal)
         assertEquals("PAPER_BUY", PaperStrategy.crossoverSignal(30.0,35.0,40.0,35.0,false).signal)
     }
+    @Test fun alreadyAboveDCanEnterAfterVolumeQualifies() {
+        assertEquals("PAPER_BUY", PaperStrategy.crossoverSignal(80.0,60.0,90.81,71.81,false).signal)
+        assertEquals("PAPER_HOLD", PaperStrategy.crossoverSignal(80.0,60.0,90.81,71.81,true).signal)
+        assertEquals("WAIT", PaperStrategy.crossoverSignal(50.0,50.0,50.0,50.0,false).signal)
+    }
     @Test fun missedBearishCrossStillClosesActiveBuy() {
         assertEquals("PAPER_SELL", PaperStrategy.crossoverSignal(10.0,30.0,2.74,23.30,true).signal)
         assertEquals("WAIT", PaperStrategy.crossoverSignal(10.0,30.0,2.74,23.30,false).signal)
