@@ -58,7 +58,8 @@ class IndexMarketScannerTest {
         assertEquals(StockCatalog.indices.map { it.symbol }, report.rows.map { it.symbol })
         assertTrue(report.rows.all { it.state == IndexDataState.LIVE && it.signal == "BULLISH" && it.dayChangePercent != null })
         assertTrue(feed.paths.all { it.contains("/minutes/1") })
-        assertTrue(report.rows.all { it.technicals == null && it.sma21 == null })
+        assertTrue(report.rows.all { it.technicals != null && it.sma21 == null })
+        assertTrue(report.rows.all { it.technicals!!.stochK in 0.0..100.0 && it.technicals!!.stochD in 0.0..100.0 })
         feed.bseClosed = true
         val closed = IndexMarketScanner(Store(), feed).scan("test", now).rows
         assertEquals(IndexDataState.HISTORICAL, closed.single { it.symbol == "SENSEX" }.state)
