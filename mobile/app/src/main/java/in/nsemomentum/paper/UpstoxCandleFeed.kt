@@ -73,6 +73,7 @@ class UpstoxCandleFeed(
                 .header("Accept", "application/json").header("Authorization", "Bearer $token").build()
             try {
                 execute(request).let { response ->
+                    DiagnosticLog.event("API_REQUEST", if (response.code == 200) "SUCCESS" else "HTTP_${response.code}")
                     if (response.code == 200) {
                         // Body reads remain cancellable via the active call and total call timeout.
                         val body = response.body ?: throw IOException("INVALID_RESPONSE")

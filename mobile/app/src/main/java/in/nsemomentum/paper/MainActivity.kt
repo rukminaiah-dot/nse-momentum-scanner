@@ -80,6 +80,7 @@ private enum class Page(val title: String) {
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        DiagnosticLog.initialize(this)
         setContent {
             MaterialTheme {
                 Surface(color = MaterialTheme.colorScheme.background) { PaperScannerApp() }
@@ -144,17 +145,22 @@ private fun PaperScannerApp() {
     var livePrices by remember { mutableStateOf(LivePriceState(status = "Save your Upstox token in Settings for live prices.")) }
     var liveTokenRevision by remember { mutableStateOf(0) }
     val priceLifecycle = LocalLifecycleOwner.current.lifecycle
-    val priceKeys = stocks.filter { it.symbol in favourites && "_EQ|" in it.instrumentKey }.map { it.instrumentKey }.toSet()
+    val priceKeys = (stocks.filter { it.symbol in favourites && "_EQ|" in it.instrumentKey } + StockCatalog.indices).map { it.instrumentKey }.toSet()
     LaunchedEffect(priceKeys, tokenConfigured, liveTokenRevision, priceLifecycle) {
-        livePrices = LivePriceState(quotes = if (tokenConfigured) livePrices.quotes.filterKeys { it in priceKeys } else emptyMap(), status = if (!tokenConfigured) "Save your Upstox token in Settings for live prices." else "Connecting to Upstox…")
-        if (priceKeys.isNotEmpty() && tokenConfigured) {
-            priceLifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                val savedToken = tokenStore.read()
-                if (!savedToken.isNullOrBlank()) {
-                    try { livePriceClient.stream(savedToken, priceKeys, livePrices.quotes).collect { livePrices = it } }
-                    catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
-                    catch (_: Exception) { livePrices = LivePriceState(status = "Prices unavailable. Reopen the app to reconnect.") }
-                }
+        priceLifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            val savedToken = tokenStore.read()
+            if (!savedToken.isNullOrBlank()) {
+                LiveMarketHub.acquire("screen", savedToken, priceKeys)
+                try { LiveMarketHub.state.collect { livePrices = it; delay(1000) } }
+                finally { LiveMarketHub.release("screen") }
+            } else livePrices = LivePriceState(status="Save your Upstox token in Settings")
+        }
+    }
+    LaunchedEffect(tokenConfigured, liveTokenRevision) {
+        priceLifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                tokenStore.read()?.let { token -> withContext(Dispatchers.IO) { IndexRefresh.refresh(context,token) } }
+                delay(10_000)
             }
         }
     }
@@ -299,7 +305,7 @@ private fun PaperScannerApp() {
             qualifiedToday = snapshot.second
             weeklyOutcomes = snapshot.third
             weeklySummary = PaperOutcomeLogic.summarize(snapshot.third, today.minusDays(6), today)
-            delay(15_000)
+            delay(10_000)
         }
     }
     LaunchedEffect(Unit) {
@@ -318,7 +324,7 @@ private fun PaperScannerApp() {
                 liveStochastic = snapshot.first
                 paperTrades = snapshot.second
                 previewSampledAt = now
-                delay(10_000)
+                delay(1000)
             }
         }
     }
@@ -332,7 +338,7 @@ private fun PaperScannerApp() {
                 scanStatus = "Previous snapshot expired. Run a new paper scan."
                 scanProgress = ""
             }
-            delay(15_000)
+            delay(10_000)
         }
     }
 
@@ -359,42 +365,20 @@ private fun PaperScannerApp() {
         )
     }
 
-    val refreshIndices = {
-        val token = tokenStore.read()
-        if (token.isNullOrBlank()) {
-            page = Page.SETTINGS
-            scanStatus = "Save your Upstox token in Settings to refresh index data."
-        } else if (!scanning && !autoScanActive && !backupBusy && pendingBackup == null) {
-            scanning = true
-            scanStatus = "Refreshing Nifty 50, Sensex and Bank Nifty using index rules…"
-            scanProgress = "Verifying index sessions and history…"
-            scanJob = scope.launch {
-                try {
-                    val result = withContext(Dispatchers.IO) {
-                        indexScanner.scan(token, onProgress = { completed, total, symbol ->
-                            withContext(Dispatchers.Main.immediate) { scanProgress = "Checked $completed / $total indices · $symbol" }
-                        }).also { indexStore.write(it) }
-                    }
-                    indexReport = result
-                    scanStatus = "Index refresh finished. Each card shows its own candle time and data status."
-                } catch (_: TimeoutCancellationException) {
-                    scanStatus = "Index refresh timed out. Saved readings are timestamped; retry later."
-                } catch (cancelled: CancellationException) {
-                    scanStatus = "Index refresh cancelled. Saved readings remain timestamped."
-                    throw cancelled
+    var refreshingIndices by remember { mutableStateOf(false) }
+    val refreshIndices: () -> Unit = {
+        if (!refreshingIndices) {
+            val saved = tokenStore.read()
+            if (saved == null) { page = Page.SETTINGS }
+            else {
+                refreshingIndices = true
+                scope.launch {
+                    try { indexReport = withContext(Dispatchers.IO) { IndexRefresh.refresh(context,saved,true) } }
+                    finally { refreshingIndices = false }
                 }
-                catch (error: Exception) {
-                    indexStore.clear(); indexReport = null
-                    scanStatus = when (error.message) {
-                        "UPSTOX_AUTH_REQUIRED" -> "Upstox rejected the token. Update it in Settings only."
-                        "LOCAL_RATE_BUDGET_EXHAUSTED" -> "Local API budget reached. Wait before refreshing again."
-                        else -> "Index refresh failed. Check connectivity and retry; no live signal is assigned."
-                    }
-                } finally { scanning = false }
             }
         }
     }
-
     val runScan = {
         val token = tokenStore.read()
         if (token == null) {
@@ -478,7 +462,7 @@ private fun PaperScannerApp() {
             Page.DASHBOARD -> Dashboard(
                 indexReport = indexReport,
                 onRefreshIndices = refreshIndices,
-                indexRefreshEnabled = !scanning && !autoScanActive && !backupBusy && pendingBackup == null,
+                indexRefreshEnabled = tokenConfigured && !refreshingIndices,
                 stockCount = favourites.size,
                 favouriteCount = favourites.size,
                 customStockCount = stocks.count { it.isCustom },
@@ -494,7 +478,7 @@ private fun PaperScannerApp() {
                 liveStochastic = liveStochastic,
                 paperTrades = paperTrades,
                 previewSampledAt = previewSampledAt,
-                onRefreshPrices = { liveTokenRevision++ },
+                onRefreshPrices = { LiveMarketHub.reconnect(); liveTokenRevision++ },
                 pricesRefreshEnabled = tokenConfigured && priceKeys.isNotEmpty(),
                 weeklySummary = weeklySummary,
                 weeklyOutcomes = weeklyOutcomes,
@@ -633,11 +617,11 @@ private fun PaperScannerApp() {
                         item {
                             Text("MY 40 · LIVE PRICES", fontWeight = FontWeight.Bold)
                             Text(livePrices.status, style = MaterialTheme.typography.bodySmall)
-                            Button(onClick = { liveTokenRevision++ }, enabled = tokenConfigured && priceKeys.isNotEmpty()) { Text("Refresh prices") }
+                            Button(onClick = { LiveMarketHub.reconnect(); liveTokenRevision++ }, enabled = tokenConfigured && priceKeys.isNotEmpty()) { Text("Refresh prices") }
                             Text("Prices stream while this app is open. Last-trade times show quote freshness. Paper signals use completed 15-minute candles.", style = MaterialTheme.typography.bodySmall)
                             Spacer(Modifier.height(12.dp))
                             Text("15-MINUTE PAPER SIGNALS", fontWeight = FontWeight.Bold)
-                            Text("Volume qualifies stocks once for the day. BUY: K crosses above D, without an EMA filter. SELL after BUY: K is below D (including a missed crossover). Completed 15-minute candles only; K−D distance is context, not a filter. Indices keep their separate rules.", style = MaterialTheme.typography.bodySmall) }
+                            Text("Volume qualifies stocks once for the day. BUY: qualified today and confirmed K above D, without an EMA filter. SELL after BUY: K is below D (including a missed crossover). Completed 15-minute candles only; K−D distance is context, not a filter. Indices keep their separate rules.", style = MaterialTheme.typography.bodySmall) }
                         items(selectedStocks, key = { it.symbol }) { stock ->
                             val row = bySymbol[stock.symbol]
                             Card(Modifier.fillMaxWidth()) {
@@ -671,7 +655,7 @@ private fun PaperScannerApp() {
                     indexStore.clear(); indexReport = null
                     runCatching { tokenStore.save(token) }
                     tokenConfigured = tokenStore.read() != null
-                    liveTokenRevision++
+                    LiveMarketHub.reconnect(); liveTokenRevision++
                 },
                 onClearToken = {
                     scanJob?.cancel()
@@ -680,7 +664,7 @@ private fun PaperScannerApp() {
                     report = null
                     indexStore.clear(); indexReport = null
                     tokenStore.clear()
-                    liveTokenRevision++
+                    LiveMarketHub.reconnect(); liveTokenRevision++
                     tokenConfigured = false
                     scanStatus = "Token cleared from this device."
                 },
@@ -743,7 +727,7 @@ private fun Dashboard(
 ) {
     val qualified = report?.rows?.count { (it.relativeVolume ?: 0.0) >= 1.5 } ?: 0
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        IndexOverview(indexReport, indexRefreshEnabled, onRefreshIndices)
+        IndexOverview(indexReport, indexRefreshEnabled, onRefreshIndices, livePrices)
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
             Column(Modifier.padding(18.dp)) {
                 Text("PAPER TRADING · NO ORDERS", fontWeight = FontWeight.Bold)
@@ -804,6 +788,8 @@ private fun Dashboard(
             }
         }
         PaperTradesTable(paperTrades, null, null, allTrades = true)
+        CompletedTradeSummary(paperTrades)
+        Text("Legacy next-candle analysis · not BUY-to-SELL performance", fontWeight = FontWeight.Bold)
         PaperWeeklyChart(weeklySummary, weeklyOutcomes)
     }
 }
@@ -817,7 +803,7 @@ private fun PaperWeeklyChart(days: List<DailyPaperSummary>, outcomes: List<Paper
     val scale = days.maxOfOrNull { abs(it.averageReturnPercent) }?.coerceAtLeast(0.05) ?: 0.05
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Weekly paper P&L · success rate", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text("Legacy next-candle outcome rate", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text("Saved favourites only · next 15-minute candle open-to-close · equal-weight mean return · gross before charges and slippage.", style = MaterialTheme.typography.bodySmall)
             Text("Last 7 days: ${if (average >= 0) "+" else ""}${formatPercent(average)}% average · ${formatPercent(success)}% success ($wins/$tradeCount closed)", style = MaterialTheme.typography.bodyMedium)
             if (tradeCount == 0) Text("No completed paper outcomes yet. No success rate is inferred from open or unverified signals.", style = MaterialTheme.typography.bodySmall)
@@ -857,6 +843,20 @@ private fun SettingsPage(
 ) {
     var tokenInput by remember { mutableStateOf("") }
     val updateContext = LocalContext.current
+    var diagnosticStatus by remember { mutableStateOf("") }
+    val diagnosticScope = rememberCoroutineScope()
+    val exportLog = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        if (uri != null) diagnosticScope.launch {
+            diagnosticStatus = try {
+                withContext(Dispatchers.IO) {
+                    val text = DiagnosticLog.export(updateContext)
+                    val output = updateContext.contentResolver.openOutputStream(uri) ?: error("Could not open destination")
+                    output.use { it.write(text.toByteArray(Charsets.UTF_8)) }
+                }
+                "Diagnostic log saved"
+            } catch (_: Exception) { "Could not save file · use Copy diagnostic summary" }
+        }
+    }
     val updateScope = rememberCoroutineScope()
     val installedVersion = remember {
         runCatching {
@@ -885,6 +885,18 @@ private fun SettingsPage(
             }
         }) { Text(if (updating) "Checking update…" else "Download verified update") }
         Text(updateStatus, style = MaterialTheme.typography.bodySmall)
+        Text("Diagnostics", style = MaterialTheme.typography.titleMedium)
+        Button(onClick = { exportLog.launch("nse-diagnostic-log.txt") }) { Text("Export diagnostic log") }
+        Button(onClick = {
+            diagnosticScope.launch {
+                val text = withContext(Dispatchers.IO) { DiagnosticLog.export(updateContext) }
+                val clipboard = updateContext.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NSE diagnostics",text.takeLast(60000)))
+                diagnosticStatus = "Diagnostic summary copied"
+            }
+        }) { Text("Copy diagnostic summary") }
+        Text(diagnosticStatus)
+        Text("Latest 7 days, size limited · excludes tokens and authorization headers", style=MaterialTheme.typography.bodySmall)
         Text("Local backup & restore", style = MaterialTheme.typography.titleMedium)
         Text("Stop manual and full-day scans first. Export favourites, custom stocks, and paper history to a file you keep. Tokens and candle cache are excluded. This app cannot read another installed app's private data.")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -13,7 +13,7 @@ class IndexMarketScannerTest {
     private val now = today.start.plusSeconds(3601)
     private class Store : CandleStore {
         override fun bars(symbol: String) = emptyList<Candle>()
-        override fun save(symbol: String, bars: List<Candle>) { error("Index minutes must not contaminate the stock 15m cache") }
+        override fun save(symbol: String, bars: List<Candle>) { assertTrue("5m history must be isolated from stock 15m cache", symbol.startsWith("index5:")) }
     }
     private fun minutes(s: MarketSession, count: Int = 375) = (0 until count).map {
         val price = 100.0 + it
@@ -58,7 +58,8 @@ class IndexMarketScannerTest {
         assertEquals(StockCatalog.indices.map { it.symbol }, report.rows.map { it.symbol })
         assertTrue(report.rows.all { it.state == IndexDataState.LIVE && it.signal == "BULLISH" && it.dayChangePercent != null })
         assertTrue(feed.paths.all { it.contains("/minutes/1") })
-        assertTrue(report.rows.all { it.technicals == null && it.sma21 == null })
+        assertTrue(report.rows.all { it.technicals != null && it.sma21 == null })
+        assertTrue(report.rows.all { it.technicals!!.stochK in 0.0..100.0 && it.technicals!!.stochD in 0.0..100.0 })
         feed.bseClosed = true
         val closed = IndexMarketScanner(Store(), feed).scan("test", now).rows
         assertEquals(IndexDataState.HISTORICAL, closed.single { it.symbol == "SENSEX" }.state)

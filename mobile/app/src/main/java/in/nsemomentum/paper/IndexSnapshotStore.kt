@@ -13,6 +13,10 @@ class IndexSnapshotStore(context: Context) {
         report.rows.forEach { row ->
             val json = JSONObject().put("symbol", row.symbol).put("state", row.state.name)
                 .put("signal", row.signal).put("reason", row.reason)
+            row.refreshedAt?.let { json.put("refreshedAt", it.toString()) }
+            row.lastError?.let { json.put("lastError", it) }
+            row.previousDirection?.let { json.put("previousDirection", it) }
+            row.changedAt?.let { json.put("changedAt", it.toString()) }
             row.candle?.let { bar ->
                 json.put("candle", JSONArray(listOf(bar.timestamp.toString(), bar.open, bar.high, bar.low, bar.close, bar.volume)))
             }
@@ -25,7 +29,7 @@ class IndexSnapshotStore(context: Context) {
         check(prefs.edit().putString("report", encoded).commit()) { "INDEX_SNAPSHOT_SAVE_FAILED" }
     }
     fun clear() { prefs.edit().remove("report").apply() }
-    fun read(now: Instant = Instant.now()): IndexMarketReport? = runCatching {
+    fun read(now: Instant = Instant.now(), applyAge: Boolean = true): IndexMarketReport? = runCatching {
         val text = prefs.getString("report", null) ?: return null
         require(text.length <= 32_000)
         val root = JSONObject(text)
@@ -52,7 +56,11 @@ class IndexSnapshotStore(context: Context) {
             }
             val signal = item.getString("signal")
             require(signal in setOf("WAIT", "BULLISH", "BEARISH", "NEUTRAL"))
-            IndexReading(symbol, state, candle, technicals, sma, change, signal, item.getString("reason")).at(now)
+            IndexReading(symbol, state, candle, technicals, sma, change, signal, item.getString("reason"),
+                item.optString("refreshedAt").takeIf { it.isNotEmpty() }?.let(Instant::parse),
+                item.optString("lastError").takeIf { it.isNotEmpty() },
+                item.optString("previousDirection").takeIf { it.isNotEmpty() },
+                item.optString("changedAt").takeIf { it.isNotEmpty() }?.let(Instant::parse)).let { if (applyAge) it.at(now) else it }
         }
         require(decoded.map { it.symbol }.toSet().size == 3)
         IndexMarketReport(decoded, Instant.parse(root.getString("checkedAt")))

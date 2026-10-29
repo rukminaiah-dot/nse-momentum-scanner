@@ -100,7 +100,10 @@ object LivePriceDecoder {
             uri.port in setOf(-1, 443) && uri.fragment == null
     }.getOrDefault(false)
     fun subscription(keys: Set<String>): ByteString {
-        require(keys.isNotEmpty() && keys.size <= StockCatalog.MAX_ACTIVE && keys.all { it.matches(Regex("(?:NSE|BSE)_EQ\\|[^\\s,]{1,100}")) })
+        val indices = StockCatalog.indices.map { it.instrumentKey }.toSet()
+        val equities = keys - indices
+        require(keys.isNotEmpty() && equities.size <= StockCatalog.MAX_ACTIVE &&
+            equities.all { it.matches(Regex("(?:NSE|BSE)_EQ\\|[^\\s,]{1,100}")) })
         return JSONObject().put("guid", java.util.UUID.randomUUID().toString()).put("method", "sub")
             .put("data", JSONObject().put("mode", "ltpc").put("instrumentKeys", JSONArray(keys.sorted())))
             .toString().toByteArray(Charsets.UTF_8).toByteString()
@@ -183,7 +186,7 @@ class UpstoxLivePrices(
                 })
                 while (currentCoroutineContext().isActive) {
                     when (val event = withTimeout(30_000) { events.receive() }) {
-                        Event.Open -> { state = state.copy(status = "Connected · waiting for market data", connected = true, markets = emptyMap()); emit(state) }
+                        Event.Open -> { DiagnosticLog.event("LIVE_STREAM","CONNECTED"); state = state.copy(status = "Connected · waiting for market data", connected = true, markets = emptyMap()); emit(state) }
                         is Event.Data -> {
                             val frame = LivePriceDecoder.decode(event.bytes, keys, Instant.now())
                             state = state.copy(status = "Upstox price stream connected", connected = true,
@@ -203,6 +206,7 @@ class UpstoxLivePrices(
                 emit(LivePriceState(status = "Upstox rejected the token. Update it in Settings."))
                 awaitCancellation()
             }
+            DiagnosticLog.event("LIVE_STREAM",if (authenticationFailed) "AUTH_REQUIRED" else "RECONNECTING")
             state = state.copy(status = "Price connection interrupted · retrying", connected = false, markets = emptyMap())
             emit(state)
             delay((1000L shl failures.coerceAtMost(5)).coerceAtMost(30_000))

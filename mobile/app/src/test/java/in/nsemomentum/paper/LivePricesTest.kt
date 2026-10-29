@@ -70,7 +70,7 @@ class LivePricesTest {
         val root = JSONObject(LivePriceDecoder.subscription(setOf(key)).utf8())
         assertEquals("sub", root.getString("method")); assertEquals("ltpc", root.getJSONObject("data").getString("mode"))
         assertEquals(1, root.getJSONObject("data").getJSONArray("instrumentKeys").length())
-        for (keys in listOf(emptySet(), setOf("NSE_INDEX|Nifty 50"), (1..41).map { "NSE_EQ|TEST$it" }.toSet())) {
+        for (keys in listOf(emptySet(), setOf("NSE_INDEX|UNKNOWN"), (1..41).map { "NSE_EQ|TEST$it" }.toSet())) {
             try { LivePriceDecoder.subscription(keys); fail("Invalid subscription accepted") } catch (_: IllegalArgumentException) {}
         }
     }
@@ -78,6 +78,11 @@ class LivePricesTest {
         val keys = (1..40).map { "NSE_EQ|TEST$it" }.toSet()
         val root = JSONObject(LivePriceDecoder.subscription(keys).utf8())
         assertEquals(40, root.getJSONObject("data").getJSONArray("instrumentKeys").length())
+    }
+    @Test fun fortyEquitiesAndThreeKnownIndicesShareOneSubscription() {
+        val keys = (1..40).map { "NSE_EQ|TEST$it" }.toSet() + StockCatalog.indices.map { it.instrumentKey }
+        val root = JSONObject(LivePriceDecoder.subscription(keys).utf8())
+        assertEquals(43, root.getJSONObject("data").getJSONArray("instrumentKeys").length())
     }
     @Test fun partialTickKeepsSameSessionCloseButNeverCarriesItIntoAnotherDay() {
         val previous = LiveQuote(key, 110.0, 100.0, now, now)
