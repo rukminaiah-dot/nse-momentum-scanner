@@ -29,7 +29,7 @@ class IndexSnapshotStore(context: Context) {
         check(prefs.edit().putString("report", encoded).commit()) { "INDEX_SNAPSHOT_SAVE_FAILED" }
     }
     fun clear() { prefs.edit().remove("report").apply() }
-    fun read(now: Instant = Instant.now()): IndexMarketReport? = runCatching {
+    fun read(now: Instant = Instant.now(), applyAge: Boolean = true): IndexMarketReport? = runCatching {
         val text = prefs.getString("report", null) ?: return null
         require(text.length <= 32_000)
         val root = JSONObject(text)
@@ -60,7 +60,7 @@ class IndexSnapshotStore(context: Context) {
                 item.optString("refreshedAt").takeIf { it.isNotEmpty() }?.let(Instant::parse),
                 item.optString("lastError").takeIf { it.isNotEmpty() },
                 item.optString("previousDirection").takeIf { it.isNotEmpty() },
-                item.optString("changedAt").takeIf { it.isNotEmpty() }?.let(Instant::parse)).at(now)
+                item.optString("changedAt").takeIf { it.isNotEmpty() }?.let(Instant::parse)).let { if (applyAge) it.at(now) else it }
         }
         require(decoded.map { it.symbol }.toSet().size == 3)
         IndexMarketReport(decoded, Instant.parse(root.getString("checkedAt")))

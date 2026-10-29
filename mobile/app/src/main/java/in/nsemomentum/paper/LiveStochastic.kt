@@ -20,7 +20,11 @@ object LiveStochasticPreview {
         val slot = local.toLocalDate().atTime(9,15).atZone(MarketSession.ZONE).toInstant()
             .plusSeconds(((minute - 555) / periodMinutes) * periodSeconds)
         if (quote.tradedAt < slot || quote.tradedAt > now) return null
-        val complete = history.filter { it.timestamp < slot }.sortedBy { it.timestamp }
+        val priorDates = history.map { it.timestamp.atZone(MarketSession.ZONE).toLocalDate() }
+            .filter { it < local.toLocalDate() }.distinct().sorted().takeLast(if (periodMinutes == 15) 20 else 1).toSet()
+        val complete = history.filter { it.timestamp < slot &&
+            (it.timestamp.atZone(MarketSession.ZONE).toLocalDate() == local.toLocalDate() ||
+                it.timestamp.atZone(MarketSession.ZONE).toLocalDate() in priorDates) }.sortedBy { it.timestamp }
         if (complete.size < 52 || complete.any { !PaperStrategy.validCandle(it) } ||
             complete.map { it.timestamp }.distinct().size != complete.size) return null
         val last = complete.last().timestamp

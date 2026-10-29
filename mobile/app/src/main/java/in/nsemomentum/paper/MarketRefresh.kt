@@ -57,7 +57,7 @@ object IndexRefresh {
         val database = CandleDatabase(context)
         try {
             val fresh = IndexMarketScanner(database,feed).scan(token)
-            val old = store.read()?.rows?.associateBy { it.symbol }.orEmpty()
+            val old = store.read(applyAge=false)?.rows?.associateBy { it.symbol }.orEmpty()
             val merged = fresh.copy(rows = fresh.rows.map { row -> mergeIndexReading(old[row.symbol], row) })
             store.write(merged)
             succeeded = fresh.rows.all { it.candle != null && it.lastError == null }
