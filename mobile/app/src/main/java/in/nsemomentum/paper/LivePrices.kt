@@ -102,7 +102,7 @@ object LivePriceDecoder {
     fun subscription(keys: Set<String>): ByteString {
         val indices = StockCatalog.indices.map { it.instrumentKey }.toSet()
         val equities = keys - indices
-        require(keys.isNotEmpty() && equities.size <= StockCatalog.MAX_ACTIVE &&
+        require(keys.isNotEmpty() && equities.size <= StockCatalog.MAX_ACTIVE * 2 &&
             equities.all { it.matches(Regex("(?:NSE|BSE)_EQ\\|[^\\s,]{1,100}")) })
         return JSONObject().put("guid", java.util.UUID.randomUUID().toString()).put("method", "sub")
             .put("data", JSONObject().put("mode", "ltpc").put("instrumentKeys", JSONArray(keys.sorted())))

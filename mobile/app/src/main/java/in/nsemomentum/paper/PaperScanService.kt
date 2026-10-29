@@ -77,6 +77,7 @@ class PaperScanService : Service() {
                 val universe = readUniverse()
                 if (universe.size > StockCatalog.MAX_ACTIVE) { markStopped("Selection exceeds 40"); break }
                 LiveMarketHub.acquire("service", token, (universe.map { it.second } + StockCatalog.indices.map { it.instrumentKey }).toSet())
+                ReversalRunner.acquire("service",applicationContext,token,universe.map { Stock(it.first,it.second) })
                 val selected = preferences.getStringSet("favourites", emptySet()).orEmpty()
                 val request = "${now.epochSecond / 900}:${universe.sortedBy { it.first }}:${selected.sorted()}"
                 if (universe.isNotEmpty() && request != lastRequest) {
@@ -112,7 +113,7 @@ class PaperScanService : Service() {
                 delay(10_000)
             }
         } finally {
-            indexJob.cancel(); LiveMarketHub.release("service"); database.close()
+            indexJob.cancel(); ReversalRunner.release("service"); LiveMarketHub.release("service"); database.close()
             markStopped("Full-day scan stopped · check diagnostic log for details"); stopSelf(startId)
         }
     }

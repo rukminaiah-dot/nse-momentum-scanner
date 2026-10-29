@@ -70,7 +70,7 @@ class LivePricesTest {
         val root = JSONObject(LivePriceDecoder.subscription(setOf(key)).utf8())
         assertEquals("sub", root.getString("method")); assertEquals("ltpc", root.getJSONObject("data").getString("mode"))
         assertEquals(1, root.getJSONObject("data").getJSONArray("instrumentKeys").length())
-        for (keys in listOf(emptySet(), setOf("NSE_INDEX|UNKNOWN"), (1..41).map { "NSE_EQ|TEST$it" }.toSet())) {
+        for (keys in listOf(emptySet(), setOf("NSE_INDEX|UNKNOWN"), (1..81).map { "NSE_EQ|TEST$it" }.toSet())) {
             try { LivePriceDecoder.subscription(keys); fail("Invalid subscription accepted") } catch (_: IllegalArgumentException) {}
         }
     }

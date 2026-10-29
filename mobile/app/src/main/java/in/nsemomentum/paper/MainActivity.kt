@@ -74,7 +74,7 @@ import java.util.Locale
 import kotlin.math.abs
 
 private enum class Page(val title: String) {
-    DASHBOARD("Home"), UNIVERSE("Stocks"), FAVOURITES("My 40"), SETTINGS("Settings")
+    DASHBOARD("Home"), UNIVERSE("Stocks"), FAVOURITES("My 40"), REVERSAL("Reversal"), SETTINGS("Settings")
 }
 
 class MainActivity : ComponentActivity() {
@@ -161,6 +161,18 @@ private fun PaperScannerApp() {
             while (true) {
                 tokenStore.read()?.let { token -> withContext(Dispatchers.IO) { IndexRefresh.refresh(context,token) } }
                 delay(10_000)
+            }
+        }
+    }
+    var reversalSnapshot by remember { mutableStateOf(ReversalRunner.state.value) }
+    val reversalStocks = stocks.filter { it.symbol in favourites && "_EQ|" in it.instrumentKey }.toList()
+    LaunchedEffect(reversalStocks, tokenConfigured, liveTokenRevision) {
+        priceLifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            val saved = tokenStore.read()
+            if (!saved.isNullOrBlank()) {
+                ReversalRunner.acquire("screen",context,saved,reversalStocks)
+                try { ReversalRunner.state.collect { reversalSnapshot=it } }
+                finally { ReversalRunner.release("screen") }
             }
         }
     }
@@ -640,6 +652,7 @@ private fun PaperScannerApp() {
                     }
                 }
             }
+            Page.REVERSAL -> ReversalPage(reversalSnapshot,livePrices,Modifier.padding(inset))
             Page.SETTINGS -> SettingsPage(
                 backupStatus = backupStatus,
                 backupEnabled = !backupBusy && !scanning && !autoScanActive,
