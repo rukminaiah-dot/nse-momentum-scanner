@@ -123,15 +123,6 @@ class IndexMarketScanner(private val database: CandleStore, private val feed: Ca
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) {
                 if (error.message in setOf("UPSTOX_AUTH_REQUIRED", "LOCAL_RATE_BUDGET_EXHAUSTED")) throw error
-                val fiveHistory = (previousMinutes + minutes).groupBy { bar ->
-                    val t = bar.timestamp.atZone(MarketSession.ZONE)
-                    t.toLocalDate().atStartOfDay(MarketSession.ZONE).toInstant().plusSeconds(((t.hour * 60 + t.minute) / 5) * 300L)
-                }.toSortedMap().mapNotNull { (start, bars) ->
-                    val sorted = bars.sortedBy { it.timestamp }
-                    if (start > target || sorted.map { it.timestamp } != (0 until 5).map { start.plusSeconds(it * 60L) }) null
-                    else Candle(start, sorted.first().open, sorted.maxOf { it.high }, sorted.minOf { it.low }, sorted.last().close, 0.0)
-                }
-                database.save("index5:" + instrument.instrumentKey, fiveHistory)
                 rows += IndexReading(instrument.symbol, reason = safeReason(error))
             }
             onProgress(rows.size, StockCatalog.indices.size, instrument.symbol)
