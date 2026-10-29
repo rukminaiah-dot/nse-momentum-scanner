@@ -68,6 +68,9 @@ class PaperScanService : Service() {
         try {
             val scanner = UpstoxPaperScanner(database)
             var lastRequest: String? = null
+            var retryRequest: String? = null
+            val successful = mutableMapOf<String,ScanRow>()
+            var retryDelay = 10_000L
             while (true) {
                 val now = Instant.now()
                 if (now.atZone(zone).toLocalTime() > LocalTime.of(15,33)) break
@@ -80,7 +83,12 @@ class PaperScanService : Service() {
                     try {
                         DiagnosticLog.record(applicationContext,"STOCK_SCAN","START")
                         val started = Instant.now()
-                        val report = scanner.scan(token, universe, selected)
+                        if (retryRequest != request) { successful.clear(); retryRequest = request; retryDelay = 10_000L }
+                        val pending = universe.filter { it.first !in successful }
+                        val attempt = scanner.scan(token, pending, selected)
+                        attempt.rows.filter { it.candle != null }.forEach { successful[it.symbol] = it }
+                        val rows = (successful.values + attempt.rows.filter { it.candle == null }).sortedBy { it.symbol }
+                        val report = attempt.copy(rows=rows)
                         database.recordScanReport(report)
                         val complete = report.rows.size == universe.size && report.rows.all { it.candle != null }
                         if (complete) lastRequest = request
@@ -88,6 +96,7 @@ class PaperScanService : Service() {
                         preferences.edit().putString(PREF_STATUS,status).apply(); showForeground(status)
                         DiagnosticLog.record(applicationContext,"STOCK_SCAN",if (complete) "SUCCESS" else "PARTIAL",
                             "seconds=${Duration.between(started,Instant.now()).seconds} rows=${report.rows.count { it.candle != null }}")
+                        if (!complete) { delay(retryDelay); retryDelay = (retryDelay * 2).coerceAtMost(60_000L) }
                     } catch (error: TimeoutCancellationException) {
                         DiagnosticLog.record(applicationContext,"STOCK_SCAN","TIMEOUT")
                         preferences.edit().putString(PREF_STATUS,"Stock scan timeout · retrying; live prices and indices independent").apply()

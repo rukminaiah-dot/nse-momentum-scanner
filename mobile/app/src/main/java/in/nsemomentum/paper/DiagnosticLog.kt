@@ -9,7 +9,7 @@ object DiagnosticLog {
     @Volatile private var app: Context? = null
     fun initialize(context: Context) { app = context.applicationContext }
     fun event(event: String, result: String, numbers: String = "") { app?.let { record(it,event,result,numbers) } }
-    fun errorCode(error: Throwable): String = error.message?.takeIf { it.matches(Regex("[A-Z][A-Z0-9_]{1,70}")) } ?: "REQUEST_FAILED"
+    fun errorCode(error: Throwable): String = error.message?.takeIf { it in setOf("NETWORK_ERROR","RATE_LIMITED","LOCAL_RATE_BUDGET_EXHAUSTED","UPSTOX_AUTH_REQUIRED","MARKET_CLOSED","NO_COMPLETED_MARKET_CANDLE","MISSING_COMPLETED_INDEX_CANDLE","INVALID_INDEX_CANDLE","UNVERIFIED_MARKET_CALENDAR","UNSUPPORTED_SPECIAL_SESSION","INVALID_RESPONSE","UPSTOX_SERVER_ERROR") || it.matches(Regex("UPSTOX_HTTP_[0-9]{3}")) } ?: "REQUEST_FAILED"
     @Synchronized fun record(context: Context, event: String, result: String, numbers: String = "") {
         runCatching {
             val dir = java.io.File(context.filesDir,"diagnostics").apply { mkdirs() }
