@@ -13,7 +13,7 @@ import androidx.compose.ui.unit.dp
 fun ReversalPage(snapshot: ReversalSnapshot, prices: LivePriceState, modifier: Modifier = Modifier) {
     var onlyShortlisted by remember { mutableStateOf(true) }
     val allTrades = snapshot.rows.flatMap { row -> row.state.trades.map { t -> PaperTrade(row.stock.symbol,t.buyAt,t.buy,t.sellAt,t.sell) } }
-    val visible = snapshot.rows.filter { !onlyShortlisted || it.state.watchDate == java.time.LocalDate.now(MarketSession.ZONE).toString() || it.state.buy != null }
+    val visible = snapshot.rows.filter { !onlyShortlisted || it.state.watchDate == java.time.LocalDate.now(MarketSession.ZONE).toString() || it.state.buy != null || it.state.trades.lastOrNull()?.sellAt?.atZone(MarketSession.ZONE)?.toLocalDate() == java.time.LocalDate.now(MarketSession.ZONE) }
     LazyColumn(modifier.fillMaxSize(),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
         item {
             Text("LIVE K/D REVERSAL · PAPER ONLY",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)
@@ -23,7 +23,7 @@ fun ReversalPage(snapshot: ReversalSnapshot, prices: LivePriceState, modifier: M
             Text("${snapshot.rows.size} stocks with current / saved state · ${snapshot.rows.count { it.state.watchDate == java.time.LocalDate.now(MarketSession.ZONE).toString() }} shortlisted · ${snapshot.rows.count { it.state.buy != null }} active BUY")
             Text("${snapshot.status} · ${snapshot.updatedAt?.let(::clockTime) ?: "waiting"}",style=MaterialTheme.typography.bodySmall)
             Text("Automatic while this app is open; continues in the background with the existing full-day service. No separate scan controls.",style=MaterialTheme.typography.bodySmall)
-            TextButton(onClick={onlyShortlisted=!onlyShortlisted}) { Text(if (onlyShortlisted) "Show all selected stocks" else "Show shortlisted / active only") }
+            TextButton(onClick={onlyShortlisted=!onlyShortlisted}) { Text(if (onlyShortlisted) "Show all selected stocks" else "Show shortlisted / active / completed today") }
             if (snapshot.rows.isEmpty()) Text("Waiting for selected stocks, saved token and live data. Candle history loads automatically.")
         }
         items(visible,key={it.stock.instrumentKey}) { row ->

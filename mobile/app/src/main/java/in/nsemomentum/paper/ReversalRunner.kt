@@ -13,25 +13,39 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.concurrent.ConcurrentHashMap
 
-suspend fun reversalHistory(feed: CandleFeed, token: String, stock: Stock, now: Instant): List<Candle> {
+suspend fun reversalHistory(feed: CandleFeed, token: String, stock: Stock, now: Instant, cached: List<Candle> = emptyList()): List<Candle> {
     val date = now.atZone(MarketSession.ZONE).toLocalDate()
     val exchange = stock.instrumentKey.substringBefore('_')
     val sessions = mutableListOf<MarketSession>()
     var prior = date.minusDays(1)
-    repeat(14) {
-        if (sessions.size < 3) { feed.session(token,prior,exchange)?.let { s -> require(s.isRegular()); sessions += s }; prior=prior.minusDays(1) }
+    repeat(60) {
+        if (sessions.size < 20) { feed.session(token,prior,exchange)?.let { s -> require(s.isRegular()); sessions += s }; prior=prior.minusDays(1) }
     }
-    require(sessions.size == 3) { "UNVERIFIED_MARKET_CALENDAR" }
+    require(sessions.size == 20) { "UNVERIFIED_MARKET_CALENDAR" }
     val encoded = URLEncoder.encode(stock.instrumentKey,"UTF-8").replace("+","%20")
-    val past = feed.candles(token,"/v3/historical-candle/$encoded/minutes/15/${sessions.maxOf { it.date }}/${sessions.minOf { it.date }}")
-    for (session in sessions) {
-        val bars = past.filter { it.timestamp.atZone(MarketSession.ZONE).toLocalDate() == session.date }
-        require(bars.size == 25 && bars.map { it.timestamp }.toSet() == session.slots().toSet() && bars.all(PaperStrategy::validCandle)) { "MISSING_REVERSAL_HISTORY" }
+    fun completeHistory(bars: List<Candle>): Boolean = sessions.all { session ->
+        val day = bars.filter { it.timestamp.atZone(MarketSession.ZONE).toLocalDate() == session.date }
+        day.size == 25 && day.map { it.timestamp }.toSet() == session.slots().toSet() && day.all(PaperStrategy::validCandle)
     }
+    val past = if (completeHistory(cached)) cached else {
+        val fetched=mutableListOf<Candle>()
+        var end=sessions.maxOf { it.date }
+        val oldest=sessions.minOf { it.date }
+        while (end >= oldest) {
+            val start=maxOf(oldest,end.minusDays(27))
+            fetched += feed.candles(token,"/v3/historical-candle/$encoded/minutes/15/$end/$start")
+            end=start.minusDays(1)
+        }
+        fetched
+    }
+    require(completeHistory(past)) { "MISSING_REVERSAL_HISTORY" }
     val today = feed.session(token,date,exchange)
     require(today == null || today.isRegular()) { "UNVERIFIED_MARKET_CALENDAR" }
     val current = if (today != null && now >= today.start) {
-        val bars = feed.candles(token,"/v3/historical-candle/intraday/$encoded/minutes/15")
+        val expected = today.slots().filter { it.plusSeconds(900) <= now }.toSet()
+        val saved = cached.filter { it.timestamp in expected }
+        val bars = if (saved.size == expected.size && saved.map { it.timestamp }.toSet() == expected && saved.all(PaperStrategy::validCandle)) saved
+            else feed.candles(token,"/v3/historical-candle/intraday/$encoded/minutes/15")
         require(bars.map { it.timestamp }.distinct().size == bars.size && bars.all { PaperStrategy.validCandle(it) && it.timestamp in today.slots() }) { "INVALID_INTRADAY_CANDLES" }
         val complete = bars.filter { it.timestamp.plusSeconds(900) <= now }
         require(complete.map { it.timestamp }.toSet() == today.slots().filter { it.plusSeconds(900) <= now }.toSet()) { "MISSING_COMPLETED_15M_CANDLE" }
@@ -94,7 +108,9 @@ object ReversalRunner {
                 work.map { stock -> async {
                     if (done[stock.instrumentKey] != slot) permits.withPermit {
                         try {
-                            history[stock.instrumentKey]=reversalHistory(feed,token,stock,now)
+                            val database=CandleDatabase(context)
+                            val cached=try { database.bars(stock.instrumentKey) } finally { database.close() }
+                            history[stock.instrumentKey]=reversalHistory(feed,token,stock,now,(cached+history[stock.instrumentKey].orEmpty()).distinctBy { it.timestamp })
                             done[stock.instrumentKey]=slot;errors.remove(stock.instrumentKey)
                         } catch (cancelled: CancellationException) { throw cancelled }
                         catch (e: Exception) { errors[stock.instrumentKey]=DiagnosticLog.errorCode(e); DiagnosticLog.event("REVERSAL_HISTORY",DiagnosticLog.errorCode(e),symbol=stock.symbol) }
