@@ -129,6 +129,21 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
         return paperTrades(events)
     }
 
+    fun closeTimedPaperBuy(symbol:String,price:Double,now:Instant):Boolean {
+        if(!price.isFinite() || price <= 0) return false
+        val db=writableDatabase
+        db.beginTransaction()
+        try {
+            val last=lastSignal(db,symbol)
+            if(last == null || last.second != 1 || !StockSessionExit.due(last.first,now)) return false
+            val row=ContentValues().apply { put("symbol",symbol);put("signal_time",now.toString());put("direction",-1);put("price",price) }
+            val added=db.insertWithOnConflict("paper_signal_events",null,row,SQLiteDatabase.CONFLICT_IGNORE) != -1L
+            db.setTransactionSuccessful()
+            if(added) DiagnosticLog.event("STOCK_TIMED_EXIT","SESSION_1510",symbol=symbol)
+            return added
+        } finally { db.endTransaction() }
+    }
+
     override fun hasActivePaperBuy(symbol: String): Boolean = lastSignal(readableDatabase, symbol)?.second == 1
 
     override fun recordedPaperSignal(symbol: String, candleStart: Instant): String? = readableDatabase.rawQuery(
@@ -141,6 +156,8 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
 
     private fun recordSignalEvent(db: SQLiteDatabase, row: ScanRow) {
         val candle = row.candle ?: return
+        val committedAt=Instant.now()
+        if(row.signal == "PAPER_BUY" && candle.timestamp.atZone(MarketSession.ZONE).toLocalDate() == committedAt.atZone(MarketSession.ZONE).toLocalDate() && StockSessionExit.entriesClosed(committedAt)) return
         if (StockCatalog.indices.any { it.symbol == row.symbol }) return
         val direction = when (row.signal) { "PAPER_BUY" -> 1; "PAPER_SELL" -> -1; else -> return }
         val time = candle.timestamp.plusSeconds(900)

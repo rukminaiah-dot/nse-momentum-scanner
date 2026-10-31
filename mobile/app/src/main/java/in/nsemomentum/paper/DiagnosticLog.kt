@@ -9,7 +9,7 @@ object DiagnosticLog {
     @Volatile private var app: Context? = null
     fun initialize(context: Context) { app = context.applicationContext }
     fun event(event: String, result: String, numbers: String = "", symbol: String? = null) { app?.let { record(it,event,result,numbers,symbol) } }
-    fun errorCode(error: Throwable): String = error.message?.takeIf { it in setOf("NETWORK_ERROR","RATE_LIMITED","LOCAL_RATE_BUDGET_EXHAUSTED","UPSTOX_AUTH_REQUIRED","MARKET_CLOSED","NO_COMPLETED_MARKET_CANDLE","MISSING_COMPLETED_INDEX_CANDLE","INVALID_INDEX_CANDLE","UNVERIFIED_MARKET_CALENDAR","UNSUPPORTED_SPECIAL_SESSION","INVALID_RESPONSE","UPSTOX_SERVER_ERROR") || it.matches(Regex("UPSTOX_HTTP_[0-9]{3}")) } ?: "REQUEST_FAILED"
+    fun errorCode(error: Throwable): String = error.message?.takeIf { it in setOf("NETWORK_ERROR","RATE_LIMITED","LOCAL_RATE_BUDGET_EXHAUSTED","UPSTOX_AUTH_REQUIRED","MARKET_CLOSED","NO_COMPLETED_MARKET_CANDLE","MISSING_COMPLETED_INDEX_CANDLE","INVALID_INDEX_CANDLE","UNVERIFIED_MARKET_CALENDAR","UNSUPPORTED_SPECIAL_SESSION","NO_COMMODITY_CONTRACT","UNVERIFIED_COMMODITY_SESSION","NO_COMPLETED_COMMODITY_CANDLE","MISSING_COMMODITY_CANDLE","INVALID_COMMODITY_CANDLE","INVALID_RESPONSE","UPSTOX_SERVER_ERROR") || it.matches(Regex("UPSTOX_HTTP_[0-9]{3}")) } ?: "REQUEST_FAILED"
     @Synchronized fun record(context: Context, event: String, result: String, numbers: String = "", symbol: String? = null) {
         runCatching {
             val dir = java.io.File(context.filesDir,"diagnostics").apply { mkdirs() }

@@ -42,6 +42,20 @@ class PaperSignalPersistenceTest {
             assertFalse(db.hasActivePaperBuy("TEST"))
         }
     }
+    @Test fun timedExitIsIdempotentAndDoesNotCreateBackdatedTrade() {
+        val context=RuntimeEnvironment.getApplication() as Context
+        context.deleteDatabase("paper_candles.db")
+        withDatabase(context) { db ->
+            save(db,row("PAPER_BUY"))
+            val cutoff=LocalDate.parse("2026-10-27").atTime(15,10).atZone(MarketSession.ZONE).toInstant()
+            assertFalse(db.closeTimedPaperBuy("TEST",100.0,cutoff.minusSeconds(1)))
+            assertTrue(db.closeTimedPaperBuy("TEST",102.0,cutoff))
+            assertFalse(db.closeTimedPaperBuy("TEST",103.0,cutoff.plusSeconds(1)))
+            assertFalse(db.hasActivePaperBuy("TEST"))
+            assertEquals(102.0,db.paperTradeHistory().single().sell!!,0.0)
+            assertEquals(cutoff,db.paperTradeHistory().single().soldAt)
+        }
+    }
     @Test fun aSellWithoutBuyDoesNotCreateAnExitRecord() {
         val context = RuntimeEnvironment.getApplication() as Context
         context.deleteDatabase("paper_candles.db")

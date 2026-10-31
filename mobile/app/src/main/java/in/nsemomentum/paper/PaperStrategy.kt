@@ -96,6 +96,7 @@ object PaperStrategy {
         if (bars.any { !validCandle(it) }) return wait("INVALID_CANDLE")
         val rvol = sameSlotAverageVolume?.let { relativeVolume(latest.volume, it) }
         if (!qualifiedToday && !hasActiveBuy && (rvol == null || rvol < 1.5)) return wait("NOT_SHORTLISTED_TODAY")
+        if (StockSessionExit.entriesClosed(now)) return wait("SESSION_1510_WAITING_FRESH_PRICE_EXIT")
         val closes = bars.map { it.close }
         val (k, d) = stochRsi(closes)
         if (k.size < 2 || d.size < 2) return wait("INSUFFICIENT_STOCH_RSI_HISTORY")

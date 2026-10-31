@@ -19,6 +19,7 @@ fun ReversalPage(snapshot: ReversalSnapshot, prices: LivePriceState, modifier: M
             Text("LIVE K/D REVERSAL · PAPER ONLY",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)
             Text("Same selected stocks and live connection · no indices · 60s volume confirmation for BUY")
             Text("Shortlist: K>D with K<20. A live cross above 20 starts 60s confirmation. K must stay above 20 and D; post-cross 60s volume must exceed pre-cross 60s volume. No minimum K−D gap.")
+            Text("All stock paper trades close at 15:10 IST using a fresh price. No new stock BUYs after 15:10. App must be open or the existing full-day service running.",style=MaterialTheme.typography.bodySmall)
             Text("Exit: initial 1% stop. At +0.50% peak gain, protect +0.25%; at +0.75%, protect +0.50%; continue in 0.25-point steps. No 80-based exit. Quotes are paper marks, not execution fills.")
             Text("${snapshot.rows.size} stocks with current / saved state · ${snapshot.rows.count { it.state.watchDate == java.time.LocalDate.now(MarketSession.ZONE).toString() }} shortlisted · ${snapshot.rows.count { it.state.buy != null }} active BUY")
             Text("${snapshot.status} · ${snapshot.updatedAt?.let(::clockTime) ?: "waiting"}",style=MaterialTheme.typography.bodySmall)
@@ -77,6 +78,8 @@ fun reversalActionLabel(action: String): String = when(action) {
     "BUY_ACTIVE_INITIAL_STOP" -> "BUY active · initial 1% stop"
     "BUY_ACTIVE_PROFIT_PROTECTED" -> "BUY active · profit threshold raised"
     "SELL_STEPPED_PROFIT_STOP" -> "SELL · profit-protection threshold reached"
+    "SELL_SESSION_1510" -> "SELL · 15:10 session exit"
+    "NO_NEW_BUYS_AFTER_1510" -> "Session entry cutoff reached · no new BUYs"
     "SELL_STOP_1_PERCENT" -> "SELL · initial stop reached"
     "ALREADY_ABOVE_20_WAITING_FOR_NEW_CROSS" -> "K already above 20 · waiting for a new crossing"
     "CROSS_UNOBSERVED_AFTER_DATA_GAP_NEW_CROSS_REQUIRED" -> "Crossing interrupted by a data gap · new crossing required"
