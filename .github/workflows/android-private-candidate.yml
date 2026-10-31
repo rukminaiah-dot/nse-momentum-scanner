@@ -62,11 +62,11 @@ jobs:
       - name: Run all Android unit tests
         working-directory: mobile
         run: '"$RUNNER_TEMP/gradle-8.9/bin/gradle" --no-daemon :app:testDebugUnitTest'
-      - name: Download original installed candidate for update compatibility checks
+      - name: Download prior installed candidate for update compatibility checks
         uses: actions/download-artifact@v4
         with:
           name: android-permanent-signed-candidate
-          run-id: 40055400498
+          run-id: 40974940911
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/previous-android-candidate
       - name: Build and verify privately signed candidate
@@ -86,7 +86,7 @@ jobs:
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$ANDROID_SIGNING_STORE_FILE"
           "$RUNNER_TEMP/gradle-8.9/bin/gradle" --no-daemon :app:assembleRelease
           python tools/verify_signed_apk.py app/build/outputs/apk/release/app-release.apk --build-tools "$ANDROID_HOME/build-tools/35.0.0" --expected-sha256 "$CERTIFICATE_PIN" --previous-apk "$RUNNER_TEMP/previous-android-candidate/app-release.apk" --commit "$GITHUB_SHA" --report app/build/outputs/apk/release/android-candidate.json
-      - name: Test original-to-current APK update on Android 16
+      - name: Test prior-to-current APK update on Android 16
         timeout-minutes: 10
         shell: bash
         run: |
