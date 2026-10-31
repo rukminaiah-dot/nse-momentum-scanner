@@ -107,10 +107,11 @@ object CommodityMonitor {
                             if(start>target || sorted.map { it.timestamp }!=(0 until 5).map { start.plusSeconds(it*60L) }) null
                             else Candle(start,sorted.first().open,sorted.maxOf { it.high },sorted.minOf { it.low },sorted.last().close,0.0)
                         }
-                        val changed=open && direction!="WAIT" && old.direction in setOf("BULLISH","BEARISH","NEUTRAL") && old.direction!=direction
+                        val sameContract=old.contract?.key==contract.key
+                        val changed=sameContract && open && direction!="WAIT" && old.direction in setOf("BULLISH","BEARISH","NEUTRAL") && old.direction!=direction
                         done[name]=target
                         CommodityReading(name,contract,candle,PaperStrategy.context(five),direction,Instant.now(),next,open,
-                            previousDirection=if(changed) old.direction else old.previousDirection,changedAt=if(changed) target.plusSeconds(300) else old.changedAt)
+                            previousDirection=if(changed) old.direction else if(sameContract) old.previousDirection else null,changedAt=if(changed) target.plusSeconds(300) else if(sameContract) old.changedAt else null)
                     }
                 } catch(cancelled:CancellationException) {throw cancelled}
                 catch(e:Exception) {

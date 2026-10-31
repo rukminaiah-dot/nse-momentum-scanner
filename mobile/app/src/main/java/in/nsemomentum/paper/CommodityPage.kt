@@ -21,7 +21,7 @@ fun CommodityPage(snapshot:CommoditySnapshot,prices:LivePriceState,modifier:Modi
             Text("Gold · Silver · Crude Oil · Natural Gas")
             Text("Same direction rule as indices: three rising completed 5m closes = bullish; three falling = bearish; otherwise neutral. No stock-volume rule or commodity paper trades.")
             Text("Automatically selects the nearest non-expired standard futures contract, fixed for this app session/day. Contract and expiry are shown below. These are futures prices, not spot prices.",style=MaterialTheme.typography.bodySmall)
-            Text("Live prices share the existing stream. Direction checks every 10 seconds for new completed candles while the app is open. MCX uses its own verified session hours.",style=MaterialTheme.typography.bodySmall)
+            Text("Live prices share the existing stream. Direction checks every 10 seconds for new completed candles while the app is open or the existing full-day service is active. MCX uses its own verified session hours.",style=MaterialTheme.typography.bodySmall)
         }
         items(snapshot.rows,key={it.name}) { row ->
             Card(Modifier.fillMaxWidth()) {Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
