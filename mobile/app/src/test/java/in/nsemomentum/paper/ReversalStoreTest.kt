@@ -12,19 +12,28 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk=[28])
 class ReversalStoreTest {
-    @Test fun restartKeepsPositionAndEightyLatchButDoesNotReplayOldCrossing() {
+    @Test fun restartKeepsPeakAndEntryVolumeButCannotReplayPendingConfirmation() {
         val context=RuntimeEnvironment.getApplication() as Context
         context.getSharedPreferences("reversal_strategy_v1",0).edit().clear().commit()
         val now=Instant.parse("2026-10-30T05:00:00Z")
-        val state=ReversalState(watchDate="2026-10-30",previousK=18.0,previousAt=now,buy=100.0,buyAt=now,reached80=true,symbol="TEST")
-        ReversalStore(context).write(mapOf("NSE_EQ|TEST" to state))
+        val s=ReversalState(buy=100.0,buyAt=now,peakPrice=101.0,beforeVolume=100,afterVolume=150,symbol="TEST",confirmationAt=now,previousK=25.0,previousAt=now)
+        ReversalStore(context).write(mapOf("NSE_EQ|TEST" to s))
         val restored=ReversalStore(context).read().getValue("NSE_EQ|TEST")
-        assertEquals(100.0,restored.buy!!,0.0);assertTrue(restored.reached80)
-        assertNull(restored.previousK);assertNull(restored.previousAt)
-        assertEquals("TEST",restored.symbol)
-        val exited=ReversalStrategy.tick(restored,102.0,79.0,70.0,now.plusSeconds(1))
-        ReversalStore(context).write(mapOf("NSE_EQ|TEST" to exited))
-        assertEquals(1,ReversalStore(context).read().getValue("NSE_EQ|TEST").trades.size)
-        assertFalse(context.getSharedPreferences("paper_preferences",0).contains("reversal_state"))
+        assertEquals(101.0,restored.peakPrice!!,0.0);assertEquals(100L,restored.beforeVolume!!)
+        assertNull(restored.previousK);assertNull(restored.confirmationAt)
+        assertEquals(100.75,ReversalStrategy.stopPrice(restored)!!,1e-8)
+        val closed=ReversalStrategy.tick(restored,100.7,null,null,now.plusSeconds(1))
+        ReversalStore(context).write(mapOf("NSE_EQ|TEST" to closed))
+        val t=ReversalStore(context).read().getValue("NSE_EQ|TEST").trades.single()
+        assertEquals("VOLUME_STEP_V2",t.policy);assertEquals(150L,t.afterVolume!!)
+    }
+    @Test fun readsOldTradeShapeWithoutInventingPastPeakProfit() {
+        val context=RuntimeEnvironment.getApplication() as Context
+        context.getSharedPreferences("reversal_strategy_v1",0).edit().putString("state",
+            """{"NSE_EQ|TEST":{"symbol":"TEST","buy":100.0,"buyAt":"2026-10-30T05:00:00Z","reached80":true,"trades":[["2026-10-29T05:00:00Z",100.0,"2026-10-29T06:00:00Z",101.0,"K_BACK_BELOW_80"]]}}""").commit()
+        val restored=ReversalStore(context).read().getValue("NSE_EQ|TEST")
+        assertNull(restored.peakPrice)
+        assertEquals(99.0,ReversalStrategy.stopPrice(restored)!!,0.0)
+        assertEquals("LEGACY_80",restored.trades.single().policy)
     }
 }

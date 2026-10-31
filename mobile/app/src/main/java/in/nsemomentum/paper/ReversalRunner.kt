@@ -84,6 +84,7 @@ object ReversalRunner {
         var states=store.read()
         val activeMissing=states.filter { it.value.buy != null && selected.none { s -> s.instrumentKey == it.key } }.map { (key,value) -> Stock(value.symbol.ifBlank { key },key) }
         val work=selected+activeMissing
+        val volumes=work.associate { it.instrumentKey to LiveVolumeWindow() }
         val history=ConcurrentHashMap<String,List<Candle>>()
         val errors=ConcurrentHashMap<String,String>()
         val done=ConcurrentHashMap<String,Long>()
@@ -116,7 +117,7 @@ object ReversalRunner {
                         catch (e: Exception) { errors[stock.instrumentKey]=DiagnosticLog.errorCode(e); DiagnosticLog.event("REVERSAL_HISTORY",DiagnosticLog.errorCode(e),symbol=stock.symbol) }
                     }
                 } }.awaitAll()
-                delay(30_000)
+                delay(10_000)
             }
         }
         try { while (true) {
@@ -132,19 +133,31 @@ object ReversalRunner {
                     local >= java.time.LocalTime.of(9,15) && local < java.time.LocalTime.of(15,30)
                 val preview=LiveStochasticPreview.calculate(history[stock.instrumentKey].orEmpty(),quote,now,live.connected,marketOpen)
                 val old=states[stock.instrumentKey] ?: ReversalState()
-                val updated=if (fresh) ReversalStrategy.tick(old,quote!!.price,preview?.context?.stochK,preview?.context?.stochD,now)
-                    else old.copy(previousK=null,previousAt=null,action=if (old.buy != null) "BUY_ACTIVE_WAITING_FRESH_QUOTE" else "WAITING_FRESH_QUOTE")
+                val volume=volumes.getValue(stock.instrumentKey)
+                val volumeFresh=fresh && quote?.volumeToday != null && quote.volumeAt != null &&
+                    java.time.Duration.between(quote.volumeAt,now).toMillis() in 0..3000
+                if (volumeFresh) volume.add(quote!!.volumeAt!!,quote.volumeToday!!,live.connectionId) else volume.clear()
+                val start=old.confirmationAt ?: now
+                val before=if (old.confirmationAt == null) volume.amount(now.minusSeconds(60),now) else old.beforeVolume
+                val end=if (now >= start.plusSeconds(60)) start.plusSeconds(60) else now
+                val after=if (old.confirmationAt != null && end > start) volume.amount(start,end) else null
+                val continuous=volumeFresh && if(old.confirmationAt != null) volume.amount(start,end) != null else before != null
+                val updated=if (fresh) ReversalStrategy.tick(old,quote!!.price,preview?.context?.stochK,preview?.context?.stochD,now,before,after,continuous)
+                    else ReversalStrategy.interrupted(old,if (old.buy != null) "BUY_ACTIVE_WAITING_FRESH_QUOTE" else "QUOTE_GAP_LAST_VALID_K_RETAINED")
                 next=next+(stock.instrumentKey to updated.copy(symbol=stock.symbol))
                 ReversalRow(stock,updated.copy(symbol=stock.symbol),preview,errors[stock.instrumentKey] ?: if (fresh) updated.action else "Waiting for fresh live quote / market open")
             }
             val changed=next.any { (key,value) -> val old=states[key] ?: ReversalState()
-                value.symbol != old.symbol || value.watchDate != old.watchDate || value.buy != old.buy || value.buyAt != old.buyAt || value.reached80 != old.reached80 || value.trades != old.trades }
+                value.peakPrice != old.peakPrice || value.symbol != old.symbol || value.watchDate != old.watchDate || value.buy != old.buy || value.buyAt != old.buyAt || value.reached80 != old.reached80 || value.trades != old.trades }
             try {
+                rows.filter { row -> row.state.action != states[row.stock.instrumentKey]?.action }.forEach { row ->
+                    DiagnosticLog.event("REVERSAL_DECISION",row.state.action.take(70),"k=${row.preview?.context?.stochK ?: -1.0} d=${row.preview?.context?.stochD ?: -1.0}",row.stock.symbol)
+                }
                 if (changed) store.write(next)
-                rows.filter { it.state.action.startsWith("BUY_LIVE") || it.state.action.startsWith("SELL_") }.forEach { DiagnosticLog.event("REVERSAL_SIGNAL",it.state.action,symbol=it.stock.symbol) }
+                rows.filter { it.state.action.startsWith("BUY_CONFIRMED") || it.state.action.startsWith("SELL_") }.forEach { DiagnosticLog.event("REVERSAL_SIGNAL",it.state.action,symbol=it.stock.symbol) }
                 states=next
                 val archived=states.filter { entry -> work.none { it.instrumentKey == entry.key } && entry.value.trades.isNotEmpty() }.map { (key,value) -> ReversalRow(Stock(value.symbol.ifBlank { key },key),value,null,"Not selected · saved history only") }
-                mutable.value=ReversalSnapshot(rows+archived,now,"Automatic · same live connection · no volume filter")
+                mutable.value=ReversalSnapshot(rows+archived,now,"Automatic · live 60s volume confirmation · stepped profit protection")
             } catch (_: Exception) {
                 mutable.value=ReversalSnapshot(rows.map { row -> row.copy(state=states[row.stock.instrumentKey] ?: ReversalState()) },now,"Could not save reversal history · signals paused until storage recovers")
             }

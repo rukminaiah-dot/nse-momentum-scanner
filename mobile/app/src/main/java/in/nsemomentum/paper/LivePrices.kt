@@ -20,7 +20,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /** Display only. Never fed into candle strategies, qualification or paper outcomes. */
-data class LiveQuote(val instrumentKey: String, val price: Double, val previousClose: Double?, val tradedAt: Instant, val receivedAt: Instant) {
+data class LiveQuote(val instrumentKey: String, val price: Double, val previousClose: Double?, val tradedAt: Instant, val receivedAt: Instant, val volumeToday: Long? = null, val volumeAt: Instant? = null) {
     val change: Double? get() = previousClose?.let { (price - it).takeIf(Double::isFinite) }
     val changePercent: Double? get() = previousClose?.let { ((price / it - 1) * 100).takeIf(Double::isFinite) }
     fun label(now: Instant, connected: Boolean, marketOpen: Boolean): String = when {
@@ -32,7 +32,7 @@ data class LiveQuote(val instrumentKey: String, val price: Double, val previousC
     }
 }
 data class LivePriceState(val status: String = "Connecting to Upstox…", val connected: Boolean = false,
-                          val quotes: Map<String, LiveQuote> = emptyMap(), val markets: Map<String, Boolean> = emptyMap())
+                          val quotes: Map<String, LiveQuote> = emptyMap(), val markets: Map<String, Boolean> = emptyMap(), val connectionId: Long = 0L)
 data class LivePriceFrame(val quotes: Map<String, LiveQuote>, val markets: Map<String, Boolean>)
 
 /** LTPC subset of Upstox's official V3 MarketDataFeed.proto (field numbers unchanged).
@@ -81,7 +81,21 @@ object LivePriceDecoder {
             if (key !in subscribed) continue
             require(seen.add(key))
             var ltpc: ByteArray? = null
-            feed?.let { fields(it) { tag, input -> if (tag == 10) { ltpc = input.readByteArray(); true } else false } }
+            var volume: Long? = null
+            feed?.let { fields(it) { tag, input -> when(tag) {
+                10 -> { ltpc=input.readByteArray();true }
+                18 -> { fields(input.readByteArray()) { fullTag, full ->
+                    if (fullTag !in setOf(10,18)) false else {
+                        val isMarket=fullTag == 10
+                        fields(full.readByteArray()) { marketTag, market -> when {
+                            marketTag == 10 -> { ltpc=market.readByteArray();true }
+                            isMarket && marketTag == 48 -> { volume=market.readInt64().takeIf { value -> value >= 0 };true }
+                            else -> false
+                        } };true
+                    }
+                };true }
+                else -> false
+            } } }
             var price = Double.NaN; var close = Double.NaN; var time = 0L
             ltpc?.let { fields(it) { tag, input -> when (tag) {
                 9 -> { price = input.readDouble(); true }
@@ -90,7 +104,7 @@ object LivePriceDecoder {
                 else -> false
             } } }
             if (!price.isFinite() || price <= 0 || time <= 0 || time > timestamp + 1000) continue
-            quotes[key] = LiveQuote(key, price, close.takeIf { it.isFinite() && it > 0 }, Instant.ofEpochMilli(time), now)
+            quotes[key] = LiveQuote(key, price, close.takeIf { it.isFinite() && it > 0 }, Instant.ofEpochMilli(time), now, volume, if (volume != null) Instant.ofEpochMilli(timestamp) else null)
         }
         return LivePriceFrame(quotes, markets)
     }
@@ -105,7 +119,7 @@ object LivePriceDecoder {
         require(keys.isNotEmpty() && equities.size <= StockCatalog.MAX_ACTIVE * 2 &&
             equities.all { it.matches(Regex("(?:NSE|BSE)_EQ\\|[^\\s,]{1,100}")) })
         return JSONObject().put("guid", java.util.UUID.randomUUID().toString()).put("method", "sub")
-            .put("data", JSONObject().put("mode", "ltpc").put("instrumentKeys", JSONArray(keys.sorted())))
+            .put("data", JSONObject().put("mode", "full").put("instrumentKeys", JSONArray(keys.sorted())))
             .toString().toByteArray(Charsets.UTF_8).toByteString()
     }
     fun merge(previous: Map<String, LiveQuote>, incoming: Map<String, LiveQuote>): Map<String, LiveQuote> {
@@ -186,7 +200,7 @@ class UpstoxLivePrices(
                 })
                 while (currentCoroutineContext().isActive) {
                     when (val event = withTimeout(30_000) { events.receive() }) {
-                        Event.Open -> { DiagnosticLog.event("LIVE_STREAM","CONNECTED"); state = state.copy(status = "Connected · waiting for market data", connected = true, markets = emptyMap()); emit(state) }
+                        Event.Open -> { DiagnosticLog.event("LIVE_STREAM","CONNECTED"); state = state.copy(status = "Connected · waiting for market data", connected = true, markets = emptyMap(), connectionId=System.nanoTime()); emit(state) }
                         is Event.Data -> {
                             val frame = LivePriceDecoder.decode(event.bytes, keys, Instant.now())
                             state = state.copy(status = "Upstox price stream connected", connected = true,

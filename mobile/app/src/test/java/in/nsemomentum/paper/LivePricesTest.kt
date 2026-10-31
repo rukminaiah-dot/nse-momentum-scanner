@@ -36,6 +36,21 @@ class LivePricesTest {
         val noClose = LivePriceDecoder.decode(frame(tick(close = 0.0)), setOf(key), now).quotes.getValue(key)
         assertNull(noClose.change); assertNull(noClose.changePercent)
     }
+    @Test fun fullFeedDecodesOfficialNestedLtpcAndCumulativeVolumeWithoutSummingSnapshots() {
+        val ltpc=message { it.writeDouble(1,110.0);it.writeInt64(2,now.toEpochMilli());it.writeDouble(4,100.0) }
+        val market=message { it.writeByteArray(1,ltpc);it.writeInt64(6,123456L) }
+        val full=message { it.writeByteArray(1,market) }
+        val feed=message { it.writeByteArray(2,full) }
+        val entry=message { it.writeString(1,key);it.writeByteArray(2,feed) }
+        val quote=LivePriceDecoder.decode(frame(entry),setOf(key),now).quotes.getValue(key)
+        assertEquals(123456L,quote.volumeToday!!);assertEquals(now,quote.volumeAt)
+        assertEquals(110.0,quote.price,0.0)
+        val index=StockCatalog.indices.first().instrumentKey
+        val indexFull=message { it.writeByteArray(2,message { nested -> nested.writeByteArray(1,ltpc) }) }
+        val indexEntry=message { it.writeString(1,index);it.writeByteArray(2,message { nested -> nested.writeByteArray(2,indexFull) }) }
+        val indexQuote=LivePriceDecoder.decode(frame(indexEntry),setOf(index),now).quotes.getValue(index)
+        assertEquals(110.0,indexQuote.price,0.0);assertNull(indexQuote.volumeToday)
+    }
     @Test fun neverLabelsOldDisconnectedOrUnconfirmedMarketDataLive() {
         val q = LivePriceDecoder.decode(frame(tick()), setOf(key), now).quotes.getValue(key)
         assertNotEquals("LIVE", q.label(now.plusSeconds(31), true, true))
@@ -68,7 +83,7 @@ class LivePricesTest {
         val merged = LivePriceDecoder.merge(mapOf(key to q), mapOf(key to q.copy(price = 90.0, tradedAt = now.minusSeconds(1))))
         assertEquals(q, merged[key])
         val root = JSONObject(LivePriceDecoder.subscription(setOf(key)).utf8())
-        assertEquals("sub", root.getString("method")); assertEquals("ltpc", root.getJSONObject("data").getString("mode"))
+        assertEquals("sub", root.getString("method")); assertEquals("full", root.getJSONObject("data").getString("mode"))
         assertEquals(1, root.getJSONObject("data").getJSONArray("instrumentKeys").length())
         for (keys in listOf(emptySet(), setOf("NSE_INDEX|UNKNOWN"), (1..81).map { "NSE_EQ|TEST$it" }.toSet())) {
             try { LivePriceDecoder.subscription(keys); fail("Invalid subscription accepted") } catch (_: IllegalArgumentException) {}
