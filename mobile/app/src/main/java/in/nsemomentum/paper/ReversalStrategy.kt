@@ -42,13 +42,14 @@ object ReversalStrategy {
             val active=state.copy(peakPrice=maxOf(state.buy,state.peakPrice ?: state.buy,price),
                 confirmationAt=null)
             val stop=stopPrice(active)!!
-            if (price <= stop + state.buy*1e-12) {
-                val reason=if (stopPercent(state.buy,active.peakPrice!!) < 0) "STOP_1_PERCENT" else "STEPPED_PROFIT_STOP"
+            if (StockSessionExit.due(state.buyAt,now) || price <= stop + state.buy*1e-12) {
+                val reason=if (StockSessionExit.due(state.buyAt,now)) "SESSION_1510" else if (stopPercent(state.buy,active.peakPrice!!) < 0) "STOP_1_PERCENT" else "STEPPED_PROFIT_STOP"
                 val trade=ReversalTrade(state.buyAt,state.buy,now,price,reason,if (state.beforeVolume == null) "LEGACY_ENTRY_STEP_EXIT" else "VOLUME_STEP_V2",state.beforeVolume,state.afterVolume)
                 return ReversalState(trades=state.trades+trade,symbol=state.symbol,action="SELL_$reason",previousK=k,previousAt=now)
             }
             return active.copy(action=if (stopPercent(state.buy,active.peakPrice!!) < 0) "BUY_ACTIVE_INITIAL_STOP" else "BUY_ACTIVE_PROFIT_PROTECTED")
         }
+        if (StockSessionExit.entriesClosed(now)) return interrupted(state,"NO_NEW_BUYS_AFTER_1510")
         if (k == null || d == null || !k.isFinite() || !d.isFinite() || k !in 0.0..100.0 || d !in 0.0..100.0)
             return interrupted(state,"KD_GAP_LAST_VALID_READING_RETAINED")
         val recent=state.previousAt?.let { Duration.between(it,now).toMillis() in 0..5000 } == true

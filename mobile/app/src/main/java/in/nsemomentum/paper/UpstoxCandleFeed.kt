@@ -127,6 +127,30 @@ class UpstoxCandleFeed(
         return result
     }
 
+    suspend fun commodityContracts(token:String,name:String,today:LocalDate):List<CommodityContract> {
+        require(name in CommodityContracts.names)
+        val found=mutableListOf<CommodityContract>()
+        var page=1
+        do {
+            val root=request(token,"/v2/instruments/search?query=$name&exchanges=MCX&segments=COMM&instrument_types=FUT&page_number=$page&records=30")
+            found+=CommodityContracts.parse(root,name,today)
+            val total=root.getJSONObject("meta_data").getJSONObject("page").getInt("total_pages")
+            require(total in 0..100) { "INVALID_RESPONSE" }
+            page++
+        } while(page<=total)
+        return found.distinctBy { it.key }
+    }
+    suspend fun commoditySession(token:String,date:LocalDate):CommoditySession? {
+        val data=request(token,"/v2/market/timings/$date").getJSONArray("data")
+        val rows=(0 until data.length()).map { data.getJSONObject(it) }.filter { it.optString("exchange")=="MCX" }
+        if(rows.isEmpty()) return null
+        require(rows.size==1) { "UNVERIFIED_COMMODITY_SESSION" }
+        val row=rows.single()
+        return CommoditySession(date,Instant.ofEpochMilli(row.getLong("start_time")),Instant.ofEpochMilli(row.getLong("end_time"))).also {
+            require(it.valid()) { "UNVERIFIED_COMMODITY_SESSION" }
+        }
+    }
+
     companion object {
         fun parseCandles(root: JSONObject, requireVolume: Boolean = true): List<Candle> {
             val rows = root.getJSONObject("data").getJSONArray("candles")

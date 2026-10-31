@@ -74,7 +74,7 @@ import java.util.Locale
 import kotlin.math.abs
 
 private enum class Page(val title: String) {
-    DASHBOARD("Home"), UNIVERSE("Stocks"), FAVOURITES("My 40"), REVERSAL("Reversal"), SETTINGS("Settings")
+    DASHBOARD("Home"), UNIVERSE("Stocks"), FAVOURITES("My 40"), REVERSAL("Reversal"), COMMODITIES("MCX"), SETTINGS("Settings")
 }
 
 class MainActivity : ComponentActivity() {
@@ -170,9 +170,21 @@ private fun PaperScannerApp() {
         priceLifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             val saved = tokenStore.read()
             if (!saved.isNullOrBlank()) {
+                StockSessionCloser.acquire("screen",context,saved)
                 ReversalRunner.acquire("screen",context,saved,reversalStocks)
                 try { ReversalRunner.state.collect { reversalSnapshot=it } }
-                finally { ReversalRunner.release("screen") }
+                finally { ReversalRunner.release("screen");StockSessionCloser.release("screen") }
+            }
+        }
+    }
+    var commoditySnapshot by remember { mutableStateOf(CommodityMonitor.state.value) }
+    LaunchedEffect(tokenConfigured,liveTokenRevision) {
+        priceLifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            val saved=tokenStore.read()
+            if(!saved.isNullOrBlank()) {
+                CommodityMonitor.acquire("screen",context,saved)
+                try { CommodityMonitor.state.collect { commoditySnapshot=it } }
+                finally { CommodityMonitor.release("screen") }
             }
         }
     }
@@ -653,6 +665,7 @@ private fun PaperScannerApp() {
                 }
             }
             Page.REVERSAL -> ReversalPage(reversalSnapshot,livePrices,Modifier.padding(inset))
+            Page.COMMODITIES -> CommodityPage(commoditySnapshot,livePrices,Modifier.padding(inset))
             Page.SETTINGS -> SettingsPage(
                 backupStatus = backupStatus,
                 backupEnabled = !backupBusy && !scanning && !autoScanActive,
