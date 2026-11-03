@@ -191,6 +191,10 @@ object ReversalRunner {
                 next=next+(stock.instrumentKey to updated.copy(symbol=stock.symbol))
                 ReversalRow(stock,updated.copy(symbol=stock.symbol),preview,errors[stock.instrumentKey] ?: if (fresh) updated.action else "Waiting for fresh live quote / market open",opening,openingSample,previousPreview,signalTimes[stock.instrumentKey])
             }
+            changes.filterKeys { key -> work.none { it.instrumentKey==key } }.forEach { (key,edit) ->
+                if(edit.source==PaperSource.OPENING) nextOpening=nextOpening+(key to PaperRecordEdits.opening(openingStates[key] ?: OpeningState(),edit,now,false))
+                else next=next+(key to PaperRecordEdits.reversal(states[key] ?: ReversalState(),edit,now,false,null,null))
+            }
             val changed=next.any { (key,value) -> val old=states[key] ?: ReversalState()
                 value.quantity!=old.quantity || value.manual!=old.manual || value.recordedAt!=old.recordedAt || value.peakPrice != old.peakPrice || value.symbol != old.symbol || value.watchDate != old.watchDate || value.buy != old.buy || value.buyAt != old.buyAt || value.reached80 != old.reached80 || value.trades != old.trades }
             var reversalSaved=false;var openingSaved=false
@@ -201,16 +205,17 @@ object ReversalRunner {
                 if (changed) { store.write(next);reversalSaved=true }
                 if(nextOpening.any { (key,s) -> val previous=openingStates[key] ?: OpeningState()
                     s.recordedAt!=previous.recordedAt || s.quantity!=previous.quantity || s.day!=previous.day || s.boughtToday!=previous.boughtToday || s.skipped!=previous.skipped || s.buy!=previous.buy || s.peak!=previous.peak || s.trades!=previous.trades }) { openingStore.write(nextOpening);openingSaved=true }
+                changes.forEach { (key,edit) ->
+                    val accepted=if(edit.source==PaperSource.OPENING) nextOpening[key]?.recordedAt==now else next[key]?.recordedAt==now
+                    val symbol=next[key]?.symbol?.ifBlank { key } ?: key
+                    recordMessage=if(accepted) "$symbol · paper record saved" else "$symbol · not saved: signal or record changed"
+                    DiagnosticLog.event("PAPER_RECORD",if(accepted) "SAVED" else "REJECTED_STALE_RECORD",symbol=symbol)
+                }
                 rows.forEach { row ->
                     val previous=openingStates[row.stock.instrumentKey]
                     if(row.opening.alertAt!=null && row.opening.alertAt!=previous?.alertAt)
                         DiagnosticLog.event("OPENING_ALERT",row.opening.alert ?: "WAIT",symbol=row.stock.symbol)
                     OpeningNotifications.update(context,row,live,now)
-                    changes[row.stock.instrumentKey]?.let { edit ->
-                        val accepted=if(edit.source==PaperSource.OPENING) row.opening.recordedAt==now else row.state.recordedAt==now
-                        recordMessage=if(accepted) "${row.stock.symbol} · paper record saved" else "${row.stock.symbol} · not saved: signal or record changed"
-                        DiagnosticLog.event("PAPER_RECORD",if(accepted) "SAVED" else "REJECTED_STALE_RECORD",symbol=row.stock.symbol)
-                    }
                     commands[row.stock.instrumentKey]?.let { command ->
                         OpeningNotifications.result(context,row.stock,previous ?: OpeningState(),row.opening,command)
                     }

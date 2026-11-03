@@ -133,12 +133,14 @@ object TradeResults {
     var expanded by remember(symbol) { mutableStateOf(false) }
     val now=Instant.now()
     val fresh=quote!=null && connected && marketOpen && java.time.Duration.between(quote.tradedAt,now).seconds in 0..30
+    val display=paperSignalDisplay(row,now)
+    val signal=if(!fresh) "WAIT" else when { display.startsWith("BUY ·")->"BUY";display.startsWith("SELL ·")->"SELL";display.startsWith("BUY ACTIVE")->"HOLD";else->"WAIT" }
     val live=preview?.takeIf { fresh && java.time.Duration.between(it.sampledAt,now).seconds in 0..20 }
     Surface(Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),color=MaterialTheme.colorScheme.surface) {
         Column(Modifier.padding(13.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
             Row(Modifier.fillMaxWidth().clickable { expanded=!expanded }.heightIn(min=40.dp),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
                 Text(symbol,fontWeight=FontWeight.Medium)
-                Text("${when(row?.signal) { "PAPER_BUY"->"BUY";"PAPER_SELL"->"SELL";"PAPER_HOLD"->"HOLD";else->"WAIT" }} ${if(expanded) "⌃" else "⌄"}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.primary)
+                Text("${signal} ${if(expanded) "⌃" else "⌄"}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.primary)
             }
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
                 Text(compactPrice(quote?.price),style=MaterialTheme.typography.bodyMedium)
