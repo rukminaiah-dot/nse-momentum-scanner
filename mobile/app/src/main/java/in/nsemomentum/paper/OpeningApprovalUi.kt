@@ -19,7 +19,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 
-@Composable fun OpeningNotificationPermission() {
+@Composable fun OpeningNotificationPermission(showQuantity:Boolean=true) {
     val context=androidx.compose.ui.platform.LocalContext.current
     var status by remember { mutableStateOf("") }
     var preset by remember { mutableStateOf(OpeningNoticeFormatter.quantity(context).toString()) }
@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.dp
     TextButton(onClick={
         if(Build.VERSION.SDK_INT>=33) permission.launch(Manifest.permission.POST_NOTIFICATIONS) else status="Notifications available; check Android notification settings"
     }) { Text("Enable opening paper alerts") }
-    OutlinedTextField(value=preset,onValueChange={ value ->
+    if(showQuantity) OutlinedTextField(value=preset,onValueChange={ value ->
         preset=value.filter(Char::isDigit).take(7)
         preset.toIntOrNull()?.takeIf { it in 1..1000000 }?.let {
             context.getSharedPreferences("opening_notification_settings",0).edit().putInt("quantity",it).apply()

@@ -49,6 +49,29 @@ class CompactPageTest {
         compose.waitForIdle()
         save("results")
     }
+    @Test fun dashboardUsesCompactQualifiedCardsAndDayWeekRows() {
+        val now=Instant.now();val key="NSE_EQ|DIXON"
+        val quote=LiveQuote(key,12319.0,11000.0,now,now)
+        val qualified=QualifiedStock("DIXON",now.minusSeconds(900),now,10.97,12319.0,14000.0,10000.0)
+        val candle=Candle(now.minusSeconds(900),12300.0,12350.0,12290.0,12319.0,14000.0)
+        val report=ScanReport(listOf(ScanRow("DIXON",relativeVolume=2.1,signal="PAPER_HOLD",reason="TEST",candle=candle)),now.toString(),0,1)
+        compose.setContent { PaperUiTheme {
+            pageView=androidx.compose.ui.platform.LocalView.current
+            androidx.compose.material3.Surface(color=androidx.compose.material3.MaterialTheme.colorScheme.background) {
+                Dashboard(indexReport=null,onRefreshIndices={},indexRefreshEnabled=false,stockCount=1,favouriteCount=1,customStockCount=0,
+                    scanStatus="Ready",report=report,scanning=false,scanProgress="",autoScanActive=true,autoScanStatus="Running",
+                    qualifiedToday=listOf(qualified),catalog=listOf(Stock("DIXON",key)),
+                    livePrices=LivePriceState(connected=true,quotes=mapOf(key to quote),markets=mapOf("NSE_EQ" to true)),liveStochastic=emptyMap(),
+                    paperTrades=listOf(PaperTrade("DIXON",now.minusSeconds(3600),11463.0,now.minusSeconds(60),12278.0)),previewSampledAt=now,
+                    onRefreshPrices={},pricesRefreshEnabled=true,weeklySummary=emptyList(),weeklyOutcomes=emptyList(),
+                    onStartFullDayScan={},onStopFullDayScan={},onRunScan={},onCancelScan={})
+            }
+        } }
+        compose.waitForIdle();save("dashboard")
+        compose.onNodeWithText("DIXON").performClick()
+        compose.onNodeWithText("Confirmed K / D").assertExists()
+        compose.onNodeWithText("Dashboard").assertExists()
+    }
     private fun save(name:String) {
         compose.runOnIdle {
             val image=android.graphics.Bitmap.createBitmap(pageView.width,pageView.height,android.graphics.Bitmap.Config.ARGB_8888)

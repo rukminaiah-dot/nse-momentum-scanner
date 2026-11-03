@@ -732,7 +732,7 @@ private fun rowDetail(row: ScanRow): String {
 }
 
 @Composable
-private fun Dashboard(
+internal fun Dashboard(
     indexReport: IndexMarketReport?,
     onRefreshIndices: () -> Unit,
     indexRefreshEnabled: Boolean,

@@ -55,7 +55,7 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
         Text("Reversal: K>D below 20; cross above 20 with 60s volume confirmation.")
         Text("Initial stop −1%; profit protection advances in 0.25-point steps. MUST SELL flags an urgent exit; manual positions stay open until SELL is recorded.")
         Text("Prices entered here are unverified paper records. Original automatic history is retained and labelled. Records are local and are not included in the existing backup. Avg % is the mean closed-trade return; P&L includes recorded quantity, before costs.")
-        OpeningNotificationPermission()
+        OpeningNotificationPermission(showQuantity=false)
     }},confirmButton={TextButton(onClick={help=false}) { Text("Done") }})
     request?.let { r -> PaperRecordDialog(r,onDismiss={request=null},onSave={price,qty ->
         val queued=ReversalRunner.record(PaperRecordEdit(r.key,r.source,r.operation,r.at,price,qty))
