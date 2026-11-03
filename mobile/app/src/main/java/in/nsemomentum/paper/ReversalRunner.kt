@@ -54,7 +54,7 @@ suspend fun reversalHistory(feed: CandleFeed, token: String, stock: Stock, now: 
     return (past.filter { b -> sessions.any { it.date == b.timestamp.atZone(MarketSession.ZONE).toLocalDate() } } + current).sortedBy { it.timestamp }
 }
 
-data class ReversalRow(val stock: Stock, val state: ReversalState, val preview: LiveStochastic?, val status: String,val opening:OpeningState=OpeningState())
+data class ReversalRow(val stock: Stock, val state: ReversalState, val preview: LiveStochastic?, val status: String,val opening:OpeningState=OpeningState(),val openingSample:OpeningSample?=null)
 data class ReversalSnapshot(val rows: List<ReversalRow> = emptyList(), val updatedAt: Instant? = null,
                             val status: String = "Waiting for live connection")
 
@@ -69,7 +69,12 @@ object ReversalRunner {
     private var credential: String? = null
     private val verifiedHistory=ConcurrentHashMap<String,List<Candle>>()
     private val approvals=kotlinx.coroutines.channels.Channel<OpeningApproval>(32)
-    fun approveOpening(command:OpeningApproval) { approvals.trySend(command) }
+    fun approveOpening(command:OpeningApproval):Boolean {
+        val pending=state.value.rows.firstOrNull { it.stock.instrumentKey==command.key }?.opening ?: return false
+        if(job?.isActive!=true || pending.alertAt!=command.alertAt || pending.alert==null ||
+            java.time.Duration.between(command.alertAt,Instant.now()).toMillis() !in 0..59999) return false
+        return approvals.trySend(command).isSuccess
+    }
     @Synchronized fun acquire(owner: String, context: Context, token: String, stocks: List<Stock>) {
         owners += owner
         val selected = stocks.filter { "_EQ|" in it.instrumentKey }.distinctBy { it.instrumentKey }.sortedBy { it.instrumentKey }
@@ -171,7 +176,7 @@ object ReversalRunner {
                 val updated=if (fresh) ReversalStrategy.tick(old,quote!!.price,preview?.context?.stochK,preview?.context?.stochD,now,before,after,continuous)
                     else ReversalStrategy.interrupted(old,if (old.buy != null) "BUY_ACTIVE_WAITING_FRESH_QUOTE" else "QUOTE_GAP_LAST_VALID_K_RETAINED")
                 next=next+(stock.instrumentKey to updated.copy(symbol=stock.symbol))
-                ReversalRow(stock,updated.copy(symbol=stock.symbol),preview,errors[stock.instrumentKey] ?: if (fresh) updated.action else "Waiting for fresh live quote / market open",opening)
+                ReversalRow(stock,updated.copy(symbol=stock.symbol),preview,errors[stock.instrumentKey] ?: if (fresh) updated.action else "Waiting for fresh live quote / market open",opening,openingSample)
             }
             val changed=next.any { (key,value) -> val old=states[key] ?: ReversalState()
                 value.peakPrice != old.peakPrice || value.symbol != old.symbol || value.watchDate != old.watchDate || value.buy != old.buy || value.buyAt != old.buyAt || value.reached80 != old.reached80 || value.trades != old.trades }
@@ -184,9 +189,11 @@ object ReversalRunner {
                     s.day!=previous.day || s.boughtToday!=previous.boughtToday || s.skipped!=previous.skipped || s.buy!=previous.buy || s.peak!=previous.peak || s.trades!=previous.trades }) openingStore.write(nextOpening)
                 rows.forEach { row ->
                     val previous=openingStates[row.stock.instrumentKey]
-                    if(row.opening.alertAt!=null && row.opening.alertAt!=previous?.alertAt) {
+                    if(row.opening.alertAt!=null && row.opening.alertAt!=previous?.alertAt)
                         DiagnosticLog.event("OPENING_ALERT",row.opening.alert ?: "WAIT",symbol=row.stock.symbol)
-                        OpeningNotifications.show(context,row.stock,row.opening)
+                    OpeningNotifications.update(context,row,live,now)
+                    commands[row.stock.instrumentKey]?.let { command ->
+                        OpeningNotifications.result(context,row.stock,previous ?: OpeningState(),row.opening,command)
                     }
                 }
                 openingStates=nextOpening

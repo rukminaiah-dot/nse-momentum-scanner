@@ -1,0 +1,12 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="14dp" android:background="@drawable/paper_notification_background">
+    <TextView android:id="@+id/signal_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#57E3B2" android:textSize="13sp" android:textStyle="bold" android:maxLines="1" android:ellipsize="end" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="6dp">
+        <TextView android:id="@+id/signal_price" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="#FFFFFF" android:textSize="25sp" android:textStyle="bold" android:maxLines="1" android:ellipsize="end" />
+        <TextView android:id="@+id/signal_change" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#57E3B2" android:textSize="13sp" android:textStyle="bold" />
+    </LinearLayout>
+    <TextView android:id="@+id/signal_metrics" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:textColor="#F9CF73" android:textSize="15sp" android:textStyle="bold" android:maxLines="2" />
+    <TextView android:id="@+id/signal_volume_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:textColor="#A7B8CB" android:textSize="10sp" android:text="Volume × = latest 60s / preceding 60s" />
+    <TextView android:id="@+id/signal_context" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="9dp" android:textColor="#FFFFFF" android:textSize="12sp" android:maxLines="2" />
+    <TextView android:id="@+id/signal_reason" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:textColor="#A7B8CB" android:textSize="12sp" android:maxLines="2" android:ellipsize="end" />
+    <TextView android:id="@+id/signal_expiry" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="9dp" android:textColor="#A7B8CB" android:textSize="11sp" android:maxLines="2" />
+</LinearLayout>

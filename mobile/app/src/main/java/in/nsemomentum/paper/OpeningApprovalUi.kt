@@ -19,40 +19,28 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 
-object OpeningNotifications {
-    private const val channel="opening-paper-approvals"
-    private val lastNotice=java.util.concurrent.ConcurrentHashMap<String,java.time.Instant>()
-    fun show(context:Context,stock:Stock,state:OpeningState) {
-        if(Build.VERSION.SDK_INT>=33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED) return
-        val now=java.time.Instant.now()
-        val noticeKey=stock.instrumentKey+if(state.buy==null) "BUY" else "SELL"
-        if(lastNotice[noticeKey]?.let { java.time.Duration.between(it,now).seconds<60 }==true) return
-        runCatching {
-            val manager=context.getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(NotificationChannel(channel,"Opening paper approvals",NotificationManager.IMPORTANCE_HIGH))
-            val intent=PendingIntent.getActivity(context,0,Intent(context,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-            val notification=NotificationCompat.Builder(context,channel).setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setContentTitle("${stock.symbol} · ${if(state.buy==null) "BUY" else "SELL"} approval · PAPER")
-                .setContentText("${state.alert?.replace('_',' ')}. Tap to review. No real orders.")
-                .setContentIntent(intent).setAutoCancel(true).setTimeoutAfter(30000).setPriority(NotificationCompat.PRIORITY_HIGH).build()
-            manager.notify(stock.instrumentKey.hashCode(),notification)
-            lastNotice[noticeKey]=now
-        }
-    }
-}
 @Composable fun OpeningNotificationPermission() {
     val context=androidx.compose.ui.platform.LocalContext.current
     var status by remember { mutableStateOf("") }
+    var preset by remember { mutableStateOf(OpeningNoticeFormatter.quantity(context).toString()) }
     val permission=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { status=if(it) "Opening alerts enabled" else "Notifications denied · approvals remain in app" }
     TextButton(onClick={
         if(Build.VERSION.SDK_INT>=33) permission.launch(Manifest.permission.POST_NOTIFICATIONS) else status="Notifications available; check Android notification settings"
     }) { Text("Enable opening paper alerts") }
+    OutlinedTextField(value=preset,onValueChange={ value ->
+        preset=value.filter(Char::isDigit).take(7)
+        preset.toIntOrNull()?.takeIf { it in 1..1000000 }?.let {
+            context.getSharedPreferences("opening_notification_settings",0).edit().putInt("quantity",it).apply()
+        }
+    },label={Text("Paper quantity for notification BUY")},supportingText={Text("Default 1 share. SELL uses the full held quantity. Invalid input keeps the last saved quantity.")},
+        isError=preset.toIntOrNull()?.let { it !in 1..1000000 } ?: true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number))
     if(status.isNotEmpty()) Text(status)
 }
 @Composable fun OpeningApprovalDialog(snapshot:ReversalSnapshot,prices:LivePriceState) {
     val row=snapshot.rows.firstOrNull { it.opening.alert!=null && it.opening.alertAt!=null } ?: return
     val state=row.opening
-    var quantity by remember(row.stock.instrumentKey,state.alertAt) { mutableStateOf("1") }
+    val appContext=androidx.compose.ui.platform.LocalContext.current
+    var quantity by remember(row.stock.instrumentKey,state.alertAt) { mutableStateOf(OpeningNoticeFormatter.quantity(appContext).toString()) }
     val q=quantity.toIntOrNull()
     val quote=prices.quotes[row.stock.instrumentKey]
     fun choose(choice:OpeningChoice) { state.alertAt?.let { ReversalRunner.approveOpening(OpeningApproval(row.stock.instrumentKey,it,choice,q ?: 0)) } }
@@ -71,7 +59,7 @@ object OpeningNotifications {
                 Text("WAIT keeps this position open, including for stops and the 15:10 exit.")
             }
             row.preview?.let { Text("Live 15m K %.2f / D %.2f".format(it.context.stochK,it.context.stochD)) }
-            Text("Approval expires after 30 seconds. Android may suppress heads-up popups depending on notification settings.")
+            Text("Approval expires after 60 seconds. Android may suppress heads-up popups depending on notification settings.")
         }
     },confirmButton={TextButton(enabled=state.buy!=null || q!=null && q in 1..1000000,onClick={choose(if(state.buy==null) OpeningChoice.BUY else OpeningChoice.SELL)}) { Text(if(state.buy==null) "BUY NOW · PAPER" else "SELL NOW · PAPER") }},dismissButton={
         Row {
