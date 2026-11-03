@@ -43,6 +43,17 @@ class ReversalStoreTest {
         val trade=store.read().getValue("TEST").trades.single()
         assertTrue(trade.manual);assertEquals(4,trade.quantity);assertEquals(-4.0,trade.gross,0.0)
     }
+    @Test fun kdOnlyEntryKeepsItsPolicyAcrossRestartAndExit() {
+        val context=RuntimeEnvironment.getApplication() as Context
+        val at=Instant.parse("2026-11-03T04:00:00Z")
+        val watch=ReversalStrategy.tick(ReversalState(),100.0,18.0,16.0,at)
+        val bought=ReversalStrategy.tick(watch,100.0,21.0,19.0,at.plusSeconds(1))
+        val store=ReversalStore(context);store.write(mapOf("TEST" to bought))
+        val restored=store.read().getValue("TEST")
+        assertEquals("KD_CROSS_V3",restored.entryPolicy)
+        val closed=ReversalStrategy.tick(restored,98.0,null,null,at.plusSeconds(2))
+        assertEquals("KD_CROSS_V3",closed.trades.single().policy)
+    }
     @Test fun readsOldTradeShapeWithoutInventingPastPeakProfit() {
         val context=RuntimeEnvironment.getApplication() as Context
         context.getSharedPreferences("reversal_strategy_v1",0).edit().putString("state",

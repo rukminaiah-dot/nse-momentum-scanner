@@ -24,7 +24,7 @@ data class ReversalState(
     val beforeVolume: Long? = null,
     val afterVolume: Long? = null,
     val observationGap: Boolean = true,
-    val quantity:Int=1,val manual:Boolean=false,val recordedAt:Instant?=null,val manualWaitUntil:Instant?=null,val identifiedAt:Instant?=null
+    val quantity:Int=1,val manual:Boolean=false,val recordedAt:Instant?=null,val manualWaitUntil:Instant?=null,val identifiedAt:Instant?=null,val entryPolicy:String?=null
 )
 object ReversalStrategy {
     fun stopPercent(buy: Double, peak: Double): Double {
@@ -46,7 +46,7 @@ object ReversalStrategy {
             if (StockSessionExit.due(state.buyAt,now) || price <= stop + state.buy*1e-12) {
                 val reason=if (StockSessionExit.due(state.buyAt,now)) "SESSION_1510" else if (stopPercent(state.buy,active.peakPrice!!) < 0) "STOP_1_PERCENT" else "STEPPED_PROFIT_STOP"
                 if(state.manual) return active.copy(action=if(state.manualWaitUntil?.let { now<it }==true) "WAIT_SELL_$reason" else "SELL_REQUIRED_$reason")
-                val trade=ReversalTrade(state.buyAt,state.buy,now,price,reason,if (state.beforeVolume == null) "LEGACY_ENTRY_STEP_EXIT" else "VOLUME_STEP_V2",state.beforeVolume,state.afterVolume)
+                val trade=ReversalTrade(state.buyAt,state.buy,now,price,reason,state.entryPolicy ?: if (state.beforeVolume == null) "LEGACY_ENTRY_STEP_EXIT" else "VOLUME_STEP_V2",state.beforeVolume,state.afterVolume)
                 return ReversalState(trades=state.trades+trade,symbol=state.symbol,action="SELL_$reason",previousK=k,previousAt=now)
             }
             return active.copy(action=if (stopPercent(state.buy,active.peakPrice!!) < 0) "BUY_ACTIVE_INITIAL_STOP" else "BUY_ACTIVE_PROFIT_PROTECTED")
@@ -58,28 +58,11 @@ object ReversalStrategy {
         val watching=state.watchDate == day
         val identified=state.identifiedAt?.takeIf { it<=now && it.atZone(MarketSession.ZONE).toLocalDate().toString()==day }
             ?: now.takeIf { k<20 && k>d }
-        val observed=state.copy(previousK=k,previousAt=now,observationGap=false,identifiedAt=identified)
-        if (state.confirmationAt != null) {
-            if (!recent || state.observationGap || !volumeContinuous)
-                return interrupted(observed,"CONFIRMATION_CANCELLED_DATA_GAP")
-            if (k <= 20 || k <= d) return observed.copy(confirmationAt=null,beforeVolume=null,afterVolume=null,
-                watchDate=if (k < 20 && k > d) day else null,action="CONFIRMATION_CANCELLED_KD_REVERSED")
-            val elapsed=Duration.between(state.confirmationAt,now).seconds
-            if (elapsed >= 60) {
-                if (state.beforeVolume == null || state.beforeVolume <= 0 || after == null)
-                    return observed.copy(confirmationAt=null,action="VOLUME_COMPARISON_UNAVAILABLE_NEW_CROSS_REQUIRED")
-                if (after > state.beforeVolume) return observed.copy(buy=price,buyAt=now,peakPrice=price,watchDate=null,
-                    confirmationAt=null,afterVolume=after,action="BUY_CONFIRMED_60S_VOLUME_INCREASE")
-                return observed.copy(confirmationAt=null,afterVolume=after,action="VOLUME_DID_NOT_INCREASE_NEW_CROSS_REQUIRED")
-            }
-            return observed.copy(afterVolume=after,action="CONFIRMING_60S_VOLUME_AND_KD")
-        }
+        val observed=state.copy(previousK=k,previousAt=now,observationGap=false,identifiedAt=identified,confirmationAt=null)
         val crossing=recent && !state.observationGap && state.previousK != null && state.previousK <= 20 && k > 20
-        if (watching && crossing && k > d) {
-            if (before == null || before <= 0 || !volumeContinuous) return observed.copy(
-                beforeVolume=before,afterVolume=null,action="PRE_CROSS_VOLUME_UNAVAILABLE_NEW_CROSS_REQUIRED")
-            return observed.copy(confirmationAt=now,beforeVolume=before,afterVolume=0,action="CONFIRMING_60S_VOLUME_AND_KD")
-        }
+        if (watching && crossing && k > d) return observed.copy(
+            buy=price,buyAt=now,peakPrice=price,watchDate=null,confirmationAt=null,
+            beforeVolume=null,afterVolume=null,entryPolicy="KD_CROSS_V3",action="BUY_CONFIRMED_K_CROSS_20")
         val watch=when { k < 20 && k > d -> day; k < 20 && k <= d -> null; watching -> day; else -> null }
         val reason=when {
             watching && k > 20 && (!recent || state.observationGap) -> "CROSS_UNOBSERVED_AFTER_DATA_GAP_NEW_CROSS_REQUIRED"
