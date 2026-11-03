@@ -77,11 +77,13 @@ class OpeningNotificationsTest {
             OpeningNotifications.update(context,row(sell),LivePriceState(connected=true,quotes=mapOf(stock.instrumentKey to quote)),at)
             val n=manager.activeNotifications.single().notification
             val view=n.bigContentView.apply(context,FrameLayout(context))
-            view.measure(View.MeasureSpec.makeMeasureSpec(1000,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED))
+            val width=(360*context.resources.displayMetrics.density).toInt()
+            view.measure(View.MeasureSpec.makeMeasureSpec(width,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED))
             view.layout(0,0,view.measuredWidth,view.measuredHeight)
             assertTrue(view.measuredHeight>0)
             val bitmap=Bitmap.createBitmap(view.measuredWidth,view.measuredHeight,Bitmap.Config.ARGB_8888)
             view.draw(Canvas(bitmap))
+            assertTrue(android.graphics.Color.alpha(bitmap.getPixel(bitmap.width/2,bitmap.height/2))>0)
             val file=File("build/outputs/notification-previews/${if(sell) "sell" else "buy"}.png");file.parentFile!!.mkdirs()
             file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG,100,it) }
             OpeningNotifications.update(context,row().copy(opening=OpeningState()),LivePriceState(),at)
