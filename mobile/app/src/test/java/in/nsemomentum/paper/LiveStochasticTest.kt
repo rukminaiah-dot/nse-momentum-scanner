@@ -33,6 +33,11 @@ class LiveStochasticTest {
         assertEquals(LiveStochasticPreview.calculate(history,quote,now,true,true),
             LiveStochasticPreview.calculate(history+current,quote,now,true,true))
     }
+    @Test fun boundedFeedSkewDoesNotCreateOneTickIndicatorGaps() {
+        assertNotNull(LiveStochasticPreview.calculate(history,quote.copy(receivedAt=now.plusMillis(50)),now,true,true))
+        assertNotNull(LiveStochasticPreview.calculate(history,quote.copy(tradedAt=now.plusMillis(500)),now,true,true))
+        assertNull(LiveStochasticPreview.calculate(history,quote.copy(tradedAt=now.plusSeconds(2)),now,true,true))
+    }
     @Test fun tradesPairEntriesExitsAndCalculateGrossPerShare() {
         val events = listOf(PaperTradeEvent("A",now,-1,90.0), PaperTradeEvent("A",now.plusSeconds(1),1,100.0),
             PaperTradeEvent("A",now.plusSeconds(2),1,110.0), PaperTradeEvent("A",now.plusSeconds(3),-1,98.0),
