@@ -49,14 +49,18 @@ object OpeningNotifications {
     }) { Text("Enable opening paper alerts") }
     if(status.isNotEmpty()) Text(status)
 }
-@Composable fun OpeningApprovalDialog(snapshot:ReversalSnapshot) {
+@Composable fun OpeningApprovalDialog(snapshot:ReversalSnapshot,prices:LivePriceState) {
     val row=snapshot.rows.firstOrNull { it.opening.alert!=null && it.opening.alertAt!=null } ?: return
     val state=row.opening
     var quantity by remember(row.stock.instrumentKey,state.alertAt) { mutableStateOf("1") }
     val q=quantity.toIntOrNull()
+    val quote=prices.quotes[row.stock.instrumentKey]
     fun choose(choice:OpeningChoice) { state.alertAt?.let { ReversalRunner.approveOpening(OpeningApproval(row.stock.instrumentKey,it,choice,q ?: 0)) } }
     AlertDialog(onDismissRequest={choose(OpeningChoice.WAIT)},title={Text("${row.stock.symbol} · ${if(state.buy==null) "BUY" else "SELL"} · PAPER ONLY")},text={
         Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+            quote?.let { Text("Latest price ₹%.2f · %s".format(it.price,clockTime(it.tradedAt))) }
+            if(quote!=null && q!=null && q in 1..1000000 && state.buy==null) Text("Estimated paper amount ₹%.2f".format(quote.price*q))
+            if(quote!=null && state.buy!=null) Text("Gross paper P&L ₹%+.2f · %+.2f%%".format((quote.price-state.buy)*state.quantity,(quote.price/state.buy-1)*100))
             Text(state.alert!!.replace('_',' '))
             Text("Approval records a simulated trade only. Upstox real orders are not connected.")
             if(state.buy==null) {
