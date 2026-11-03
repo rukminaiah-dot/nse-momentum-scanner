@@ -21,8 +21,12 @@ import androidx.compose.ui.unit.dp
 
 object OpeningNotifications {
     private const val channel="opening-paper-approvals"
+    private val lastNotice=java.util.concurrent.ConcurrentHashMap<String,java.time.Instant>()
     fun show(context:Context,stock:Stock,state:OpeningState) {
         if(Build.VERSION.SDK_INT>=33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED) return
+        val now=java.time.Instant.now()
+        val noticeKey=stock.instrumentKey+if(state.buy==null) "BUY" else "SELL"
+        if(lastNotice[noticeKey]?.let { java.time.Duration.between(it,now).seconds<60 }==true) return
         runCatching {
             val manager=context.getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(NotificationChannel(channel,"Opening paper approvals",NotificationManager.IMPORTANCE_HIGH))
@@ -32,6 +36,7 @@ object OpeningNotifications {
                 .setContentText("${state.alert?.replace('_',' ')}. Tap to review. No real orders.")
                 .setContentIntent(intent).setAutoCancel(true).setTimeoutAfter(30000).setPriority(NotificationCompat.PRIORITY_HIGH).build()
             manager.notify(stock.instrumentKey.hashCode(),notification)
+            lastNotice[noticeKey]=now
         }
     }
 }

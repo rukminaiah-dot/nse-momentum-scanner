@@ -29,6 +29,7 @@ object OpeningMomentum {
         val kd=s.k!=null && s.d!=null && s.k.isFinite() && s.d.isFinite() && s.k in 0.0..100.0 && s.d in 0.0..100.0
         val recent=old.previousAt?.let { Duration.between(it,s.at).toMillis() in 1..5000 }==true
         val rising=kd && recent && old.previousK!=null && s.k!!>old.previousK
+        val upward=rising || (old.alert=="OPENING_BUY" && kd && recent && old.previousK!=null && s.k!!>=old.previousK)
         val bearish=kd && recent && old.previousK!=null && old.previousD!=null &&
             s.k!!<s.d!! && s.k<old.previousK && (old.previousK>=old.previousD || old.alert=="KD_BEARISH")
         old=old.copy(previousK=if(kd) s.k else old.previousK,previousD=if(kd) s.d else old.previousD,previousAt=if(kd) s.at else null)
@@ -48,7 +49,7 @@ object OpeningMomentum {
             val window=time>=LocalTime.of(9,17) && time<LocalTime.of(9,30)
             val positive=s.open!=null && s.previousClose!=null && s.open>0 && s.previousClose>0 && s.open>s.previousClose && price>s.open
             val volume=s.continuous && (s.beforeVolume ?: 0)>0 && s.latestVolume!=null && s.latestVolume>s.beforeVolume!!
-            if(!old.boughtToday && !old.skipped && window && kd && s.k!!<50 && s.k>s.d!! && rising && positive &&
+            if(!old.boughtToday && !old.skipped && window && kd && s.k!!<50 && s.k>s.d!! && upward && positive &&
                 s.price60!=null && price>s.price60 && volume) "OPENING_BUY" else null
         }
         if(reason==null) return old.copy(alert=null,alertAt=null,status=if(openBuy!=null) "Paper position open" else "Watching opening K<50, K>D, rising price and 60s volume")
