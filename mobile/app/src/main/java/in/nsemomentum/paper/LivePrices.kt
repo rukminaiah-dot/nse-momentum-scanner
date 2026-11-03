@@ -164,7 +164,8 @@ class UpstoxLivePrices(
         .followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false).build(),
     private val apiBase: String = "https://api.upstox.com",
     private val socketClient: OkHttpClient = OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS).readTimeout(0, TimeUnit.SECONDS)
-        .pingInterval(20, TimeUnit.SECONDS).followRedirects(false).followSslRedirects(false).build()
+        .pingInterval(20, TimeUnit.SECONDS).followRedirects(false).followSslRedirects(false).build(),
+    private val webSockets: WebSocket.Factory = socketClient
 ) {
     internal suspend fun authorize(token: String): String = suspendCancellableCoroutine { continuation ->
         val request = Request.Builder().url("$apiBase/v3/feed/market-data-feed/authorize").get()
@@ -212,7 +213,7 @@ class UpstoxLivePrices(
                 subscribed = requested?.value ?: keys
                 subscription = LivePriceDecoder.subscription(subscribed)
                 val url = authorize(token)
-                socket = socketClient.newWebSocket(Request.Builder().url(url).build(), object : WebSocketListener() {
+                socket = webSockets.newWebSocket(Request.Builder().url(url).build(), object : WebSocketListener() {
                     override fun onOpen(webSocket: WebSocket, response: Response) {
                         if (!webSocket.send(subscription) || events.trySend(Event.Open).isFailure) webSocket.cancel()
                     }
