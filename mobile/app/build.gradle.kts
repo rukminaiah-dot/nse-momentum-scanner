@@ -10,8 +10,8 @@ android {
         applicationId = "com.nsemomentum.paper.scanner"
         minSdk = 26
         targetSdk = 35
-        versionCode = 24
-        versionName = "0.20.0-candidate"
+        versionCode = 25
+        versionName = "0.21.0-candidate"
         resValue("string", "app_name", "Momentum Paper Scanner")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -60,6 +60,9 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.protobuf:protobuf-javalite:3.25.5")
+    testImplementation(composeBom)
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
     testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")

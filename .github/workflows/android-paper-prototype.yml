@@ -95,3 +95,11 @@ jobs:
           path: mobile/app/build/outputs/notification-previews/*.png
           if-no-files-found: warn
           retention-days: 7
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compact-page-previews
+          path: mobile/app/build/outputs/page-previews/*.png
+          if-no-files-found: warn
+          retention-days: 7

@@ -12,7 +12,9 @@ class ReversalStore(context: Context) {
         root.keys().asSequence().associateWith { key ->
             val row = root.getJSONObject(key)
             val closed = row.getJSONArray("trades")
-            ReversalState(symbol=row.optString("symbol"),watchDate=row.optString("watch").takeIf { it.isNotEmpty() },
+            ReversalState(quantity=row.optInt("quantity",1),manual=row.optBoolean("manual"),
+                recordedAt=row.optString("recordedAt").takeIf { it.isNotEmpty() }?.let(Instant::parse),
+                manualWaitUntil=row.optString("manualWaitUntil").takeIf { it.isNotEmpty() }?.let(Instant::parse),symbol=row.optString("symbol"),watchDate=row.optString("watch").takeIf { it.isNotEmpty() },
                 buy=if (row.has("buy")) row.getDouble("buy").also { require(it.isFinite() && it > 0) } else null,
                 buyAt=row.optString("buyAt").takeIf { it.isNotEmpty() }?.let(Instant::parse),
                 reached80=row.optBoolean("reached80"),
@@ -20,17 +22,17 @@ class ReversalStore(context: Context) {
                 afterVolume=if(row.has("entryAfter")) row.getLong("entryAfter") else null,
                 peakPrice=if (row.has("peak")) row.getDouble("peak").also { require(it.isFinite() && it > 0) } else null,
                 trades=(0 until closed.length()).map { i -> val t=closed.getJSONArray(i)
-                    ReversalTrade(Instant.parse(t.getString(0)),t.getDouble(1),Instant.parse(t.getString(2)),t.getDouble(3),t.getString(4),if (t.length()>5) t.getString(5) else "LEGACY_80",if(t.length()>6 && !t.isNull(6)) t.getLong(6) else null,if(t.length()>7 && !t.isNull(7)) t.getLong(7) else null) })
+                    ReversalTrade(Instant.parse(t.getString(0)),t.getDouble(1),Instant.parse(t.getString(2)),t.getDouble(3),t.getString(4),if (t.length()>5) t.getString(5) else "LEGACY_80",if(t.length()>6 && !t.isNull(6)) t.getLong(6) else null,if(t.length()>7 && !t.isNull(7)) t.getLong(7) else null,if(t.length()>8) t.getInt(8) else 1,if(t.length()>9) t.getBoolean(9) else false) })
         }.also { states -> require(states.values.all { (it.buy == null) == (it.buyAt == null) }) }
     }.getOrDefault(emptyMap())
     fun write(states: Map<String,ReversalState>) {
         val root = JSONObject()
         states.forEach { (key,s) ->
-            val row = JSONObject().put("symbol",s.symbol).put("reached80",s.reached80).put("trades",JSONArray().apply {
-                s.trades.forEach { put(JSONArray(listOf(it.buyAt.toString(),it.buy,it.sellAt.toString(),it.sell,it.reason,it.policy,it.beforeVolume,it.afterVolume))) }
+            val row = JSONObject().put("symbol",s.symbol).put("quantity",s.quantity).put("manual",s.manual).put("reached80",s.reached80).put("trades",JSONArray().apply {
+                s.trades.forEach { put(JSONArray(listOf(it.buyAt.toString(),it.buy,it.sellAt.toString(),it.sell,it.reason,it.policy,it.beforeVolume,it.afterVolume,it.quantity,it.manual))) }
             })
             if (s.buy != null) { s.beforeVolume?.let { row.put("entryBefore",it) };s.afterVolume?.let { row.put("entryAfter",it) } }
-            s.peakPrice?.let { row.put("peak",it) }
+            s.recordedAt?.let { row.put("recordedAt",it.toString()) };s.manualWaitUntil?.let { row.put("manualWaitUntil",it.toString()) };s.peakPrice?.let { row.put("peak",it) }
             s.watchDate?.let { row.put("watch",it) }; s.buy?.let { row.put("buy",it) };s.buyAt?.let { row.put("buyAt",it.toString()) }
             root.put(key,row)
         }

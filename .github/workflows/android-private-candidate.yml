@@ -66,7 +66,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: android-permanent-signed-candidate
-          run-id: 41557093500
+          run-id: 41560462605
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/previous-android-candidate
       - name: Build and verify privately signed candidate
@@ -121,5 +121,13 @@ jobs:
         with:
           name: opening-notification-previews
           path: mobile/app/build/outputs/notification-previews/*.png
+          if-no-files-found: warn
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compact-page-previews
+          path: mobile/app/build/outputs/page-previews/*.png
           if-no-files-found: warn
           retention-days: 7

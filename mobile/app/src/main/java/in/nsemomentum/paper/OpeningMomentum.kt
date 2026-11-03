@@ -13,7 +13,7 @@ data class OpeningState(
     val day:String="",val previousK:Double?=null,val previousD:Double?=null,val previousAt:Instant?=null,
     val boughtToday:Boolean=false,val skipped:Boolean=false,val buy:Double?=null,val buyAt:Instant?=null,
     val quantity:Int=0,val peak:Double?=null,val alert:String?=null,val alertAt:Instant?=null,
-    val waitUntil:Instant?=null,val status:String="Waiting for opening data",val trades:List<OpeningTrade> = emptyList()
+    val waitUntil:Instant?=null,val status:String="Waiting for opening data",val trades:List<OpeningTrade> = emptyList(),val recordedAt:Instant?=null
 )
 data class OpeningSample(val at:Instant,val fresh:Boolean,val price:Double?,val open:Double?,val previousClose:Double?,
     val k:Double?,val d:Double?,val price60:Double?,val beforeVolume:Long?,val latestVolume:Long?,val continuous:Boolean)
