@@ -15,6 +15,18 @@ class OpeningMomentumTest {
         assertEquals(102.0,buy.buy!!,0.0);assertEquals(5,buy.quantity);assertTrue(buy.boughtToday)
         assertNull(buy.alert)
     }
+    @Test fun openingKMustBeStrictlyBetweenTwentyAndFiftyAtAlertAndApproval() {
+        for(k in listOf(0.0,19.99,20.0,50.0,50.01,100.0)) {
+            val first=OpeningMomentum.tick(OpeningState(),sample(k=(k-1).coerceAtLeast(0.0),d=0.0))
+            assertNull("Rejected K=$k",OpeningMomentum.tick(first,sample(1,k=k,d=0.0)).alert)
+        }
+        for(k in listOf(20.01,49.99)) {
+            val first=OpeningMomentum.tick(OpeningState(),sample(k=k-1,d=10.0))
+            assertEquals("OPENING_BUY",OpeningMomentum.tick(first,sample(1,k=k,d=10.0)).alert)
+        }
+        val p=alert()
+        for(k in listOf(20.0,50.0)) assertNull(OpeningMomentum.approve(p,sample(2,k=k,d=10.0),OpeningApproval("TEST",p.alertAt!!,OpeningChoice.BUY,1)).buy)
+    }
     @Test fun everyEntryConditionAndFreshApprovalIsRequired() {
         val samples=listOf(sample(1,k=50.0),sample(1,k=28.0),sample(1,d=35.0),sample(1).copy(open=99.0),
             sample(1,price=101.0),sample(1).copy(price60=103.0),sample(1).copy(latestVolume=100),sample(1).copy(beforeVolume=0),

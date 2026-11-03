@@ -49,10 +49,10 @@ object OpeningMomentum {
             val window=time>=LocalTime.of(9,17) && time<LocalTime.of(9,30)
             val positive=s.open!=null && s.previousClose!=null && s.open>0 && s.previousClose>0 && s.open>s.previousClose && price>s.open
             val volume=s.continuous && (s.beforeVolume ?: 0)>0 && s.latestVolume!=null && s.latestVolume>s.beforeVolume!!
-            if(!old.boughtToday && !old.skipped && window && kd && s.k!!<50 && s.k>s.d!! && upward && positive &&
+            if(!old.boughtToday && !old.skipped && window && kd && s.k!!>20 && s.k<50 && s.k>s.d!! && upward && positive &&
                 s.price60!=null && price>s.price60 && volume) "OPENING_BUY" else null
         }
-        if(reason==null) return old.copy(alert=null,alertAt=null,status=if(openBuy!=null) "Paper position open" else "Watching opening K<50, K>D, rising price and 60s volume")
+        if(reason==null) return old.copy(alert=null,alertAt=null,status=if(openBuy!=null) "Paper position open" else "Watching opening 20<K<50, K>D, rising price and 60s volume")
         if(old.waitUntil?.let { s.at<it }==true) return old.copy(alert=null,alertAt=null,status="Waiting · paper position unchanged")
         if(old.alertAt?.let { Duration.between(it,s.at).seconds>=30 }==true) return old.copy(alert=null,alertAt=null,waitUntil=s.at.plusSeconds(30),status="Approval expired · rechecking")
         return old.copy(alert=reason,alertAt=if(old.alert==reason) old.alertAt ?: s.at else s.at,status="Approval required · PAPER ONLY")

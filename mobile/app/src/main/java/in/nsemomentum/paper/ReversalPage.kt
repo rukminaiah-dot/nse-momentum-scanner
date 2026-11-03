@@ -18,7 +18,7 @@ fun ReversalPage(snapshot: ReversalSnapshot, prices: LivePriceState, modifier: M
         item {
             Text("LIVE K/D REVERSAL · PAPER ONLY",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)
             OpeningNotificationPermission()
-            Text("Opening paper setup 09:17–09:30 IST: positive open; price above open and 60 seconds ago; K<50, K>D and rising; latest 60s volume above preceding 60s. BUY/SELL require approval; WAIT keeps positions open. At most one approved opening BUY per stock/day. Separate paper ledger; no Upstox orders.")
+            Text("Opening paper setup 09:17–09:30 IST: positive open; price above open and 60 seconds ago; 20<K<50, K>D and rising; latest 60s volume above preceding 60s. BUY/SELL require approval; WAIT keeps positions open. At most one approved opening BUY per stock/day. Separate paper ledger; no Upstox orders.")
             Text("Same selected stocks and live connection · no indices · 60s volume confirmation for BUY")
             Text("Shortlist: K>D with K<20. A live cross above 20 starts 60s confirmation. K must stay above 20 and D; post-cross 60s volume must exceed pre-cross 60s volume. No minimum K−D gap.")
             Text("Automatic Reversal paper trades close at 15:10 IST using a fresh price. Opening trades instead request SELL approval; WAIT leaves them open. No new stock BUYs after 15:10. App must be open or the existing full-day service running.",style=MaterialTheme.typography.bodySmall)
