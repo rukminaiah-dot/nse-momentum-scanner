@@ -201,7 +201,6 @@ fun signalBlocker(row:ReversalRow):String=when {
     row.preview==null -> "K/D unavailable · waiting for fresh quote/history"
     row.state.action=="PRE_CROSS_VOLUME_UNAVAILABLE_NEW_CROSS_REQUIRED" -> "Cross seen · preceding 60s volume unavailable · new cross required"
     row.state.action=="BUY_CONFIRMED_K_CROSS_20" -> "BUY · K crossed above 20 with K>D"
-    "CONFIRMING_60S_VOLUME_AND_KD" -> "Confirming K/D and 60s volume"
     row.state.action.contains("VOLUME") || row.state.action.contains("GAP") -> reversalActionLabel(row.state.action)
     row.state.action=="WAITING_FOR_K_ABOVE_D_BELOW_20" -> "Waiting for K>D below 20"
     row.state.action=="SHORTLISTED_BELOW_20_WAITING_FOR_CROSS" -> "Waiting for K to cross 20"
