@@ -21,7 +21,7 @@ object DiagnosticLog {
                 if (date == null || date < today.minusDays(6)) file.delete()
             }
             val file = java.io.File(dir,"$today.log")
-            if (file.length() > 256_000) return
+            if (file.length() > 256_000) file.writeText(file.readText().takeLast(128_000).substringAfter('\n', ""))
             val safeEvent = event.takeIf { it.matches(Regex("[A-Z_]{1,40}")) } ?: "EVENT"
             val safeResult = result.takeIf { it.matches(Regex("[A-Z0-9_]{1,70}")) } ?: "STATUS"
             val safeNumbers = numbers.takeIf { it.matches(Regex("[a-z0-9= .,:%+−-]{0,160}")) } ?: ""
