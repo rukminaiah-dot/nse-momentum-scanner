@@ -28,7 +28,7 @@ data class SignalItem(val row:ReversalRow,val source:PaperSource) {
     val quantity:Int get()=if(source==PaperSource.OPENING) row.opening.quantity else row.state.quantity
     val held:Boolean get()=buy!=null && (source==PaperSource.OPENING || row.state.manual)
     val latest:Instant get()=if(source==PaperSource.OPENING) listOfNotNull(row.opening.alertAt,row.opening.recordedAt,buyAt,row.opening.trades.lastOrNull()?.sellAt).maxOrNull() ?: row.signalAt ?: Instant.EPOCH
-        else listOfNotNull(row.signalAt,row.state.recordedAt,buyAt,row.state.confirmationAt,row.state.trades.lastOrNull()?.sellAt).maxOrNull() ?: Instant.EPOCH
+        else listOfNotNull(row.state.identifiedAt,row.signalAt,row.state.recordedAt,buyAt,row.state.confirmationAt,row.state.trades.lastOrNull()?.sellAt).maxOrNull() ?: Instant.EPOCH
 }
 fun unifiedSignals(snapshot:ReversalSnapshot,now:Instant):List<SignalItem> {
     val date=now.atZone(MarketSession.ZONE).toLocalDate();val time=now.atZone(MarketSession.ZONE).toLocalTime()
@@ -36,12 +36,12 @@ fun unifiedSignals(snapshot:ReversalSnapshot,now:Instant):List<SignalItem> {
         val k=row.preview?.context?.stochK;val d=row.preview?.context?.stochD
         val openingWatch=row.openingSample?.fresh==true && time>=LocalTime.of(9,15) && time<LocalTime.of(9,30) && k!=null && d!=null && k>20 && k<50 && k>d
         val opening=openingWatch || row.opening.alert!=null || row.opening.buy!=null || row.opening.trades.lastOrNull()?.sellAt?.atZone(MarketSession.ZONE)?.toLocalDate()==date
-        val reversal=row.state.watchDate==date.toString() || row.state.buy!=null || row.state.trades.lastOrNull()?.sellAt?.atZone(MarketSession.ZONE)?.toLocalDate()==date
+        val reversal=row.state.identifiedAt?.atZone(MarketSession.ZONE)?.toLocalDate()==date || row.state.watchDate==date.toString() || row.state.buy!=null || row.state.trades.lastOrNull()?.sellAt?.atZone(MarketSession.ZONE)?.toLocalDate()==date
         val candidates=listOfNotNull(if(opening) SignalItem(row,PaperSource.OPENING) else null,if(reversal) SignalItem(row,PaperSource.REVERSAL) else null)
         val held=candidates.filter { it.held }
         val active=candidates.filter { item -> if(item.source==PaperSource.OPENING) openingWatch || row.opening.alert!=null || row.opening.buy!=null else row.state.watchDate==date.toString() || row.state.buy!=null }
         if(held.isNotEmpty()) held else listOfNotNull((active.ifEmpty { candidates }).maxByOrNull { it.latest })
-    }.sortedByDescending { it.latest }
+    }.sortedWith(compareByDescending<SignalItem> { it.latest.takeIf { t->t<=now } ?: Instant.EPOCH }.thenBy { it.id })
 }
 data class RecordRequest(val key:String,val symbol:String,val source:PaperSource,val operation:PaperOperation,val at:Instant?,val price:Double?,val quantity:Int)
 @Composable fun ReversalPage(snapshot:ReversalSnapshot,prices:LivePriceState,modifier:Modifier=Modifier) {
@@ -50,7 +50,8 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
     var defaultQty by remember { mutableStateOf(OpeningNoticeFormatter.quantity(context)) }
     var request by remember { mutableStateOf<RecordRequest?>(null) }
     var notice by remember { mutableStateOf("") }
-    val now=snapshot.updatedAt ?: Instant.now()
+    var now by remember { mutableStateOf(Instant.now()) }
+    LaunchedEffect(Unit) { while(true) { now=Instant.now();kotlinx.coroutines.delay(1000) } }
     val signals=unifiedSignals(snapshot,now)
     fun edit(trade:UiTrade,operation:PaperOperation) { trade.source?.let { source -> request=RecordRequest(trade.key,trade.symbol,source,operation,trade.buyAt,if(operation==PaperOperation.EDIT_BUY) trade.buy else trade.sell,trade.quantity) } }
     if(help) AlertDialog(onDismissRequest={help=false},title={Text("Rules & alerts")},text={Column(Modifier.heightIn(max=480.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
@@ -73,8 +74,8 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
         if(signals.isEmpty()) item { Text("No shortlisted stocks yet",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant) }
         items(signals,key={it.id}) { item -> UnifiedStockCard(item,prices,onRecord={op,at,price,qty -> request=RecordRequest(item.row.stock.instrumentKey,item.row.stock.symbol,item.source,op,at,price,qty)},onWait={
             notice=if(ReversalRunner.record(PaperRecordEdit(item.row.stock.instrumentKey,item.source,PaperOperation.WAIT,item.buyAt,null,item.quantity.coerceAtLeast(1)))) "WAIT requested · no SELL" else "Monitoring unavailable"
-        },defaultQuantity=defaultQty) }
-        item { Text("${if(prices.connected) "Connected" else "Disconnected"} · ${compactTime(snapshot.updatedAt)}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+        },defaultQuantity=defaultQty,now=now) }
+        item { Text(monitorStatus(snapshot.updatedAt,prices.connected,now),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
         item { PaperQuantityBar { defaultQty=it } }
         if(snapshot.recordStatus!=null || notice.isNotEmpty()) item { Text(snapshot.recordStatus ?: notice,style=MaterialTheme.typography.bodySmall) }
         item { CompactResults(TradeResults.reversal(snapshot),::edit) }
@@ -94,15 +95,16 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
             keyboardOptions=androidx.compose.foundation.text.KeyboardOptions(keyboardType=androidx.compose.ui.text.input.KeyboardType.Number))
     }},confirmButton={TextButton(enabled=p!=null && p.isFinite() && p>0 && p<=1000000000 && q!=null && q in 1..1000000,onClick={onSave(p!!,q!!)}) { Text(if(editing) "Save price" else if(sell) "Record SELL" else "Record BUY") }},dismissButton={TextButton(onClick=onDismiss) { Text("Cancel") }})
 }
-@Composable fun UnifiedStockCard(item:SignalItem,prices:LivePriceState,onRecord:(PaperOperation,Instant?,Double?,Int)->Unit,onWait:()->Unit,defaultQuantity:Int) {
+@Composable fun UnifiedStockCard(item:SignalItem,prices:LivePriceState,onRecord:(PaperOperation,Instant?,Double?,Int)->Unit,onWait:()->Unit,defaultQuantity:Int,now:Instant=Instant.now()) {
     var expanded by remember(item.id) { mutableStateOf(false) }
     val row=item.row;val quote=prices.quotes[row.stock.instrumentKey];val sample=row.openingSample
-    val k=row.preview?.context?.stochK;val d=row.preview?.context?.stochD;val pk=row.previousPreview?.context?.stochK;val pd=row.previousPreview?.context?.stochD
+    val displayPreview=row.preview ?: row.previousPreview
+    val k=displayPreview?.context?.stochK;val d=displayPreview?.context?.stochD;val pk=row.previousPreview?.context?.stochK;val pd=row.previousPreview?.context?.stochD
     val ratio=if(sample?.continuous==true && (sample.beforeVolume ?: 0)>0 && sample.latestVolume!=null) sample.latestVolume.toDouble()/sample.beforeVolume!! else null
-    val urgent=item.held && (ratio?.let { it<=.70 }==true || (k!=null && d!=null && pk!=null && k<d && k<pk))
+    val urgent=item.held && row.preview!=null && (ratio?.let { it<=.70 }==true || (k!=null && d!=null && pk!=null && k<d && k<pk))
     val required=if(item.source==PaperSource.OPENING) row.opening.alert?.takeIf { it!="OPENING_BUY" }!=null else row.state.action.contains("SELL_")
-    val fresh=sample?.fresh==true
-    val canBuy=if(item.source==PaperSource.OPENING) row.opening.alert=="OPENING_BUY" else row.state.buy!=null && !row.state.manual && k!=null && d!=null && k>d
+    val fresh=sample?.fresh==true && row.preview!=null && java.time.Duration.between(sample.at,now).seconds in 0..5 && java.time.Duration.between(row.preview.sampledAt,now).seconds in 0..5
+    val canBuy=row.preview!=null && if(item.source==PaperSource.OPENING) row.opening.alert=="OPENING_BUY" else row.state.buy!=null && !row.state.manual && k!=null && d!=null && k>d
     val lastTrade=TradeResults.reversal(ReversalSnapshot(listOf(row))).filter { it.source==item.source }.maxByOrNull { it.sellAt ?: Instant.EPOCH }
     val closedToday=lastTrade?.sellAt?.atZone(MarketSession.ZONE)?.toLocalDate()==LocalDate.now(MarketSession.ZONE)
     val label=when { urgent->"MUST SELL";item.held && required->"SELL SIGNAL";item.held->"BOUGHT";canBuy->"BUY SIGNAL";closedToday->"CLOSED";item.buy==null && item.latest!=Instant.EPOCH->"IDENTIFIED";else->"WATCH" }
@@ -134,7 +136,9 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
                     TextButton(onClick={onRecord(PaperOperation.EDIT_SELL,lastTrade.buyAt,lastTrade.sell,lastTrade.quantity)},contentPadding=PaddingValues(0.dp)) { Text("SELL ${compactPrice(lastTrade.sell)} ✎",fontSize=12.sp) }
                 }
             }
-            Text("${compactTime(item.latest.takeIf { it!=Instant.EPOCH })}${if(!fresh) " · Last data" else ""}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Signal ${compactTime(item.latest.takeIf { it!=Instant.EPOCH && it<=now })}${if(!fresh) " · Last data" else ""}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("K/D ${compactTime(displayPreview?.sampledAt)}${if(row.preview==null) " · STALE" else ""} · Quote ${compactTime(quote?.tradedAt)}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            if(!item.held && !canBuy) Text(signalBlocker(row),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             if(expanded) {
                 HorizontalDivider()
                 val priceChange=if(sample?.price60!=null && quote!=null) (quote.price/sample.price60-1)*100 else null
@@ -181,4 +185,23 @@ fun reversalActionLabel(action: String): String = when(action) {
     "SHORTLISTED_BELOW_20_WAITING_FOR_CROSS" -> "Shortlisted below 20 · watching for upward crossing"
     "WAITING_FOR_K_ABOVE_D_BELOW_20" -> "Watching for K above D below 20"
     else -> action.replace('_',' ').lowercase()
+}
+
+fun monitorStatus(updated:Instant?,connected:Boolean,now:Instant):String {
+    val age=updated?.let { java.time.Duration.between(it,now).seconds }
+    return when {
+        age==null -> "Monitor waiting · ${if(connected) "socket connected" else "disconnected"}"
+        age<0 -> "Clock changed · check device automatic date/time"
+        age>10 -> "Monitor stale · ${age}s old · ${if(connected) "socket connected" else "disconnected"}"
+        else -> "Monitor ${compactTime(updated)} · ${if(connected) "connected" else "disconnected"}"
+    }
+}
+fun signalBlocker(row:ReversalRow):String=when {
+    row.preview==null -> "K/D unavailable · waiting for fresh quote/history"
+    row.state.action=="PRE_CROSS_VOLUME_UNAVAILABLE_NEW_CROSS_REQUIRED" -> "Cross seen · preceding 60s volume unavailable · new cross required"
+    row.state.action=="CONFIRMING_60S_VOLUME_AND_KD" -> "Confirming K/D and 60s volume"
+    row.state.action.contains("VOLUME") || row.state.action.contains("GAP") -> reversalActionLabel(row.state.action)
+    row.state.action=="WAITING_FOR_K_ABOVE_D_BELOW_20" -> "Waiting for K>D below 20"
+    row.state.action=="SHORTLISTED_BELOW_20_WAITING_FOR_CROSS" -> "Waiting for K to cross 20"
+    else -> reversalActionLabel(row.state.action)
 }

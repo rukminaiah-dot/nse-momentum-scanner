@@ -67,7 +67,10 @@ class CompactPageTest {
             }
         } }
         compose.waitForIdle();save("dashboard")
-        compose.onNodeWithText("DIXON").performClick()
+        compose.onNodeWithText("Refresh").assertIsDisplayed()
+        compose.onNodeWithText("Stop scan").assertIsDisplayed()
+        compose.onNodeWithText("Market indices").assertExists()
+        compose.onNodeWithText("DIXON").performScrollTo().performClick()
         compose.onNodeWithText("Confirmed K / D").assertExists()
         compose.onNodeWithText("Dashboard").assertExists()
     }

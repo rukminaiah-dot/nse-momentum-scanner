@@ -153,15 +153,13 @@ object ReversalRunner {
                 val marketOpen=live.markets[stock.instrumentKey.substringBefore('|')] == true
                 val local=now.atZone(MarketSession.ZONE).toLocalTime()
                 val fresh=quote != null && live.connected && marketOpen &&
-                    java.time.Duration.between(quote.tradedAt,now).toMillis() in -1000..30000 &&
-                    java.time.Duration.between(quote.receivedAt,now).toMillis() in -1000..30000 &&
+                    java.time.Duration.between(quote.tradedAt,now).toMillis() in -1000..50000 &&
+                    java.time.Duration.between(quote.receivedAt,now).toMillis() in -1000..50000 &&
                     local >= java.time.LocalTime.of(9,15) && local < java.time.LocalTime.of(15,30)
                 val preview=LiveStochasticPreview.calculate(history[stock.instrumentKey].orEmpty(),quote,now,live.connected,marketOpen)
                 val old=states[stock.instrumentKey] ?: ReversalState()
                 val volume=volumes.getValue(stock.instrumentKey)
-                val volumeFresh=fresh && quote?.volumeToday != null && quote.volumeAt != null &&
-                    java.time.Duration.between(quote.volumeAt,now).toMillis() in -1000..3000
-                if (volumeFresh) volume.add(quote!!.volumeAt!!,quote.volumeToday!!,live.connectionId) else volume.clear()
+                val volumeFresh=volume.ingest(quote,now,fresh,live.connectionId)
                 val priceWindow=priceWindows.getValue(stock.instrumentKey)
                 if(fresh) priceWindow.add(quote!!.receivedAt,quote.price,live.connectionId) else priceWindow.clear()
                 val earlier=volume.amount(now.minusSeconds(120),now.minusSeconds(60))
@@ -187,19 +185,19 @@ object ReversalRunner {
                 val priorPreview=previousPreviews[stock.instrumentKey]
                 val openingWatch=fresh && local>=java.time.LocalTime.of(9,15) && local<java.time.LocalTime.of(9,30) && preview?.context?.let { it.stochK>20 && it.stochK<50 && it.stochK>it.stochD }==true
                 val wasOpeningWatch=priorPreview?.context?.let { it.stochK>20 && it.stochK<50 && it.stochK>it.stochD }==true
-                val signalChanged=(openingWatch && !wasOpeningWatch) || updated.watchDate!=old.watchDate || opening.alertAt!=previousOpening.alertAt || updated.confirmationAt!=old.confirmationAt || updated.buyAt!=old.buyAt || updated.trades.size!=old.trades.size || (updated.action.startsWith("SELL_REQUIRED") && updated.action!=old.action)
+                val signalChanged=(openingWatch && !wasOpeningWatch) || (updated.watchDate!=null && updated.watchDate!=old.watchDate) || opening.alertAt!=previousOpening.alertAt || updated.confirmationAt!=old.confirmationAt || updated.buyAt!=old.buyAt || updated.trades.size!=old.trades.size || (updated.action.startsWith("SELL_REQUIRED") && updated.action!=old.action)
                 if(signalChanged) signalTimes[stock.instrumentKey]=now
                 val previousPreview=previousPreviews[stock.instrumentKey]
                 if(preview!=null) previousPreviews[stock.instrumentKey]=preview
                 next=next+(stock.instrumentKey to updated.copy(symbol=stock.symbol))
-                ReversalRow(stock,updated.copy(symbol=stock.symbol),preview,errors[stock.instrumentKey] ?: if (fresh) updated.action else "Waiting for fresh live quote / market open",opening,openingSample,previousPreview,signalTimes[stock.instrumentKey])
+                ReversalRow(stock,updated.copy(symbol=stock.symbol),preview,errors[stock.instrumentKey] ?: if (fresh) updated.action else "Waiting for fresh live quote / market open",opening,openingSample,previousPreview,signalTimes[stock.instrumentKey]?.takeIf { it<=now })
             }
             changes.filterKeys { key -> work.none { it.instrumentKey==key } }.forEach { (key,edit) ->
                 if(edit.source==PaperSource.OPENING) nextOpening=nextOpening+(key to PaperRecordEdits.opening(openingStates[key] ?: OpeningState(),edit,now,false))
                 else next=next+(key to PaperRecordEdits.reversal(states[key] ?: ReversalState(),edit,now,false,null,null))
             }
             val changed=next.any { (key,value) -> val old=states[key] ?: ReversalState()
-                value.quantity!=old.quantity || value.manual!=old.manual || value.recordedAt!=old.recordedAt || value.peakPrice != old.peakPrice || value.symbol != old.symbol || value.watchDate != old.watchDate || value.buy != old.buy || value.buyAt != old.buyAt || value.reached80 != old.reached80 || value.trades != old.trades }
+                value.identifiedAt!=old.identifiedAt || value.quantity!=old.quantity || value.manual!=old.manual || value.recordedAt!=old.recordedAt || value.peakPrice != old.peakPrice || value.symbol != old.symbol || value.watchDate != old.watchDate || value.buy != old.buy || value.buyAt != old.buyAt || value.reached80 != old.reached80 || value.trades != old.trades }
             var reversalSaved=false;var openingSaved=false
             try {
                 rows.filter { row -> row.state.action != states[row.stock.instrumentKey]?.action }.forEach { row ->

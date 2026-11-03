@@ -146,6 +146,10 @@ private fun PaperScannerApp() {
     val livePriceClient = remember { UpstoxLivePrices() }
     var livePrices by remember { mutableStateOf(LivePriceState(status = "Save your Upstox token in Settings for live prices.")) }
     var liveTokenRevision by remember { mutableStateOf(0) }
+    val latestLivePrices by rememberUpdatedState(livePrices)
+    val latestQualified by rememberUpdatedState(qualifiedToday)
+    val latestStocks by rememberUpdatedState(stocks.toList())
+    val latestFavourites by rememberUpdatedState(favourites.toSet())
     val priceLifecycle = LocalLifecycleOwner.current.lifecycle
     val priceKeys = (stocks.filter { it.symbol in favourites && "_EQ|" in it.instrumentKey } + StockCatalog.indices).map { it.instrumentKey }.toSet()
     LaunchedEffect(priceKeys, tokenConfigured, liveTokenRevision, priceLifecycle) {
@@ -339,8 +343,8 @@ private fun PaperScannerApp() {
         priceLifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while (true) {
                 val now = java.time.Instant.now()
-                val state = livePrices
-                val instruments = stocks.filter { stock -> qualifiedToday.any { it.symbol == stock.symbol } && stock.symbol in favourites }
+                val state = latestLivePrices
+                val instruments = latestStocks.filter { stock -> latestQualified.any { it.symbol == stock.symbol } && stock.symbol in latestFavourites }
                 val snapshot = withContext(Dispatchers.IO) {
                     instruments.mapNotNull { stock ->
                         LiveStochasticPreview.calculate(database.bars(stock.instrumentKey), state.quotes[stock.instrumentKey], now,
@@ -512,7 +516,7 @@ private fun PaperScannerApp() {
                 liveStochastic = liveStochastic,
                 paperTrades = paperTrades,
                 previewSampledAt = previewSampledAt,
-                onRefreshPrices = { LiveMarketHub.reconnect(); liveTokenRevision++ },
+                onRefreshPrices = { refreshIndices(); if(!livePrices.connected) { LiveMarketHub.reconnect(); liveTokenRevision++ } },
                 pricesRefreshEnabled = tokenConfigured && priceKeys.isNotEmpty(),
                 weeklySummary = weeklySummary,
                 weeklyOutcomes = weeklyOutcomes,
@@ -761,13 +765,22 @@ internal fun Dashboard(
     onCancelScan: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var indicesExpanded by remember { mutableStateOf(false) }
-    var controlsExpanded by remember { mutableStateOf(false) }
     var legacyExpanded by remember { mutableStateOf(false) }
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
         Text("Dashboard",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Medium)
+        Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+            OutlinedButton(modifier=Modifier.weight(1f),onClick=onRefreshPrices,enabled=pricesRefreshEnabled) { Text("Refresh",fontSize=12.sp) }
+            OutlinedButton(modifier=Modifier.weight(1f),enabled=pricesRefreshEnabled && !scanning && !autoScanActive && stockCount in 1..StockCatalog.MAX_ACTIVE,onClick=onRunScan) { Text("Single scan",fontSize=12.sp) }
+            if(autoScanActive) Button(modifier=Modifier.weight(1f),onClick=onStopFullDayScan) { Text("Stop scan",fontSize=12.sp) }
+            else Button(modifier=Modifier.weight(1f),enabled=!scanning && pricesRefreshEnabled && stockCount in 1..StockCatalog.MAX_ACTIVE,onClick=onStartFullDayScan) { Text("Full-day scan",fontSize=12.sp) }
+        }
+        Text(if(autoScanActive) "Full-day scan · Running" else if(scanning) "Single scan · Running" else "Full-day scan · OFF",style=MaterialTheme.typography.labelLarge)
+        Text(if(autoScanActive) autoScanStatus else scanProgress.ifBlank { scanStatus },style=MaterialTheme.typography.bodySmall)
+        if(scanning) TextButton(onClick=onCancelScan) { Text("Cancel scan") }
+        IndexOverview(indexReport,indexRefreshEnabled,onRefreshIndices,livePrices,compact=true)
+
         CompactHeader("Qualified stocks","${qualifiedToday.size} · Volume strategy")
-        if(qualifiedToday.isEmpty()) Text("No qualified stocks yet",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        if(qualifiedToday.isEmpty()) Text(if(autoScanActive || scanning) "No qualified stocks yet · check scan status above" else "Start a scan to find today’s volume-qualified stocks",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
         qualifiedToday.sortedByDescending { stock -> paperTrades.filter { it.symbol==stock.symbol }.maxOfOrNull { it.soldAt ?: it.boughtAt } ?: java.time.Instant.EPOCH }.forEach { stock ->
             val row=report?.rows?.singleOrNull { it.symbol==stock.symbol }
             val instrument=catalog.singleOrNull { it.symbol==stock.symbol }
@@ -777,26 +790,10 @@ internal fun Dashboard(
             CompactVolumeCard(stock.symbol,stock.peakRelativeVolume,row?.relativeVolume,quote,preview,row,ownTrades,livePrices.connected,
                 instrument?.let { livePrices.markets[it.instrumentKey.substringBefore('|')] }==true)
         }
-        Text("${if(livePrices.connected) "Connected" else "Disconnected"} · ${compactTime(previewSampledAt)}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Socket ${if(livePrices.connected) "connected" else "disconnected"} · K/D check ${compactTime(previewSampledAt)}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         PaperQuantityBar()
         Text("Manual quantity is used on Signals; volume history uses one share.",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         CompactResults(TradeResults.volume(paperTrades))
-        TextButton(onClick={indicesExpanded=!indicesExpanded}) { Text("Market indices ${if(indicesExpanded) "⌃" else "⌄"}") }
-        if(indicesExpanded) IndexOverview(indexReport,indexRefreshEnabled,onRefreshIndices,livePrices)
-        TextButton(onClick={controlsExpanded=!controlsExpanded}) { Text("Scan controls ${if(autoScanActive) "· Running" else "· Stopped"} ${if(controlsExpanded) "⌃" else "⌄"}") }
-        if(controlsExpanded) {
-            Text("$stockCount / 40 selected · $customStockCount custom",style=MaterialTheme.typography.bodySmall)
-            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                if(autoScanActive) Button(onClick=onStopFullDayScan) { Text("Stop scan") }
-                else Button(enabled=!scanning,onClick=onStartFullDayScan) { Text("Full-day scan") }
-                OutlinedButton(enabled=!scanning && !autoScanActive && stockCount in 1..StockCatalog.MAX_ACTIVE,onClick=onRunScan) { Text("One scan") }
-            }
-            if(scanning) TextButton(onClick=onCancelScan) { Text("Cancel") }
-            Text(scanProgress.ifBlank { scanStatus },style=MaterialTheme.typography.bodySmall)
-            Text(autoScanStatus,style=MaterialTheme.typography.labelSmall)
-            TextButton(onClick=onRefreshPrices,enabled=pricesRefreshEnabled) { Text("Reconnect prices") }
-            Text("Volume ≥1.5× qualifies once per day. Signals use completed 15m candles; live K/D is provisional.",style=MaterialTheme.typography.bodySmall)
-        }
         TextButton(onClick={legacyExpanded=!legacyExpanded}) { Text("Legacy analysis ${if(legacyExpanded) "⌃" else "⌄"}") }
         if(legacyExpanded) PaperWeeklyChart(weeklySummary,weeklyOutcomes)
     }

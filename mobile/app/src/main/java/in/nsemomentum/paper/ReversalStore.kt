@@ -12,7 +12,7 @@ class ReversalStore(context: Context) {
         root.keys().asSequence().associateWith { key ->
             val row = root.getJSONObject(key)
             val closed = row.getJSONArray("trades")
-            ReversalState(quantity=row.optInt("quantity",1),manual=row.optBoolean("manual"),
+            ReversalState(identifiedAt=row.optString("identifiedAt").takeIf { it.isNotEmpty() }?.let(Instant::parse),quantity=row.optInt("quantity",1),manual=row.optBoolean("manual"),
                 recordedAt=row.optString("recordedAt").takeIf { it.isNotEmpty() }?.let(Instant::parse),
                 manualWaitUntil=row.optString("manualWaitUntil").takeIf { it.isNotEmpty() }?.let(Instant::parse),symbol=row.optString("symbol"),watchDate=row.optString("watch").takeIf { it.isNotEmpty() },
                 buy=if (row.has("buy")) row.getDouble("buy").also { require(it.isFinite() && it > 0) } else null,
@@ -32,7 +32,7 @@ class ReversalStore(context: Context) {
                 s.trades.forEach { put(JSONArray(listOf(it.buyAt.toString(),it.buy,it.sellAt.toString(),it.sell,it.reason,it.policy,it.beforeVolume,it.afterVolume,it.quantity,it.manual))) }
             })
             if (s.buy != null) { s.beforeVolume?.let { row.put("entryBefore",it) };s.afterVolume?.let { row.put("entryAfter",it) } }
-            s.recordedAt?.let { row.put("recordedAt",it.toString()) };s.manualWaitUntil?.let { row.put("manualWaitUntil",it.toString()) };s.peakPrice?.let { row.put("peak",it) }
+            s.identifiedAt?.let { row.put("identifiedAt",it.toString()) };s.recordedAt?.let { row.put("recordedAt",it.toString()) };s.manualWaitUntil?.let { row.put("manualWaitUntil",it.toString()) };s.peakPrice?.let { row.put("peak",it) }
             s.watchDate?.let { row.put("watch",it) }; s.buy?.let { row.put("buy",it) };s.buyAt?.let { row.put("buyAt",it.toString()) }
             root.put(key,row)
         }
