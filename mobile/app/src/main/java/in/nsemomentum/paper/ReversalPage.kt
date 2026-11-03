@@ -13,10 +13,12 @@ import androidx.compose.ui.unit.dp
 fun ReversalPage(snapshot: ReversalSnapshot, prices: LivePriceState, modifier: Modifier = Modifier) {
     var onlyShortlisted by remember { mutableStateOf(true) }
     val allTrades = snapshot.rows.flatMap { row -> row.state.trades.map { t -> PaperTrade(row.stock.symbol,t.buyAt,t.buy,t.sellAt,t.sell) } }
-    val visible = snapshot.rows.filter { !onlyShortlisted || it.state.watchDate == java.time.LocalDate.now(MarketSession.ZONE).toString() || it.state.buy != null || it.state.trades.lastOrNull()?.sellAt?.atZone(MarketSession.ZONE)?.toLocalDate() == java.time.LocalDate.now(MarketSession.ZONE) }
+    val visible = snapshot.rows.filter { !onlyShortlisted || it.state.watchDate == java.time.LocalDate.now(MarketSession.ZONE).toString() || it.state.buy != null || it.opening.alert!=null || it.opening.buy!=null || it.opening.boughtToday || it.state.trades.lastOrNull()?.sellAt?.atZone(MarketSession.ZONE)?.toLocalDate() == java.time.LocalDate.now(MarketSession.ZONE) }
     LazyColumn(modifier.fillMaxSize(),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
         item {
             Text("LIVE K/D REVERSAL · PAPER ONLY",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)
+            OpeningNotificationPermission()
+            Text("Opening paper setup 09:17–09:30 IST: positive open; price above open and 60 seconds ago; K<50, K>D and rising; latest 60s volume above preceding 60s. BUY/SELL require approval; WAIT keeps positions open. At most one approved opening BUY per stock/day. Separate paper ledger; no Upstox orders.")
             Text("Same selected stocks and live connection · no indices · 60s volume confirmation for BUY")
             Text("Shortlist: K>D with K<20. A live cross above 20 starts 60s confirmation. K must stay above 20 and D; post-cross 60s volume must exceed pre-cross 60s volume. No minimum K−D gap.")
             Text("All stock paper trades close at 15:10 IST using a fresh price. No new stock BUYs after 15:10. App must be open or the existing full-day service running.",style=MaterialTheme.typography.bodySmall)
@@ -32,6 +34,7 @@ fun ReversalPage(snapshot: ReversalSnapshot, prices: LivePriceState, modifier: M
             Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
                 Text(row.stock.symbol,fontWeight=FontWeight.Bold)
                 LivePriceDisplay(row.stock,prices)
+                OpeningRowSummary(row,prices)
                 row.state.confirmationAt?.let { start ->
                     val remaining=(60-java.time.Duration.between(start,snapshot.updatedAt ?: java.time.Instant.now()).seconds).coerceAtLeast(0)
                     Text("Volume confirmation: $remaining seconds remaining",fontWeight=FontWeight.Bold)

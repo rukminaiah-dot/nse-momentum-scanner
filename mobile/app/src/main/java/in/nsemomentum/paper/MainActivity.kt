@@ -165,6 +165,7 @@ private fun PaperScannerApp() {
         }
     }
     var reversalSnapshot by remember { mutableStateOf(ReversalRunner.state.value) }
+    OpeningApprovalDialog(reversalSnapshot)
     val reversalStocks = stocks.filter { it.symbol in favourites && "_EQ|" in it.instrumentKey }.toList()
     LaunchedEffect(reversalStocks, tokenConfigured, liveTokenRevision) {
         priceLifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {

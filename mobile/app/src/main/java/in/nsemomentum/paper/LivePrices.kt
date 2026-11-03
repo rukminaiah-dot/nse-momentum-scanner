@@ -20,7 +20,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /** Display only. Never fed into candle strategies, qualification or paper outcomes. */
-data class LiveQuote(val instrumentKey: String, val price: Double, val previousClose: Double?, val tradedAt: Instant, val receivedAt: Instant, val volumeToday: Long? = null, val volumeAt: Instant? = null) {
+data class LiveQuote(val instrumentKey: String, val price: Double, val previousClose: Double?, val tradedAt: Instant, val receivedAt: Instant, val volumeToday: Long? = null, val volumeAt: Instant? = null, val sessionOpen: Double? = null, val sessionOpenDate: java.time.LocalDate? = null) {
     val change: Double? get() = previousClose?.let { (price - it).takeIf(Double::isFinite) }
     val changePercent: Double? get() = previousClose?.let { ((price / it - 1) * 100).takeIf(Double::isFinite) }
     fun label(now: Instant, connected: Boolean, marketOpen: Boolean): String = when {
@@ -82,6 +82,8 @@ object LivePriceDecoder {
             require(seen.add(key))
             var ltpc: ByteArray? = null
             var volume: Long? = null
+            var sessionOpen: Double? = null
+            var sessionOpenDate: java.time.LocalDate? = null
             feed?.let { fields(it) { tag, input -> when(tag) {
                 10 -> { ltpc=input.readByteArray();true }
                 18 -> { fields(input.readByteArray()) { fullTag, full ->
@@ -89,6 +91,22 @@ object LivePriceDecoder {
                         val isMarket=fullTag == 10
                         fields(full.readByteArray()) { marketTag, market -> when {
                             marketTag == 10 -> { ltpc=market.readByteArray();true }
+                            isMarket && marketTag == 34 -> {
+                                fields(market.readByteArray()) { ohlcTag, ohlcs ->
+                                    if(ohlcTag != 10) false else {
+                                        var interval="";var open=Double.NaN;var at=0L
+                                        fields(ohlcs.readByteArray()) { ot, o -> when(ot) {
+                                            10 -> { interval=o.readStringRequireUtf8();true }
+                                            17 -> { open=o.readDouble();true }
+                                            56 -> { at=o.readInt64();true }
+                                            else -> false
+                                        } }
+                                        if(interval=="1d" && open.isFinite() && open>0 && at>0) {
+                                            sessionOpen=open;sessionOpenDate=Instant.ofEpochMilli(at).atZone(MarketSession.ZONE).toLocalDate()
+                                        };true
+                                    }
+                                };true
+                            }
                             isMarket && marketTag == 48 -> { volume=market.readInt64().takeIf { value -> value >= 0 };true }
                             else -> false
                         } };true
@@ -104,7 +122,7 @@ object LivePriceDecoder {
                 else -> false
             } } }
             if (!price.isFinite() || price <= 0 || time <= 0 || time > timestamp + 1000) continue
-            quotes[key] = LiveQuote(key, price, close.takeIf { it.isFinite() && it > 0 }, Instant.ofEpochMilli(time), now, volume, if (volume != null) Instant.ofEpochMilli(timestamp) else null)
+            quotes[key] = LiveQuote(key, price, close.takeIf { it.isFinite() && it > 0 }, Instant.ofEpochMilli(time), now, volume, if (volume != null) Instant.ofEpochMilli(timestamp) else null,sessionOpen,sessionOpenDate)
         }
         return LivePriceFrame(quotes, markets)
     }
@@ -131,7 +149,8 @@ object LivePriceDecoder {
             if (old != null && quote.tradedAt < old.tradedAt) continue
             val sameSession = old != null && old.tradedAt.atZone(MarketSession.ZONE).toLocalDate() ==
                 quote.tradedAt.atZone(MarketSession.ZONE).toLocalDate()
-            merged[key] = if (quote.previousClose == null && sameSession) quote.copy(previousClose = old?.previousClose) else quote
+            merged[key] = if(sameSession) quote.copy(previousClose=quote.previousClose ?: old?.previousClose,
+                sessionOpen=quote.sessionOpen ?: old?.sessionOpen,sessionOpenDate=quote.sessionOpenDate ?: old?.sessionOpenDate) else quote
         }
         return merged
     }
@@ -201,7 +220,7 @@ class UpstoxLivePrices(
                     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) { events.trySend(Event.End(response?.code in setOf(401, 403))) }
                 })
                 while (currentCoroutineContext().isActive) {
-                    when (val event = withTimeout(30_000) { events.receive() }) {
+                    when (val event = withTimeout(90_000) { events.receive() }) {
                         Event.Open -> { DiagnosticLog.event("LIVE_STREAM","CONNECTED"); state = state.copy(status = "Connected · waiting for market data", connected = true, markets = emptyMap(), connectionId=System.nanoTime()); emit(state) }
                         is Event.Data -> {
                             val frame = LivePriceDecoder.decode(event.bytes, keys, Instant.now())
