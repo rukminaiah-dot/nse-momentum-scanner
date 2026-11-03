@@ -44,6 +44,7 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
 @Composable fun ReversalPage(snapshot:ReversalSnapshot,prices:LivePriceState,modifier:Modifier=Modifier) {
     val context=androidx.compose.ui.platform.LocalContext.current
     var help by remember { mutableStateOf(false) }
+    var defaultQty by remember { mutableStateOf(OpeningNoticeFormatter.quantity(context)) }
     var request by remember { mutableStateOf<RecordRequest?>(null) }
     var notice by remember { mutableStateOf("") }
     val now=snapshot.updatedAt ?: Instant.now()
@@ -69,9 +70,9 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
         if(signals.isEmpty()) item { Text("No shortlisted stocks yet",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant) }
         items(signals,key={it.id}) { item -> UnifiedStockCard(item,prices,onRecord={op,at,price,qty -> request=RecordRequest(item.row.stock.instrumentKey,item.row.stock.symbol,item.source,op,at,price,qty)},onWait={
             notice=if(ReversalRunner.record(PaperRecordEdit(item.row.stock.instrumentKey,item.source,PaperOperation.WAIT,item.buyAt,null,item.quantity.coerceAtLeast(1)))) "WAIT requested · no SELL" else "Monitoring unavailable"
-        },defaultQuantity=OpeningNoticeFormatter.quantity(context)) }
+        },defaultQuantity=defaultQty) }
         item { Text("${if(prices.connected) "Connected" else "Disconnected"} · ${compactTime(snapshot.updatedAt)}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
-        item { PaperQuantityBar() }
+        item { PaperQuantityBar { defaultQty=it } }
         if(snapshot.recordStatus!=null || notice.isNotEmpty()) item { Text(snapshot.recordStatus ?: notice,style=MaterialTheme.typography.bodySmall) }
         item { CompactResults(TradeResults.reversal(snapshot),::edit) }
     }
@@ -141,6 +142,7 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
                 DetailLine("Price · last 60s",priceChange?.let { "%+.2f%%".format(Locale.US,it) } ?: "—",priceChange)
                 DetailLine("K / D",if(k!=null && d!=null) "%.2f / %.2f".format(Locale.US,k,d) else "—")
                 DetailLine("Previous K / D",if(pk!=null && pd!=null) "%.2f / %.2f".format(Locale.US,pk,pd) else "—")
+                DetailLine("Previous reading",compactTime(row.previousPreview?.sampledAt))
                 DetailLine("K − D",if(k!=null && d!=null) "%+.2f".format(Locale.US,k-d) else "—")
                 DetailLine("Latest / prior 60s volume",if(sample?.continuous==true) "${sample.latestVolume} / ${sample.beforeVolume} shares" else "Unavailable")
                 DetailLine("Volume ratio",ratio?.let { "%.2f× (%+.0f%%)".format(Locale.US,it,(it-1)*100) } ?: "Unavailable")

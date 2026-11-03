@@ -15,6 +15,7 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk=[35],qualifiers="w360dp-h800dp-xxhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
+@OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
 class CompactPageTest {
     @get:Rule val compose=createComposeRule()
     @Test fun unifiedPageExpandsAndOpensManualPriceForm() {

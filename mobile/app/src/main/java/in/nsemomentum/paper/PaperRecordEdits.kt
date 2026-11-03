@@ -15,7 +15,7 @@ object PaperRecordEdits {
             if(!fresh || s.buy!=null || s.alert!="OPENING_BUY" || s.alertAt!=c.expectedAt || s.alertAt==null || java.time.Duration.between(s.alertAt,now).toMillis() !in 0..59999) return s
             return s.copy(buy=price,buyAt=now,quantity=c.quantity,peak=price,boughtToday=true,alert=null,alertAt=null,recordedAt=now,status="Manual BUY recorded")
         }
-        if(s.buyAt==c.expectedAt && s.buy!=null) return when(c.operation) {
+        if(s.buyAt!=null && s.buyAt==c.expectedAt && s.buy!=null) return when(c.operation) {
             PaperOperation.SELL -> s.copy(buy=null,buyAt=null,quantity=0,peak=null,alert=null,alertAt=null,recordedAt=now,
                 trades=s.trades+OpeningTrade(s.buyAt,s.buy,now,price,s.quantity,"MANUAL_SELL"),status="Manual SELL recorded")
             PaperOperation.EDIT_BUY -> s.copy(buy=price,quantity=c.quantity,peak=maxOf(price,s.peak ?: price),recordedAt=now,status="BUY price corrected")
@@ -31,7 +31,7 @@ object PaperRecordEdits {
     fun reversal(s:ReversalState,c:PaperRecordEdit,now:Instant,fresh:Boolean,k:Double?,d:Double?):ReversalState {
         if(!valid(c)) return s
         val price=c.price ?: 0.0
-        if(s.buyAt==c.expectedAt && s.buy!=null) return when(c.operation) {
+        if(s.buyAt!=null && s.buyAt==c.expectedAt && s.buy!=null) return when(c.operation) {
             PaperOperation.BUY -> if(!fresh || s.manual || StockSessionExit.entriesClosed(now) || k==null || d==null || !k.isFinite() || !d.isFinite() || k<=20 || k>100 || d !in 0.0..100.0 || k<=d) s else s.copy(buy=price,quantity=c.quantity,manual=true,recordedAt=now,peakPrice=price,action="MANUAL_BUY_RECORDED")
             PaperOperation.SELL -> if(!s.manual) s else s.copy(buy=null,buyAt=null,peakPrice=null,manual=false,recordedAt=now,action="SELL_MANUAL_RECORDED",
                 trades=s.trades+ReversalTrade(s.buyAt,s.buy,now,price,"MANUAL_SELL","MANUAL_RECORD",s.beforeVolume,s.afterVolume,s.quantity,true))

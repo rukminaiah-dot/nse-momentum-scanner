@@ -113,14 +113,14 @@ object TradeResults {
     }
     Text("Closed trades · gross before costs",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
 }
-@Composable fun PaperQuantityBar() {
+@Composable fun PaperQuantityBar(onQuantity:(Int)->Unit={}) {
     val context=androidx.compose.ui.platform.LocalContext.current
     var value by remember { mutableStateOf(OpeningNoticeFormatter.quantity(context).toString()) }
     Surface(shape=RoundedCornerShape(12.dp),color=MaterialTheme.colorScheme.surface) {
         Row(Modifier.fillMaxWidth().padding(horizontal=12.dp,vertical=6.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
             Text("Manual paper qty",style=MaterialTheme.typography.bodyMedium)
             Row(verticalAlignment=Alignment.CenterVertically) {
-                fun save(v:Int) { value=v.coerceIn(1,1000000).toString();context.getSharedPreferences("opening_notification_settings",0).edit().putInt("quantity",value.toInt()).apply() }
+                fun save(v:Int) { value=v.coerceIn(1,1000000).toString();context.getSharedPreferences("opening_notification_settings",0).edit().putInt("quantity",value.toInt()).apply();onQuantity(value.toInt()) }
                 TextButton(onClick={save((value.toIntOrNull() ?: 1)-1)},contentPadding=PaddingValues(8.dp)) { Text("−") }
                 OutlinedTextField(value=value,onValueChange={v->value=v.filter(Char::isDigit).take(7);value.toIntOrNull()?.takeIf { it in 1..1000000 }?.let(::save)},modifier=Modifier.width(70.dp),singleLine=true,textStyle=MaterialTheme.typography.bodyMedium)
                 TextButton(onClick={save((value.toIntOrNull() ?: 1)+1)},contentPadding=PaddingValues(8.dp)) { Text("+") }
