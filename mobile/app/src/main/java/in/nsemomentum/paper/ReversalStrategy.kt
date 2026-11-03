@@ -5,9 +5,9 @@ import java.time.Instant
 import kotlin.math.floor
 
 data class ReversalTrade(val buyAt: Instant, val buy: Double, val sellAt: Instant, val sell: Double, val reason: String,
-                         val policy: String = "LEGACY_80", val beforeVolume: Long? = null, val afterVolume: Long? = null) {
-    val gross: Double get() = sell - buy
-    val percent: Double get() = gross / buy * 100.0
+                         val policy: String = "LEGACY_80", val beforeVolume: Long? = null, val afterVolume: Long? = null,val quantity:Int=1,val manual:Boolean=false) {
+    val gross: Double get() = (sell - buy)*quantity
+    val percent: Double get() = (sell / buy-1) * 100.0
 }
 data class ReversalState(
     val watchDate: String? = null,
@@ -23,7 +23,8 @@ data class ReversalState(
     val confirmationAt: Instant? = null,
     val beforeVolume: Long? = null,
     val afterVolume: Long? = null,
-    val observationGap: Boolean = true
+    val observationGap: Boolean = true,
+    val quantity:Int=1,val manual:Boolean=false,val recordedAt:Instant?=null,val manualWaitUntil:Instant?=null
 )
 object ReversalStrategy {
     fun stopPercent(buy: Double, peak: Double): Double {
@@ -44,6 +45,7 @@ object ReversalStrategy {
             val stop=stopPrice(active)!!
             if (StockSessionExit.due(state.buyAt,now) || price <= stop + state.buy*1e-12) {
                 val reason=if (StockSessionExit.due(state.buyAt,now)) "SESSION_1510" else if (stopPercent(state.buy,active.peakPrice!!) < 0) "STOP_1_PERCENT" else "STEPPED_PROFIT_STOP"
+                if(state.manual) return active.copy(action=if(state.manualWaitUntil?.let { now<it }==true) "WAIT_SELL_$reason" else "SELL_REQUIRED_$reason")
                 val trade=ReversalTrade(state.buyAt,state.buy,now,price,reason,if (state.beforeVolume == null) "LEGACY_ENTRY_STEP_EXIT" else "VOLUME_STEP_V2",state.beforeVolume,state.afterVolume)
                 return ReversalState(trades=state.trades+trade,symbol=state.symbol,action="SELL_$reason",previousK=k,previousAt=now)
             }

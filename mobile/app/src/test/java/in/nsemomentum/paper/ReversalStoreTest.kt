@@ -27,6 +27,21 @@ class ReversalStoreTest {
         val t=ReversalStore(context).read().getValue("NSE_EQ|TEST").trades.single()
         assertEquals("VOLUME_STEP_V2",t.policy);assertEquals(150L,t.afterVolume!!)
     }
+    @Test fun restartKeepsManualApprovalAndQuantitySoStopsCannotAutoCloseIt() {
+        val context=RuntimeEnvironment.getApplication() as Context
+        val at=Instant.parse("2026-11-03T04:00:00Z")
+        val store=ReversalStore(context)
+        val manual=ReversalState(buy=100.0,buyAt=at,quantity=4,manual=true,recordedAt=at,peakPrice=101.0)
+        store.write(mapOf("TEST" to manual))
+        val saved=store.read().getValue("TEST")
+        assertTrue(saved.manual);assertEquals(4,saved.quantity);assertEquals(at,saved.recordedAt)
+        val exit=ReversalStrategy.tick(saved,98.0,null,null,at.plusSeconds(1))
+        assertNotNull(exit.buy);assertTrue(exit.trades.isEmpty())
+        val closed=PaperRecordEdits.reversal(exit,PaperRecordEdit("TEST",PaperSource.REVERSAL,PaperOperation.SELL,at,99.0,4),at.plusSeconds(2),false,null,null)
+        store.write(mapOf("TEST" to closed))
+        val trade=store.read().getValue("TEST").trades.single()
+        assertTrue(trade.manual);assertEquals(4,trade.quantity);assertEquals(-4.0,trade.gross,0.0)
+    }
     @Test fun readsOldTradeShapeWithoutInventingPastPeakProfit() {
         val context=RuntimeEnvironment.getApplication() as Context
         context.getSharedPreferences("reversal_strategy_v1",0).edit().putString("state",

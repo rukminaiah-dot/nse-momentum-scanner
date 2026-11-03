@@ -32,6 +32,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -82,7 +84,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         DiagnosticLog.initialize(this)
         setContent {
-            MaterialTheme {
+            PaperUiTheme {
                 Surface(color = MaterialTheme.colorScheme.background) { PaperScannerApp() }
             }
         }
@@ -465,8 +467,8 @@ private fun PaperScannerApp() {
         topBar = {
             TopAppBar(title = {
                 Column {
-                    Text("NSE Momentum", fontWeight = FontWeight.Bold)
-                    Text("PAPER ONLY · NO ORDERS", style = MaterialTheme.typography.labelSmall)
+                    Text("NSE Momentum",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Medium)
+                    Text("PAPER · NO ORDERS",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.primary)
                 }
             })
         },
@@ -476,8 +478,15 @@ private fun PaperScannerApp() {
                     NavigationBarItem(
                         selected = page == item,
                         onClick = { page = item },
-                        icon = { Text("•") },
-                        label = { Text(item.title) }
+                        icon = { androidx.compose.material3.Icon(androidx.compose.ui.res.painterResource(when(item) {
+                            Page.DASHBOARD->android.R.drawable.ic_menu_view
+                            Page.UNIVERSE->android.R.drawable.ic_menu_sort_by_size
+                            Page.FAVOURITES->android.R.drawable.btn_star_big_off
+                            Page.REVERSAL->R.drawable.ic_paper_signal
+                            Page.COMMODITIES->android.R.drawable.ic_menu_compass
+                            Page.SETTINGS->android.R.drawable.ic_menu_manage
+                        }),contentDescription=null,modifier=Modifier.height(20.dp).width(20.dp)) },
+                        label = { Text(if(item==Page.REVERSAL) "Signals" else item.title,maxLines=1,fontSize=11.sp) }
                     )
                 }
             }
@@ -723,7 +732,7 @@ private fun rowDetail(row: ScanRow): String {
 }
 
 @Composable
-private fun Dashboard(
+internal fun Dashboard(
     indexReport: IndexMarketReport?,
     onRefreshIndices: () -> Unit,
     indexRefreshEnabled: Boolean,
@@ -752,72 +761,44 @@ private fun Dashboard(
     onCancelScan: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val qualified = report?.rows?.count { (it.relativeVolume ?: 0.0) >= 1.5 } ?: 0
-    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        IndexOverview(indexReport, indexRefreshEnabled, onRefreshIndices, livePrices)
-        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-            Column(Modifier.padding(18.dp)) {
-                Text("PAPER TRADING · NO ORDERS", fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
-                Text(if (scanning) "SCANNING · READ ONLY" else "15-MINUTE VOLUME-FIRST SCAN", style = MaterialTheme.typography.titleMedium)
-                Text(scanStatus)
-                if (scanProgress.isNotBlank()) Text(scanProgress, style = MaterialTheme.typography.bodySmall)
-                Text(autoScanStatus, style = MaterialTheme.typography.bodySmall)
-                Text("Full-day mode refreshes indices every 5 minutes and checks stocks on completed 15-minute candles. It keeps a stock in today's qualified list after it first reaches 1.5×.", style = MaterialTheme.typography.bodySmall)
-                Spacer(Modifier.height(8.dp))
-                if (autoScanActive) {
-                    Button(onClick = onStopFullDayScan) { Text("Stop full-day scan") }
-                } else {
-                    Button(onClick = onStartFullDayScan, enabled = !scanning) { Text("Start full-day scan") }
-                }
-                Button(onClick = onRunScan, enabled = !scanning && !autoScanActive && stockCount in 1..StockCatalog.MAX_ACTIVE) {
-                    Text(if (scanning) "Scanning…" else "Run one scan")
-                }
-                if (scanning) Button(onClick = onCancelScan) { Text("Cancel one scan") }
-            }
+    var indicesExpanded by remember { mutableStateOf(false) }
+    var controlsExpanded by remember { mutableStateOf(false) }
+    var legacyExpanded by remember { mutableStateOf(false) }
+    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+        Text("Dashboard",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Medium)
+        CompactHeader("Qualified stocks","${qualifiedToday.size} · Volume strategy")
+        if(qualifiedToday.isEmpty()) Text("No qualified stocks yet",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        qualifiedToday.sortedByDescending { stock -> paperTrades.filter { it.symbol==stock.symbol }.maxOfOrNull { it.soldAt ?: it.boughtAt } ?: java.time.Instant.EPOCH }.forEach { stock ->
+            val row=report?.rows?.singleOrNull { it.symbol==stock.symbol }
+            val instrument=catalog.singleOrNull { it.symbol==stock.symbol }
+            val quote=instrument?.let { livePrices.quotes[it.instrumentKey] }
+            val preview=liveStochastic[stock.symbol]
+            val ownTrades=paperTrades.filter { it.symbol==stock.symbol }
+            CompactVolumeCard(stock.symbol,stock.peakRelativeVolume,row?.relativeVolume,quote,preview,row,ownTrades,livePrices.connected,
+                instrument?.let { livePrices.markets[it.instrumentKey.substringBefore('|')] }==true)
         }
-        InfoCard("Selected instrument scan", "$stockCount / 40 active instruments", "$customStockCount custom additions · $qualified stocks currently at or above 1.5× on the latest scan.")
-        InfoCard("Favourites", "$favouriteCount / 40 selected", "Selected stocks use the volume-first rules. The three index cards above use separate price-based rules.")
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Qualified today · ${qualifiedToday.size}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("A stock stays here after qualifying once during today's market session, even if its later RVOL falls.", style = MaterialTheme.typography.bodySmall)
-                Text(livePrices.status, style = MaterialTheme.typography.bodySmall)
-                Button(onClick = onRefreshPrices, enabled = pricesRefreshEnabled) { Text("Refresh prices") }
-                Text("Prices update from the live stream; BUY/SELL checks use completed 15-minute candles.", style = MaterialTheme.typography.bodySmall)
-                if (qualifiedToday.isEmpty()) Text("No stock has qualified in a verified scan today.", style = MaterialTheme.typography.bodySmall)
-                qualifiedToday.forEach { stock ->
-                    val row = report?.rows?.singleOrNull { it.symbol == stock.symbol }
-                    Text(stock.symbol, fontWeight = FontWeight.Bold)
-                    catalog.singleOrNull { it.symbol == stock.symbol }?.let { instrument -> LivePriceDisplay(instrument, livePrices) }
-                    Text("Peak RVOL ${formatPrice(stock.peakRelativeVolume)}× · latest scan RVOL ${row?.relativeVolume?.let { "${formatPrice(it)}×" } ?: "unavailable"}")
-                    Text(paperSignalDisplay(row), fontWeight = FontWeight.SemiBold)
-                    val preview = liveStochastic[stock.symbol]
-                    val instrument = catalog.singleOrNull { it.symbol == stock.symbol }
-                    val quote = instrument?.let { livePrices.quotes[it.instrumentKey] }
-                    val previewFresh = preview != null && quote != null && livePrices.connected &&
-                        livePrices.markets[quote.instrumentKey.substringBefore('|')] == true &&
-                        java.time.Duration.between(preview.sampledAt, java.time.Instant.now()).seconds in 0..20 &&
-                        java.time.Duration.between(quote.tradedAt, java.time.Instant.now()).seconds in 0..30
-                    if (previewFresh) {
-                        Text("Live Stoch RSI · forming 15m candle · provisional", fontWeight = FontWeight.SemiBold)
-                        Text("K ${formatPrice(preview!!.context.stochK)} / D ${formatPrice(preview.context.stochD)} · ${clockTime(preview.sampledAt)}", style = MaterialTheme.typography.bodySmall)
-                        Text(stochasticGapDisplay(preview.context), style = MaterialTheme.typography.bodySmall)
-                    } else Text("Live Stoch RSI unavailable · waiting for fresh quote / completed history", style = MaterialTheme.typography.bodySmall)
-                    row?.technicals?.let {
-                        Text("Confirmed 15m Stoch RSI K ${formatPrice(it.stochK)} / D ${formatPrice(it.stochD)} · candle ${row.candle?.timestamp?.plusSeconds(900)?.let(::clockTime) ?: "unavailable"}", style = MaterialTheme.typography.bodySmall)
-                        Text(stochasticGapDisplay(it), style = MaterialTheme.typography.bodySmall)
-                    }
-                    PaperTradesTable(paperTrades.filter { it.symbol == stock.symbol }, quote?.price,
-                        quote?.label(previewSampledAt, livePrices.connected, instrument?.let { livePrices.markets[it.instrumentKey.substringBefore('|')] } == true))
-                    HorizontalDivider()
-                }
+        Text("${if(livePrices.connected) "Connected" else "Disconnected"} · ${compactTime(previewSampledAt)}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        PaperQuantityBar()
+        Text("Manual quantity is used on Signals; volume history uses one share.",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        CompactResults(TradeResults.volume(paperTrades))
+        TextButton(onClick={indicesExpanded=!indicesExpanded}) { Text("Market indices ${if(indicesExpanded) "⌃" else "⌄"}") }
+        if(indicesExpanded) IndexOverview(indexReport,indexRefreshEnabled,onRefreshIndices,livePrices)
+        TextButton(onClick={controlsExpanded=!controlsExpanded}) { Text("Scan controls ${if(autoScanActive) "· Running" else "· Stopped"} ${if(controlsExpanded) "⌃" else "⌄"}") }
+        if(controlsExpanded) {
+            Text("$stockCount / 40 selected · $customStockCount custom",style=MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                if(autoScanActive) Button(onClick=onStopFullDayScan) { Text("Stop scan") }
+                else Button(enabled=!scanning,onClick=onStartFullDayScan) { Text("Full-day scan") }
+                OutlinedButton(enabled=!scanning && !autoScanActive && stockCount in 1..StockCatalog.MAX_ACTIVE,onClick=onRunScan) { Text("One scan") }
             }
+            if(scanning) TextButton(onClick=onCancelScan) { Text("Cancel") }
+            Text(scanProgress.ifBlank { scanStatus },style=MaterialTheme.typography.bodySmall)
+            Text(autoScanStatus,style=MaterialTheme.typography.labelSmall)
+            TextButton(onClick=onRefreshPrices,enabled=pricesRefreshEnabled) { Text("Reconnect prices") }
+            Text("Volume ≥1.5× qualifies once per day. Signals use completed 15m candles; live K/D is provisional.",style=MaterialTheme.typography.bodySmall)
         }
-        PaperTradesTable(paperTrades, null, null, allTrades = true)
-        CompletedTradeSummary(paperTrades)
-        Text("Legacy next-candle analysis · not BUY-to-SELL performance", fontWeight = FontWeight.Bold)
-        PaperWeeklyChart(weeklySummary, weeklyOutcomes)
+        TextButton(onClick={legacyExpanded=!legacyExpanded}) { Text("Legacy analysis ${if(legacyExpanded) "⌃" else "⌄"}") }
+        if(legacyExpanded) PaperWeeklyChart(weeklySummary,weeklyOutcomes)
     }
 }
 

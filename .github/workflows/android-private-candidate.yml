@@ -66,7 +66,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: android-permanent-signed-candidate
-          run-id: 41557093500
+          run-id: 41560462605
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/previous-android-candidate
       - name: Build and verify privately signed candidate
@@ -86,6 +86,9 @@ jobs:
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$ANDROID_SIGNING_STORE_FILE"
           "$RUNNER_TEMP/gradle-8.9/bin/gradle" --no-daemon :app:assembleRelease
           python tools/verify_signed_apk.py app/build/outputs/apk/release/app-release.apk --build-tools "$ANDROID_HOME/build-tools/35.0.0" --expected-sha256 "$CERTIFICATE_PIN" --previous-apk "$RUNNER_TEMP/previous-android-candidate/app-release.apk" --commit "$GITHUB_SHA" --report app/build/outputs/apk/release/android-candidate.json
+      - name: Build device dialog tests
+        working-directory: mobile
+        run: '"$RUNNER_TEMP/gradle-8.9/bin/gradle" --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest'
       - name: Test prior-to-current APK update on Android 16
         timeout-minutes: 10
         shell: bash
@@ -101,12 +104,25 @@ jobs:
           trap 'tail -n 100 "$RUNNER_TEMP/emulator.log"; adb emu kill || true' EXIT
           timeout 180 adb wait-for-device
           timeout 240 bash -c 'until adb shell getprop sys.boot_completed | tr -d "\r" | grep -q "^1$"; do sleep 2; done'
+          adb shell input keyevent 82
+          adb shell wm dismiss-keyguard
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
           adb install "$RUNNER_TEMP/previous-android-candidate/app-release.apk"
           adb shell dumpsys package com.nsemomentum.paper.scanner | grep versionName
           adb install -r mobile/app/build/outputs/apk/release/app-release.apk
           adb shell dumpsys package com.nsemomentum.paper.scanner | grep versionName
           adb shell am start -W -n com.nsemomentum.paper.scanner/com.nsemomentum.paper.MainActivity
-          echo 'Original 0.9.0 to current APK update succeeded without uninstall on Android 16.'
+          adb install mobile/app/build/outputs/apk/debug/app-debug.apk
+          adb install mobile/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          adb shell am instrument -w -r com.nsemomentum.paper.scanner.dev.test/androidx.test.runner.AndroidJUnitRunner > "$RUNNER_TEMP/dialog-tests.txt"
+          cat "$RUNNER_TEMP/dialog-tests.txt"
+          grep -q '^OK (' "$RUNNER_TEMP/dialog-tests.txt"
+          mkdir -p mobile/app/build/outputs/page-previews
+          adb exec-out run-as com.nsemomentum.paper.scanner.dev cat files/sell-form.png > mobile/app/build/outputs/page-previews/sell-form.png
+          adb exec-out run-as com.nsemomentum.paper.scanner.dev cat files/edit-buy-form.png > mobile/app/build/outputs/page-previews/edit-buy-form.png
+          echo 'Prior-to-current APK upgrade and manual-price dialog tests passed on Android 16.'
       - uses: actions/upload-artifact@v4
         with:
           name: android-permanent-signed-candidate
@@ -121,5 +137,13 @@ jobs:
         with:
           name: opening-notification-previews
           path: mobile/app/build/outputs/notification-previews/*.png
+          if-no-files-found: warn
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compact-page-previews
+          path: mobile/app/build/outputs/page-previews/*.png
           if-no-files-found: warn
           retention-days: 7
