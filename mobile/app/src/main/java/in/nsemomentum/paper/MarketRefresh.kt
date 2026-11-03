@@ -16,19 +16,19 @@ object LiveMarketHub {
     val state: StateFlow<LivePriceState> = mutable
     private val owners = mutableMapOf<String, Set<String>>()
     private var keys = emptySet<String>()
-    private val requested=MutableStateFlow(emptySet<String>())
+    private val requestedSubscriptions=MutableStateFlow(emptySet<String>())
     private var credential: String? = null
     private var job: Job? = null
     @Synchronized fun acquire(owner: String, token: String, requested: Set<String>) {
         owners[owner] = requested
         val union = owners.values.flatten().toSet()
-        requested.value=union
+        requestedSubscriptions.value=union
         if (token == credential && job?.isActive == true) { keys=union;return }
         val sameCredential = token == credential
         job?.cancel(); keys = union; credential = token
         val initial = if (mutable.value.quotes.isNotEmpty() && sameCredential) mutable.value.quotes.filterKeys { it in union } else emptyMap()
         job = scope.launch {
-            try { UpstoxLivePrices().stream(token, union, initial, requested).collect { mutable.value = it } }
+            try { UpstoxLivePrices().stream(token, union, initial, requestedSubscriptions).collect { mutable.value = it } }
             catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { mutable.value = LivePriceState(status = "Live connection unavailable · reopen to retry") }
         }
