@@ -12,14 +12,14 @@ object LiveStochasticPreview {
         require(periodMinutes in setOf(5,15))
         val periodSeconds = periodMinutes * 60L
         if (quote == null || !connected || !marketOpen || !quote.price.isFinite() || quote.price <= 0) return null
-        if (Duration.between(quote.receivedAt, now).seconds !in 0..30 ||
-            Duration.between(quote.tradedAt, now).seconds !in 0..30) return null
+        if (Duration.between(quote.receivedAt, now).toMillis() !in -1000..30000 ||
+            Duration.between(quote.tradedAt, now).toMillis() !in -1000..30000) return null
         val local = now.atZone(MarketSession.ZONE)
         val minute = local.hour * 60 + local.minute
         if (minute !in 555 until 930) return null
         val slot = local.toLocalDate().atTime(9,15).atZone(MarketSession.ZONE).toInstant()
             .plusSeconds(((minute - 555) / periodMinutes) * periodSeconds)
-        if (quote.tradedAt < slot || quote.tradedAt > now) return null
+        if (quote.tradedAt < slot || quote.tradedAt > now.plusMillis(1000)) return null
         val priorDates = history.map { it.timestamp.atZone(MarketSession.ZONE).toLocalDate() }
             .filter { it < local.toLocalDate() }.distinct().sorted().takeLast(if (periodMinutes == 15) 20 else 1).toSet()
         val complete = history.filter { it.timestamp < slot &&

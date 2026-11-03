@@ -51,6 +51,18 @@ class LivePricesTest {
         val indexQuote=LivePriceDecoder.decode(frame(indexEntry),setOf(index),now).quotes.getValue(index)
         assertEquals(110.0,indexQuote.price,0.0);assertNull(indexQuote.volumeToday)
     }
+    @Test fun dailyOpenUsesOfficialOhlcFieldsAndIsNotCarriedIntoAnotherSession() {
+        val ltpc=message { it.writeDouble(1,110.0);it.writeInt64(2,now.toEpochMilli());it.writeDouble(4,100.0) }
+        val daily=message { it.writeString(1,"1d");it.writeDouble(2,105.0);it.writeInt64(7,now.toEpochMilli()) }
+        val market=message { it.writeByteArray(1,ltpc);it.writeByteArray(4,message { o -> o.writeByteArray(1,daily) }) }
+        val entry=message { it.writeString(1,key);it.writeByteArray(2,message { f -> f.writeByteArray(2,message { full -> full.writeByteArray(1,market) }) }) }
+        val q=LivePriceDecoder.decode(frame(entry),setOf(key),now).quotes.getValue(key)
+        assertEquals(105.0,q.sessionOpen!!,0.0)
+        assertEquals(now.atZone(MarketSession.ZONE).toLocalDate(),q.sessionOpenDate)
+        val next=q.copy(sessionOpen=null,sessionOpenDate=null,tradedAt=now.plusSeconds(1))
+        assertEquals(105.0,LivePriceDecoder.merge(mapOf(key to q),mapOf(key to next)).getValue(key).sessionOpen!!,0.0)
+        assertNull(LivePriceDecoder.merge(mapOf(key to q),mapOf(key to next.copy(tradedAt=now.plusSeconds(86400)))).getValue(key).sessionOpen)
+    }
     @Test fun neverLabelsOldDisconnectedOrUnconfirmedMarketDataLive() {
         val q = LivePriceDecoder.decode(frame(tick()), setOf(key), now).quotes.getValue(key)
         assertNotEquals("LIVE", q.label(now.plusSeconds(31), true, true))

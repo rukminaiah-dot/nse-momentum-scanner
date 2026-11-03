@@ -54,7 +54,7 @@ suspend fun reversalHistory(feed: CandleFeed, token: String, stock: Stock, now: 
     return (past.filter { b -> sessions.any { it.date == b.timestamp.atZone(MarketSession.ZONE).toLocalDate() } } + current).sortedBy { it.timestamp }
 }
 
-data class ReversalRow(val stock: Stock, val state: ReversalState, val preview: LiveStochastic?, val status: String)
+data class ReversalRow(val stock: Stock, val state: ReversalState, val preview: LiveStochastic?, val status: String,val opening:OpeningState=OpeningState())
 data class ReversalSnapshot(val rows: List<ReversalRow> = emptyList(), val updatedAt: Instant? = null,
                             val status: String = "Waiting for live connection")
 
@@ -67,6 +67,9 @@ object ReversalRunner {
     private var job: Job? = null
     private var config = emptyList<Stock>()
     private var credential: String? = null
+    private val verifiedHistory=ConcurrentHashMap<String,List<Candle>>()
+    private val approvals=kotlinx.coroutines.channels.Channel<OpeningApproval>(32)
+    fun approveOpening(command:OpeningApproval) { approvals.trySend(command) }
     @Synchronized fun acquire(owner: String, context: Context, token: String, stocks: List<Stock>) {
         owners += owner
         val selected = stocks.filter { "_EQ|" in it.instrumentKey }.distinctBy { it.instrumentKey }.sortedBy { it.instrumentKey }
@@ -82,10 +85,15 @@ object ReversalRunner {
     private suspend fun run(context: Context, token: String, selected: List<Stock>) = coroutineScope {
         val store=ReversalStore(context)
         var states=store.read()
+        val openingStore=OpeningStore(context)
+        var openingStates=openingStore.read()
+        DiagnosticLog.event("REVERSAL_RUNNER","STARTED")
+        val activeOpening=openingStates.filter { it.value.buy!=null && selected.none { s -> s.instrumentKey==it.key } }.map { (key,_) -> Stock(key,key) }
         val activeMissing=states.filter { it.value.buy != null && selected.none { s -> s.instrumentKey == it.key } }.map { (key,value) -> Stock(value.symbol.ifBlank { key },key) }
-        val work=selected+activeMissing
+        val work=(selected+activeMissing+activeOpening).distinctBy { it.instrumentKey }
         val volumes=work.associate { it.instrumentKey to LiveVolumeWindow() }
-        val history=ConcurrentHashMap<String,List<Candle>>()
+        val priceWindows=work.associate { it.instrumentKey to OpeningPriceWindow() }
+        val history=ConcurrentHashMap<String,List<Candle>>().apply { work.forEach { s -> verifiedHistory[s.instrumentKey]?.let { put(s.instrumentKey,it) } } }
         val errors=ConcurrentHashMap<String,String>()
         val done=ConcurrentHashMap<String,Long>()
         val underlying=UpstoxCandleFeed()
@@ -112,7 +120,9 @@ object ReversalRunner {
                             val database=CandleDatabase(context)
                             val cached=try { database.bars(stock.instrumentKey) } finally { database.close() }
                             history[stock.instrumentKey]=reversalHistory(feed,token,stock,now,(cached+history[stock.instrumentKey].orEmpty()).distinctBy { it.timestamp })
+                            verifiedHistory[stock.instrumentKey]=history.getValue(stock.instrumentKey)
                             done[stock.instrumentKey]=slot;errors.remove(stock.instrumentKey)
+                            DiagnosticLog.event("REVERSAL_HISTORY","READY","bars=${history[stock.instrumentKey]?.size ?: 0}",stock.symbol)
                         } catch (cancelled: CancellationException) { throw cancelled }
                         catch (e: Exception) { errors[stock.instrumentKey]=DiagnosticLog.errorCode(e); DiagnosticLog.event("REVERSAL_HISTORY",DiagnosticLog.errorCode(e),symbol=stock.symbol) }
                     }
@@ -121,22 +131,38 @@ object ReversalRunner {
             }
         }
         try { while (true) {
-            val now=Instant.now(); val live=LiveMarketHub.state.value
+            val live=LiveMarketHub.state.value; val now=Instant.now()
+            val commands=mutableMapOf<String,OpeningApproval>()
+            while(true) { val command=approvals.tryReceive().getOrNull() ?: break;commands.putIfAbsent(command.key,command) }
+            var nextOpening=openingStates
             var next=states
             val rows=work.map { stock ->
                 val quote=live.quotes[stock.instrumentKey]
                 val marketOpen=live.markets[stock.instrumentKey.substringBefore('|')] == true
                 val local=now.atZone(MarketSession.ZONE).toLocalTime()
                 val fresh=quote != null && live.connected && marketOpen &&
-                    java.time.Duration.between(quote.tradedAt,now).seconds in 0..30 &&
-                    java.time.Duration.between(quote.receivedAt,now).seconds in 0..30 &&
+                    java.time.Duration.between(quote.tradedAt,now).toMillis() in -1000..30000 &&
+                    java.time.Duration.between(quote.receivedAt,now).toMillis() in -1000..30000 &&
                     local >= java.time.LocalTime.of(9,15) && local < java.time.LocalTime.of(15,30)
                 val preview=LiveStochasticPreview.calculate(history[stock.instrumentKey].orEmpty(),quote,now,live.connected,marketOpen)
                 val old=states[stock.instrumentKey] ?: ReversalState()
                 val volume=volumes.getValue(stock.instrumentKey)
                 val volumeFresh=fresh && quote?.volumeToday != null && quote.volumeAt != null &&
-                    java.time.Duration.between(quote.volumeAt,now).toMillis() in 0..3000
+                    java.time.Duration.between(quote.volumeAt,now).toMillis() in -1000..3000
                 if (volumeFresh) volume.add(quote!!.volumeAt!!,quote.volumeToday!!,live.connectionId) else volume.clear()
+                val priceWindow=priceWindows.getValue(stock.instrumentKey)
+                if(fresh) priceWindow.add(quote!!.receivedAt,quote.price,live.connectionId) else priceWindow.clear()
+                val earlier=volume.amount(now.minusSeconds(120),now.minusSeconds(60))
+                val latest=volume.amount(now.minusSeconds(60),now)
+                val currentDate=now.atZone(MarketSession.ZONE).toLocalDate()
+                val officialOpen=quote?.sessionOpen?.takeIf { quote.sessionOpenDate==currentDate }
+                    ?: history[stock.instrumentKey]?.firstOrNull { it.timestamp==currentDate.atTime(9,15).atZone(MarketSession.ZONE).toInstant() }?.open
+                val openingSample=OpeningSample(now,fresh,quote?.price,officialOpen,quote?.previousClose,preview?.context?.stochK,
+                    preview?.context?.stochD,priceWindow.previous(now),earlier,latest,volumeFresh && earlier!=null && latest!=null)
+                val previousOpening=openingStates[stock.instrumentKey] ?: OpeningState()
+                val opening=commands[stock.instrumentKey]?.let { OpeningMomentum.approve(previousOpening,openingSample,it) }
+                    ?: OpeningMomentum.tick(previousOpening,openingSample)
+                nextOpening=nextOpening+(stock.instrumentKey to opening)
                 val start=old.confirmationAt ?: now
                 val before=if (old.confirmationAt == null) volume.amount(now.minusSeconds(60),now) else old.beforeVolume
                 val end=if (now >= start.plusSeconds(60)) start.plusSeconds(60) else now
@@ -145,7 +171,7 @@ object ReversalRunner {
                 val updated=if (fresh) ReversalStrategy.tick(old,quote!!.price,preview?.context?.stochK,preview?.context?.stochD,now,before,after,continuous)
                     else ReversalStrategy.interrupted(old,if (old.buy != null) "BUY_ACTIVE_WAITING_FRESH_QUOTE" else "QUOTE_GAP_LAST_VALID_K_RETAINED")
                 next=next+(stock.instrumentKey to updated.copy(symbol=stock.symbol))
-                ReversalRow(stock,updated.copy(symbol=stock.symbol),preview,errors[stock.instrumentKey] ?: if (fresh) updated.action else "Waiting for fresh live quote / market open")
+                ReversalRow(stock,updated.copy(symbol=stock.symbol),preview,errors[stock.instrumentKey] ?: if (fresh) updated.action else "Waiting for fresh live quote / market open",opening)
             }
             val changed=next.any { (key,value) -> val old=states[key] ?: ReversalState()
                 value.peakPrice != old.peakPrice || value.symbol != old.symbol || value.watchDate != old.watchDate || value.buy != old.buy || value.buyAt != old.buyAt || value.reached80 != old.reached80 || value.trades != old.trades }
@@ -154,12 +180,25 @@ object ReversalRunner {
                     DiagnosticLog.event("REVERSAL_DECISION",row.state.action.take(70),"k=${row.preview?.context?.stochK ?: -1.0} d=${row.preview?.context?.stochD ?: -1.0}",row.stock.symbol)
                 }
                 if (changed) store.write(next)
+                if(nextOpening.any { (key,s) -> val previous=openingStates[key] ?: OpeningState()
+                    s.day!=previous.day || s.boughtToday!=previous.boughtToday || s.skipped!=previous.skipped || s.buy!=previous.buy || s.peak!=previous.peak || s.trades!=previous.trades }) openingStore.write(nextOpening)
+                rows.forEach { row ->
+                    val previous=openingStates[row.stock.instrumentKey]
+                    if(row.opening.alertAt!=null && row.opening.alertAt!=previous?.alertAt) {
+                        DiagnosticLog.event("OPENING_ALERT",row.opening.alert ?: "WAIT",symbol=row.stock.symbol)
+                        OpeningNotifications.show(context,row.stock,row.opening)
+                    }
+                }
+                openingStates=nextOpening
                 rows.filter { it.state.action.startsWith("BUY_CONFIRMED") || it.state.action.startsWith("SELL_") }.forEach { DiagnosticLog.event("REVERSAL_SIGNAL",it.state.action,symbol=it.stock.symbol) }
                 states=next
-                val archived=states.filter { entry -> work.none { it.instrumentKey == entry.key } && entry.value.trades.isNotEmpty() }.map { (key,value) -> ReversalRow(Stock(value.symbol.ifBlank { key },key),value,null,"Not selected · saved history only") }
+                val archiveKeys=(states.keys+openingStates.keys).filter { key -> work.none { it.instrumentKey==key } &&
+                    (states[key]?.trades?.isNotEmpty()==true || openingStates[key]?.trades?.isNotEmpty()==true) }
+                val archived=archiveKeys.map { key -> val saved=states[key] ?: ReversalState()
+                    ReversalRow(Stock(saved.symbol.ifBlank { key },key),saved,null,"Not selected · saved history only",openingStates[key] ?: OpeningState()) }
                 mutable.value=ReversalSnapshot(rows+archived,now,"Automatic · live 60s volume confirmation · stepped profit protection")
             } catch (_: Exception) {
-                mutable.value=ReversalSnapshot(rows.map { row -> row.copy(state=states[row.stock.instrumentKey] ?: ReversalState()) },now,"Could not save reversal history · signals paused until storage recovers")
+                mutable.value=ReversalSnapshot(rows.map { row -> row.copy(state=states[row.stock.instrumentKey] ?: ReversalState(),opening=openingStates[row.stock.instrumentKey] ?: OpeningState()) },now,"Could not save reversal history · signals paused until storage recovers")
             }
             delay(1000)
         } } finally { historyJob.cancel();LiveMarketHub.release("reversal") }
