@@ -11,6 +11,8 @@ object DiagnosticLog {
     fun event(event: String, result: String, numbers: String = "", symbol: String? = null) { app?.let { record(it,event,result,numbers,symbol) } }
     fun errorCode(error: Throwable): String = error.message?.takeIf { it in setOf("MISSING_REVERSAL_HISTORY","INVALID_INTRADAY_CANDLES","MISSING_COMPLETED_15M_CANDLE","NETWORK_ERROR","RATE_LIMITED","LOCAL_RATE_BUDGET_EXHAUSTED","UPSTOX_AUTH_REQUIRED","MARKET_CLOSED","NO_COMPLETED_MARKET_CANDLE","MISSING_COMPLETED_INDEX_CANDLE","INVALID_INDEX_CANDLE","UNVERIFIED_MARKET_CALENDAR","UNSUPPORTED_SPECIAL_SESSION","NO_COMMODITY_CONTRACT","UNVERIFIED_COMMODITY_SESSION","NO_COMPLETED_COMMODITY_CANDLE","MISSING_COMMODITY_CANDLE","INVALID_COMMODITY_CANDLE","INVALID_RESPONSE","UPSTOX_SERVER_ERROR") || it.matches(Regex("UPSTOX_HTTP_[0-9]{3}")) } ?: "REQUEST_FAILED"
     @Synchronized fun record(context: Context, event: String, result: String, numbers: String = "", symbol: String? = null) {
+        // Routine successful requests previously exhausted the daily log before useful failures arrived.
+        if(event=="API_REQUEST" && result=="SUCCESS") return
         runCatching {
             val dir = java.io.File(context.filesDir,"diagnostics").apply { mkdirs() }
             val today = LocalDate.now(MarketSession.ZONE)

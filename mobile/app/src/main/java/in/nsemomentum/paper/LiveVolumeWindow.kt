@@ -26,6 +26,10 @@ class LiveVolumeWindow {
         if(valid) add(quote!!.volumeAt!!,quote.volumeToday!!,connection) else clear()
         return valid
     }
+    fun observedSeconds(now:Instant):Long=points.firstOrNull()?.let { first ->
+        if(points.lastOrNull()?.let { Duration.between(it.at,now).toMillis() in 0..5000 }!=true) 0L
+        else Duration.between(first.at,now).seconds.coerceIn(0,120)
+    } ?: 0L
     fun point(at: Instant): VolumePoint? = points.lastOrNull { it.at <= at }?.takeIf { Duration.between(it.at,at).toMillis() in 0..2000 }
     fun amount(start: Instant,end: Instant): Long? {
         if (end <= start) return null

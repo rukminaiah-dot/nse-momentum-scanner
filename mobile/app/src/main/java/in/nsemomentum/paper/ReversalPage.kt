@@ -119,7 +119,7 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
                 Text(compactPrice(quote?.price),style=MaterialTheme.typography.bodyMedium,fontWeight=FontWeight.Medium)
                 Text(quote?.changePercent?.let { "%+.2f%% today".format(Locale.US,it) } ?: "—",style=MaterialTheme.typography.bodySmall,color=profitColor(quote?.changePercent))
             }
-            Text("K ${k?.let { "%.1f".format(Locale.US,it) } ?: "—"} · D ${d?.let { "%.1f".format(Locale.US,it) } ?: "—"} · Vol ${ratio?.let { "%.2f×".format(Locale.US,it) } ?: "—"}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("K ${k?.let { "%.1f".format(Locale.US,it) } ?: "—"} · D ${d?.let { "%.1f".format(Locale.US,it) } ?: "—"} · Vol ${ratio?.let { "%.2f×".format(Locale.US,it) } ?: "collecting ${row.volumeSeconds}/120s"}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             if(item.held) {
                 TextButton(onClick={onRecord(PaperOperation.EDIT_BUY,item.buyAt,item.buy,item.quantity)},contentPadding=PaddingValues(0.dp)) { Text("BUY ${compactPrice(item.buy)} ✎ · Qty ${item.quantity}",fontSize=12.sp) }
                 val pnl=quote?.price?.let { (it-item.buy!!)*item.quantity }

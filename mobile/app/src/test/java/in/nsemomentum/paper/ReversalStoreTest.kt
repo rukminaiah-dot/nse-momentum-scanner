@@ -16,11 +16,12 @@ class ReversalStoreTest {
         val context=RuntimeEnvironment.getApplication() as Context
         context.getSharedPreferences("reversal_strategy_v1",0).edit().clear().commit()
         val now=Instant.parse("2026-10-30T05:00:00Z")
-        val s=ReversalState(buy=100.0,buyAt=now,peakPrice=101.0,beforeVolume=100,afterVolume=150,symbol="TEST",confirmationAt=now,previousK=25.0,previousAt=now)
+        val s=ReversalState(buy=100.0,buyAt=now,identifiedAt=now,peakPrice=101.0,beforeVolume=100,afterVolume=150,symbol="TEST",confirmationAt=now,previousK=25.0,previousAt=now)
         ReversalStore(context).write(mapOf("NSE_EQ|TEST" to s))
         val restored=ReversalStore(context).read().getValue("NSE_EQ|TEST")
         assertEquals(101.0,restored.peakPrice!!,0.0);assertEquals(100L,restored.beforeVolume!!)
         assertNull(restored.previousK);assertNull(restored.confirmationAt)
+        assertEquals(now,restored.identifiedAt)
         assertEquals(100.75,ReversalStrategy.stopPrice(restored)!!,1e-8)
         val closed=ReversalStrategy.tick(restored,100.7,null,null,now.plusSeconds(1))
         ReversalStore(context).write(mapOf("NSE_EQ|TEST" to closed))
