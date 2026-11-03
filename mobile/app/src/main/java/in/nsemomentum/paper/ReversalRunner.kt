@@ -192,10 +192,13 @@ object ReversalRunner {
                 openingStates=nextOpening
                 rows.filter { it.state.action.startsWith("BUY_CONFIRMED") || it.state.action.startsWith("SELL_") }.forEach { DiagnosticLog.event("REVERSAL_SIGNAL",it.state.action,symbol=it.stock.symbol) }
                 states=next
-                val archived=states.filter { entry -> work.none { it.instrumentKey == entry.key } && entry.value.trades.isNotEmpty() }.map { (key,value) -> ReversalRow(Stock(value.symbol.ifBlank { key },key),value,null,"Not selected · saved history only") }
+                val archiveKeys=(states.keys+openingStates.keys).filter { key -> work.none { it.instrumentKey==key } &&
+                    (states[key]?.trades?.isNotEmpty()==true || openingStates[key]?.trades?.isNotEmpty()==true) }
+                val archived=archiveKeys.map { key -> val saved=states[key] ?: ReversalState()
+                    ReversalRow(Stock(saved.symbol.ifBlank { key },key),saved,null,"Not selected · saved history only",openingStates[key] ?: OpeningState()) }
                 mutable.value=ReversalSnapshot(rows+archived,now,"Automatic · live 60s volume confirmation · stepped profit protection")
             } catch (_: Exception) {
-                mutable.value=ReversalSnapshot(rows.map { row -> row.copy(state=states[row.stock.instrumentKey] ?: ReversalState()) },now,"Could not save reversal history · signals paused until storage recovers")
+                mutable.value=ReversalSnapshot(rows.map { row -> row.copy(state=states[row.stock.instrumentKey] ?: ReversalState(),opening=openingStates[row.stock.instrumentKey] ?: OpeningState()) },now,"Could not save reversal history · signals paused until storage recovers")
             }
             delay(1000)
         } } finally { historyJob.cancel();LiveMarketHub.release("reversal") }

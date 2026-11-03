@@ -65,6 +65,10 @@ fun ReversalPage(snapshot: ReversalSnapshot, prices: LivePriceState, modifier: M
         }
         item {
             Text("Historical results include earlier 80-exit trades. The second summary includes only new volume-confirmed entries. Existing open positions adopt profit protection from prices observed after this update; past peak gains cannot be reconstructed.",style=MaterialTheme.typography.bodySmall)
+            val openingClosed=snapshot.rows.flatMap { it.opening.trades }
+            Text("Opening approval-only paper results",fontWeight=FontWeight.Bold)
+            Text("${openingClosed.size} completed · ${openingClosed.count { it.gross>0 }} wins · gross P&L ₹%+.2f".format(openingClosed.sumOf { it.gross }))
+            Text("Quantity-weighted rupee P&L; separate from automatic Reversal. Charges and slippage excluded. Opening records are local and not included in the existing backup.",style=MaterialTheme.typography.bodySmall)
             Text("Reversal strategy results only",fontWeight=FontWeight.Bold)
             CompletedTradeSummary(allTrades)
             val newTrades=snapshot.rows.flatMap { row -> row.state.trades.filter { it.policy == "VOLUME_STEP_V2" }.map { t -> PaperTrade(row.stock.symbol,t.buyAt,t.buy,t.sellAt,t.sell) } }
