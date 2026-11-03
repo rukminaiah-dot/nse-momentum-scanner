@@ -55,8 +55,8 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
     val signals=unifiedSignals(snapshot,now)
     fun edit(trade:UiTrade,operation:PaperOperation) { trade.source?.let { source -> request=RecordRequest(trade.key,trade.symbol,source,operation,trade.buyAt,if(operation==PaperOperation.EDIT_BUY) trade.buy else trade.sell,trade.quantity) } }
     if(help) AlertDialog(onDismissRequest={help=false},title={Text("Rules & alerts")},text={Column(Modifier.heightIn(max=480.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-        Text("Opening: 09:17–09:30, 20<K<50, K>D, positive open and rising price/60s volume.")
-        Text("Reversal: K>D below 20; cross above 20 with 60s volume confirmation.")
+        Text("Opening: 09:17–09:30, 20<K<50, K>D, positive open and rising price. Volume is informational for BUY.")
+        Text("Reversal: K>D below 20; observed cross above 20 with K>D. No volume requirement or 60s volume wait for BUY.")
         Text("Initial stop −1%; profit protection advances in 0.25-point steps. MUST SELL flags an urgent exit; manual positions stay open until SELL is recorded.")
         Text("Prices entered here are unverified paper records. Original automatic history is retained and labelled. Records are local and are not included in the existing backup. Avg % is the mean closed-trade return; P&L includes recorded quantity, before costs.")
         OpeningNotificationPermission(showQuantity=false)
@@ -119,7 +119,7 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
                 Text(compactPrice(quote?.price),style=MaterialTheme.typography.bodyMedium,fontWeight=FontWeight.Medium)
                 Text(quote?.changePercent?.let { "%+.2f%% today".format(Locale.US,it) } ?: "—",style=MaterialTheme.typography.bodySmall,color=profitColor(quote?.changePercent))
             }
-            Text("K ${k?.let { "%.1f".format(Locale.US,it) } ?: "—"} · D ${d?.let { "%.1f".format(Locale.US,it) } ?: "—"} · Vol ${ratio?.let { "%.2f×".format(Locale.US,it) } ?: "collecting ${row.volumeSeconds}/120s"}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("K ${k?.let { "%.1f".format(Locale.US,it) } ?: "—"} · D ${d?.let { "%.1f".format(Locale.US,it) } ?: "—"} · Vol 60s ${ratio?.let { "%.2f×".format(Locale.US,it) } ?: "collecting ${row.volumeSeconds}/120s"}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             if(item.held) {
                 TextButton(onClick={onRecord(PaperOperation.EDIT_BUY,item.buyAt,item.buy,item.quantity)},contentPadding=PaddingValues(0.dp)) { Text("BUY ${compactPrice(item.buy)} ✎ · Qty ${item.quantity}",fontSize=12.sp) }
                 val pnl=quote?.price?.let { (it-item.buy!!)*item.quantity }
@@ -138,7 +138,7 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
             }
             Text("Signal ${compactTime(item.latest.takeIf { it!=Instant.EPOCH && it<=now })}${if(!fresh) " · Last data" else ""}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             Text("K/D ${compactTime(displayPreview?.sampledAt)}${if(!fresh) " · STALE" else ""} · Quote ${compactTime(quote?.tradedAt)}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-            if(!item.held && !canBuy) Text(signalBlocker(row),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            if(!item.held && !canBuy) Text(if(item.source==PaperSource.OPENING) row.opening.status else signalBlocker(row),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             if(expanded) {
                 HorizontalDivider()
                 val priceChange=if(sample?.price60!=null && quote!=null) (quote.price/sample.price60-1)*100 else null
@@ -152,7 +152,7 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
                 DetailLine("Previous reading",compactTime(row.previousPreview?.sampledAt))
                 DetailLine("K − D",if(k!=null && d!=null) "%+.2f".format(Locale.US,k-d) else "—")
                 DetailLine("Latest / prior 60s volume",if(sample?.continuous==true) "${sample.latestVolume} / ${sample.beforeVolume} shares" else "Unavailable")
-                DetailLine("Volume ratio",ratio?.let { "%.2f× (%+.0f%%)".format(Locale.US,it,(it-1)*100) } ?: "Unavailable")
+                DetailLine("Volume × · latest/prior 60s",ratio?.let { "%.2f× (%+.0f%%)".format(Locale.US,it,(it-1)*100) } ?: "Unavailable")
                 DetailLine("Open / previous close","${compactPrice(sample?.open)} / ${compactPrice(quote?.previousClose)}")
                 if(item.buy!=null) {
                     val peak=if(item.source==PaperSource.OPENING) row.opening.peak else row.state.peakPrice
@@ -167,6 +167,7 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
     }
 }
 fun reversalActionLabel(action: String): String = when(action) {
+    "BUY_CONFIRMED_K_CROSS_20" -> "BUY · K crossed above 20 with K>D"
     "CONFIRMING_60S_VOLUME_AND_KD" -> "Checking K/D and volume for 60 seconds"
     "BUY_CONFIRMED_60S_VOLUME_INCREASE" -> "BUY · 60-second volume increased"
     "BUY_ACTIVE_INITIAL_STOP" -> "BUY active · initial 1% stop"
@@ -199,7 +200,7 @@ fun monitorStatus(updated:Instant?,connected:Boolean,now:Instant):String {
 fun signalBlocker(row:ReversalRow):String=when {
     row.preview==null -> "K/D unavailable · waiting for fresh quote/history"
     row.state.action=="PRE_CROSS_VOLUME_UNAVAILABLE_NEW_CROSS_REQUIRED" -> "Cross seen · preceding 60s volume unavailable · new cross required"
-    row.state.action=="CONFIRMING_60S_VOLUME_AND_KD" -> "Confirming K/D and 60s volume"
+    row.state.action=="BUY_CONFIRMED_K_CROSS_20" -> "BUY · K crossed above 20 with K>D"
     row.state.action.contains("VOLUME") || row.state.action.contains("GAP") -> reversalActionLabel(row.state.action)
     row.state.action=="WAITING_FOR_K_ABOVE_D_BELOW_20" -> "Waiting for K>D below 20"
     row.state.action=="SHORTLISTED_BELOW_20_WAITING_FOR_CROSS" -> "Waiting for K to cross 20"

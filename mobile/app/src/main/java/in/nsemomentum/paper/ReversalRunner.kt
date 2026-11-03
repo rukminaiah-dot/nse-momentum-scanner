@@ -186,12 +186,7 @@ object ReversalRunner {
                     ?: OpeningMomentum.tick(previousOpening,openingSample)
                 changes[stock.instrumentKey]?.takeIf { it.source==PaperSource.OPENING }?.let { opening=PaperRecordEdits.opening(opening,it,now,fresh) }
                 nextOpening=nextOpening+(stock.instrumentKey to opening)
-                val start=old.confirmationAt ?: now
-                val before=if (old.confirmationAt == null) volume.amount(now.minusSeconds(60),now) else old.beforeVolume
-                val end=if (now >= start.plusSeconds(60)) start.plusSeconds(60) else now
-                val after=if (old.confirmationAt != null && end > start) volume.amount(start,end) else null
-                val continuous=volumeFresh && if(old.confirmationAt != null) volume.amount(start,end) != null else before != null
-                var updated=if (fresh) ReversalStrategy.tick(old,quote!!.price,preview?.context?.stochK,preview?.context?.stochD,now,before,after,continuous)
+                var updated=if (fresh) ReversalStrategy.tick(old,quote!!.price,preview?.context?.stochK,preview?.context?.stochD,now)
                     else ReversalStrategy.interrupted(old,if (old.buy != null) "BUY_ACTIVE_WAITING_FRESH_QUOTE" else "QUOTE_GAP_LAST_VALID_K_RETAINED")
                 changes[stock.instrumentKey]?.takeIf { it.source==PaperSource.REVERSAL }?.let { updated=PaperRecordEdits.reversal(updated,it,now,fresh,preview?.context?.stochK,preview?.context?.stochD) }
                 val priorPreview=previousPreviews[stock.instrumentKey]
