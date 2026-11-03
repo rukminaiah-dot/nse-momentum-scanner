@@ -27,8 +27,8 @@ data class SignalItem(val row:ReversalRow,val source:PaperSource) {
     val buyAt:Instant? get()=if(source==PaperSource.OPENING) row.opening.buyAt else row.state.buyAt
     val quantity:Int get()=if(source==PaperSource.OPENING) row.opening.quantity else row.state.quantity
     val held:Boolean get()=buy!=null && (source==PaperSource.OPENING || row.state.manual)
-    val latest:Instant get()=listOfNotNull(row.signalAt,if(source==PaperSource.OPENING) row.opening.recordedAt else row.state.recordedAt,
-        buyAt,if(source==PaperSource.OPENING) row.opening.trades.lastOrNull()?.sellAt else row.state.trades.lastOrNull()?.sellAt).maxOrNull() ?: Instant.EPOCH
+    val latest:Instant get()=if(source==PaperSource.OPENING) listOfNotNull(row.opening.alertAt,row.opening.recordedAt,buyAt,row.opening.trades.lastOrNull()?.sellAt).maxOrNull() ?: row.signalAt ?: Instant.EPOCH
+        else listOfNotNull(row.signalAt,row.state.recordedAt,buyAt,row.state.confirmationAt,row.state.trades.lastOrNull()?.sellAt).maxOrNull() ?: Instant.EPOCH
 }
 fun unifiedSignals(snapshot:ReversalSnapshot,now:Instant):List<SignalItem> {
     val date=now.atZone(MarketSession.ZONE).toLocalDate();val time=now.atZone(MarketSession.ZONE).toLocalTime()
@@ -37,7 +37,9 @@ fun unifiedSignals(snapshot:ReversalSnapshot,now:Instant):List<SignalItem> {
         val openingWatch=row.openingSample?.fresh==true && time>=LocalTime.of(9,15) && time<LocalTime.of(9,30) && k!=null && d!=null && k>20 && k<50 && k>d
         val opening=openingWatch || row.opening.alert!=null || row.opening.buy!=null || row.opening.trades.lastOrNull()?.sellAt?.atZone(MarketSession.ZONE)?.toLocalDate()==date
         val reversal=row.state.watchDate==date.toString() || row.state.buy!=null || row.state.trades.lastOrNull()?.sellAt?.atZone(MarketSession.ZONE)?.toLocalDate()==date
-        listOfNotNull(if(opening) SignalItem(row,PaperSource.OPENING) else null,if(reversal) SignalItem(row,PaperSource.REVERSAL) else null)
+        val candidates=listOfNotNull(if(opening) SignalItem(row,PaperSource.OPENING) else null,if(reversal) SignalItem(row,PaperSource.REVERSAL) else null)
+        val held=candidates.filter { it.held }
+        if(held.isNotEmpty()) held else listOfNotNull(candidates.maxByOrNull { it.latest })
     }.sortedByDescending { it.latest }
 }
 data class RecordRequest(val key:String,val symbol:String,val source:PaperSource,val operation:PaperOperation,val at:Instant?,val price:Double?,val quantity:Int)

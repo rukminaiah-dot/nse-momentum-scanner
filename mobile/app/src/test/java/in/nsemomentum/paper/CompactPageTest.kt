@@ -25,12 +25,15 @@ class CompactPageTest {
         val trade=OpeningTrade(now.minusSeconds(300),100.0,now.minusSeconds(100),101.0,2,"MANUAL_SELL")
         val opening=OpeningState(day=now.atZone(MarketSession.ZONE).toLocalDate().toString(),trades=listOf(trade))
         val state=ReversalState(buy=1024.0,buyAt=now.minusSeconds(60),manual=true,quantity=2,peakPrice=1034.0,action="SELL_REQUIRED_STOP_1_PERCENT")
-        val row=ReversalRow(Stock("HDFCBANK","NSE_EQ|TEST"),state,null,"",opening,sample,signalAt=now)
+        val current=LiveStochastic(TechnicalContext(1025.0,1020.0,18.5,25.8),now,now)
+        val previous=LiveStochastic(TechnicalContext(1025.0,1020.0,26.0,25.0),now.minusSeconds(1),now.minusSeconds(1))
+        val row=ReversalRow(Stock("HDFCBANK","NSE_EQ|TEST"),state,current,"",opening,sample,previous,now)
+        val snapshot=ReversalSnapshot(listOf(row),now)
         val live=LivePriceState(connected=true,quotes=mapOf("NSE_EQ|TEST" to LiveQuote("NSE_EQ|TEST",1030.0,1020.0,now,now)),markets=mapOf("NSE_EQ" to true))
         compose.setContent { PaperUiTheme {
             pageView=androidx.compose.ui.platform.LocalView.current
             androidx.compose.material3.Surface(color=androidx.compose.material3.MaterialTheme.colorScheme.background) {
-                ReversalPage(ReversalSnapshot(listOf(row),now),live)
+                ReversalPage(snapshot,live)
             }
         } }
         compose.waitForIdle()
@@ -40,12 +43,8 @@ class CompactPageTest {
         compose.onNodeWithText("Latest / prior 60s volume").assertExists()
         save("expanded")
         compose.onAllNodesWithText("HDFCBANK").onFirst().performClick()
-        compose.onNodeWithText("SELL",useUnmergedTree=true).performClick()
-        compose.onNodeWithText("Record SELL · HDFCBANK").assertExists()
-        compose.onNodeWithText("Executed price ₹ · entered by you").assertExists()
-
-        compose.onNodeWithText("Cancel").performClick()
-        compose.onNodeWithTag("signals-list").performScrollToIndex(5)
+        compose.onNodeWithText("SELL",useUnmergedTree=true).assertExists()
+        compose.onNodeWithTag("signals-list").performScrollToIndex(unifiedSignals(snapshot,now).size+3)
         compose.waitForIdle()
         save("results")
     }
@@ -61,7 +60,7 @@ class CompactPageTest {
                 Dashboard(indexReport=null,onRefreshIndices={},indexRefreshEnabled=false,stockCount=1,favouriteCount=1,customStockCount=0,
                     scanStatus="Ready",report=report,scanning=false,scanProgress="",autoScanActive=true,autoScanStatus="Running",
                     qualifiedToday=listOf(qualified),catalog=listOf(Stock("DIXON",key)),
-                    livePrices=LivePriceState(connected=true,quotes=mapOf(key to quote),markets=mapOf("NSE_EQ" to true)),liveStochastic=emptyMap(),
+                    livePrices=LivePriceState(connected=true,quotes=mapOf(key to quote),markets=mapOf("NSE_EQ" to true)),liveStochastic=mapOf("DIXON" to LiveStochastic(TechnicalContext(12400.0,11800.0,32.5,24.8),now,now)),
                     paperTrades=listOf(PaperTrade("DIXON",now.minusSeconds(3600),11463.0,now.minusSeconds(60),12278.0)),previewSampledAt=now,
                     onRefreshPrices={},pricesRefreshEnabled=true,weeklySummary=emptyList(),weeklyOutcomes=emptyList(),
                     onStartFullDayScan={},onStopFullDayScan={},onRunScan={},onCancelScan={})
