@@ -39,7 +39,8 @@ fun unifiedSignals(snapshot:ReversalSnapshot,now:Instant):List<SignalItem> {
         val reversal=row.state.watchDate==date.toString() || row.state.buy!=null || row.state.trades.lastOrNull()?.sellAt?.atZone(MarketSession.ZONE)?.toLocalDate()==date
         val candidates=listOfNotNull(if(opening) SignalItem(row,PaperSource.OPENING) else null,if(reversal) SignalItem(row,PaperSource.REVERSAL) else null)
         val held=candidates.filter { it.held }
-        if(held.isNotEmpty()) held else listOfNotNull(candidates.maxByOrNull { it.latest })
+        val active=candidates.filter { item -> if(item.source==PaperSource.OPENING) openingWatch || row.opening.alert!=null || row.opening.buy!=null else row.state.watchDate==date.toString() || row.state.buy!=null }
+        if(held.isNotEmpty()) held else listOfNotNull((active.ifEmpty { candidates }).maxByOrNull { it.latest })
     }.sortedByDescending { it.latest }
 }
 data class RecordRequest(val key:String,val symbol:String,val source:PaperSource,val operation:PaperOperation,val at:Instant?,val price:Double?,val quantity:Int)

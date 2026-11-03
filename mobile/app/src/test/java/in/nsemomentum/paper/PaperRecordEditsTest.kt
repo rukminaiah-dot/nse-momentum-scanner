@@ -46,6 +46,14 @@ class PaperRecordEditsTest {
         val corrected=PaperRecordEdits.opening(closed,command(PaperOperation.EDIT_SELL,102.0),at.plusSeconds(6),false)
         assertEquals(6.0,corrected.trades.single().gross,0.0)
     }
+    @Test fun closedOtherStrategyCannotHideCurrentManualPositionOrBuySetup() {
+        val closed=OpeningState(trades=listOf(OpeningTrade(at.minusSeconds(60),100.0,at,101.0,1,"TEST")))
+        val held=ReversalState(buy=100.0,buyAt=at.minusSeconds(120),manual=true)
+        val row=ReversalRow(Stock("TEST","NSE_EQ|TEST"),held,null,"",closed,signalAt=at)
+        assertEquals(listOf(PaperSource.REVERSAL),unifiedSignals(ReversalSnapshot(listOf(row)),at).map { it.source })
+        val setup=row.copy(state=held.copy(manual=false))
+        assertEquals(PaperSource.REVERSAL,unifiedSignals(ReversalSnapshot(listOf(setup)),at).single().source)
+    }
     @Test fun summariesCountOnlyClosedTradesUseQuantityAndIstDay() {
         val trades=listOf(UiTrade("T","TEST",PaperSource.OPENING,at,100.0,at.plusSeconds(20),102.0,3),UiTrade("X","OPEN",PaperSource.REVERSAL,at,100.0,null,null))
         val total=TradeResults.totals(trades)
