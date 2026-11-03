@@ -18,6 +18,7 @@ import org.robolectric.annotation.GraphicsMode
 @OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
 class CompactPageTest {
     @get:Rule val compose=createComposeRule()
+    private lateinit var pageView:android.view.View
     @Test fun unifiedPageExpandsAndOpensManualPriceForm() {
         val now=Instant.now()
         val sample=OpeningSample(now,true,1030.0,1026.0,1020.0,18.5,25.8,1032.0,10000,6500,true)
@@ -26,7 +27,12 @@ class CompactPageTest {
         val state=ReversalState(buy=1024.0,buyAt=now.minusSeconds(60),manual=true,quantity=2,peakPrice=1034.0,action="SELL_REQUIRED_STOP_1_PERCENT")
         val row=ReversalRow(Stock("HDFCBANK","NSE_EQ|TEST"),state,null,"",opening,sample,signalAt=now)
         val live=LivePriceState(connected=true,quotes=mapOf("NSE_EQ|TEST" to LiveQuote("NSE_EQ|TEST",1030.0,1020.0,now,now)),markets=mapOf("NSE_EQ" to true))
-        compose.setContent { PaperUiTheme { ReversalPage(ReversalSnapshot(listOf(row),now),live) } }
+        compose.setContent { PaperUiTheme {
+            pageView=androidx.compose.ui.platform.LocalView.current
+            androidx.compose.material3.Surface(color=androidx.compose.material3.MaterialTheme.colorScheme.background) {
+                ReversalPage(ReversalSnapshot(listOf(row),now),live)
+            }
+        } }
         compose.waitForIdle()
         save("signals")
         compose.onAllNodesWithText("HDFCBANK").onFirst().performClick()
@@ -37,15 +43,18 @@ class CompactPageTest {
         compose.onNodeWithText("SELL",useUnmergedTree=true).performClick()
         compose.onNodeWithText("Record SELL · HDFCBANK").assertExists()
         compose.onNodeWithText("Executed price ₹ · entered by you").assertExists()
-        save("record-price")
+
         compose.onNodeWithText("Cancel").performClick()
         compose.onNodeWithTag("signals-list").performScrollToIndex(5)
         compose.waitForIdle()
         save("results")
     }
     private fun save(name:String) {
-        val image=compose.onAllNodes(isRoot()).onLast().captureToImage().asAndroidBitmap()
-        val file=File("build/outputs/page-previews/$name.png");file.parentFile!!.mkdirs()
-        file.outputStream().use { image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) }
+        compose.runOnIdle {
+            val image=android.graphics.Bitmap.createBitmap(pageView.width,pageView.height,android.graphics.Bitmap.Config.ARGB_8888)
+            pageView.draw(android.graphics.Canvas(image))
+            val file=File("build/outputs/page-previews/$name.png");file.parentFile!!.mkdirs()
+            file.outputStream().use { image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) }
+        }
     }
 }

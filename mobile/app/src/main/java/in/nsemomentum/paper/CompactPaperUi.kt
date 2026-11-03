@@ -111,7 +111,8 @@ object TradeResults {
     if(history) (1L..6L).forEach { offset -> val date=today.minusDays(offset)
         ResultLine(date.format(DateTimeFormatter.ofPattern("dd MMM")),TradeResults.onDate(trades,date),onEdit=onEdit)
     }
-    Text("Closed trades · gross before costs",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+    val type=if(trades.any { it.manual } && trades.any { !it.manual }) "Automatic + recorded paper" else if(trades.any { it.manual }) "Recorded paper" else "Automatic paper"
+    Text("$type · closed trades · before costs",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
 }
 @Composable fun PaperQuantityBar(onQuantity:(Int)->Unit={}) {
     val context=androidx.compose.ui.platform.LocalContext.current
