@@ -10,8 +10,8 @@ android {
         applicationId = "com.nsemomentum.paper.scanner"
         minSdk = 26
         targetSdk = 35
-        versionCode = 23
-        versionName = "0.19.1-candidate"
+        versionCode = 24
+        versionName = "0.20.0-candidate"
         resValue("string", "app_name", "Momentum Paper Scanner")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

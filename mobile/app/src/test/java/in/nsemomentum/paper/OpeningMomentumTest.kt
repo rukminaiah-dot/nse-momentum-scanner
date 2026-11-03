@@ -27,6 +27,15 @@ class OpeningMomentumTest {
         val p=alert()
         for(k in listOf(20.0,50.0)) assertNull(OpeningMomentum.approve(p,sample(2,k=k,d=10.0),OpeningApproval("TEST",p.alertAt!!,OpeningChoice.BUY,1)).buy)
     }
+    @Test fun approvalLastsOneMinuteAndRejectsTheExactExpiryBoundary() {
+        var p=alert()
+        for(i in 2L..59L) p=OpeningMomentum.tick(p,sample(i,k=30.0))
+        assertNotNull(p.alert)
+        val approved=OpeningMomentum.approve(p,sample(60,k=31.0),OpeningApproval("TEST",p.alertAt!!,OpeningChoice.BUY,1))
+        assertNotNull(approved.buy)
+        val expired=OpeningMomentum.approve(p,sample(61,k=31.0),OpeningApproval("TEST",p.alertAt!!,OpeningChoice.BUY,1))
+        assertNull(expired.buy)
+    }
     @Test fun everyEntryConditionAndFreshApprovalIsRequired() {
         val samples=listOf(sample(1,k=50.0),sample(1,k=28.0),sample(1,d=35.0),sample(1).copy(open=99.0),
             sample(1,price=101.0),sample(1).copy(price60=103.0),sample(1).copy(latestVolume=100),sample(1).copy(beforeVolume=0),
@@ -44,7 +53,7 @@ class OpeningMomentumTest {
         assertNull(waited.buy);assertNull(OpeningMomentum.tick(waited,sample(3,k=32.0)).alert)
         val skipped=OpeningMomentum.approve(p,sample(2,k=31.0),command.copy(choice=OpeningChoice.SKIP))
         assertTrue(skipped.skipped);assertNull(OpeningMomentum.tick(skipped,sample(3,k=32.0)).alert)
-        assertNull(OpeningMomentum.approve(p,sample(40,k=31.0),command.copy(choice=OpeningChoice.BUY)).buy)
+        assertNull(OpeningMomentum.approve(p,sample(61,k=31.0),command.copy(choice=OpeningChoice.BUY)).buy)
         val bought=OpeningMomentum.approve(p,sample(2,k=31.0),command.copy(choice=OpeningChoice.BUY,quantity=2))
         assertEquals(2,OpeningMomentum.approve(bought,sample(3,k=32.0),command.copy(choice=OpeningChoice.BUY,quantity=9)).quantity)
     }

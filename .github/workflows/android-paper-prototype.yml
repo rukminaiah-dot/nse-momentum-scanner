@@ -87,3 +87,11 @@ jobs:
           path: mobile/updatecheck/build/outputs/apk/debug/updatecheck-debug.apk
           if-no-files-found: error
           retention-days: 7
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: opening-notification-previews
+          path: mobile/app/build/outputs/notification-previews/*.png
+          if-no-files-found: warn
+          retention-days: 7

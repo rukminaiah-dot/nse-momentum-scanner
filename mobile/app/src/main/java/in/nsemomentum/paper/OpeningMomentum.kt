@@ -54,14 +54,14 @@ object OpeningMomentum {
         }
         if(reason==null) return old.copy(alert=null,alertAt=null,status=if(openBuy!=null) "Paper position open" else "Watching opening 20<K<50, K>D, rising price and 60s volume")
         if(old.waitUntil?.let { s.at<it }==true) return old.copy(alert=null,alertAt=null,status="Waiting · paper position unchanged")
-        if(old.alertAt?.let { Duration.between(it,s.at).seconds>=30 }==true) return old.copy(alert=null,alertAt=null,waitUntil=s.at.plusSeconds(30),status="Approval expired · rechecking")
+        if(old.alertAt?.let { Duration.between(it,s.at).seconds>=60 }==true) return old.copy(alert=null,alertAt=null,waitUntil=s.at.plusSeconds(30),status="Approval expired · rechecking")
         return old.copy(alert=reason,alertAt=if(old.alert==reason) old.alertAt ?: s.at else s.at,status="Approval required · PAPER ONLY")
     }
     /** Must be called with a freshly re-evaluated sample, never the displayed price. */
     fun approve(state:OpeningState,s:OpeningSample,command:OpeningApproval):OpeningState {
         val checked=tick(state,s)
         if(state.alertAt!=command.alertAt || checked.alertAt!=command.alertAt || checked.alert==null ||
-            Duration.between(command.alertAt,s.at).toMillis() !in 0..29999) return checked
+            Duration.between(command.alertAt,s.at).toMillis() !in 0..59999) return checked
         return when(command.choice) {
             OpeningChoice.WAIT -> checked.copy(alert=null,alertAt=null,waitUntil=s.at.plusSeconds(30),status="Wait selected · no paper order")
             OpeningChoice.SKIP -> if(checked.buy==null) checked.copy(skipped=true,alert=null,alertAt=null,status="Opening BUY skipped today") else checked
