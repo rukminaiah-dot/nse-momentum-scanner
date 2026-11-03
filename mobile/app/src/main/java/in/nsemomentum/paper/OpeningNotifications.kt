@@ -39,8 +39,8 @@ object OpeningNoticeFormatter {
         val amount=quote?.price?.takeIf { it.isFinite() && it>0 }?.let { it*quantity }
         val pnl=if(sell && quote!=null && state.buy!=null) (quote.price-state.buy)*quantity else null
         val percent=if(sell && quote!=null && state.buy!=null) (quote.price/state.buy-1)*100 else null
-        val info=if(sell) "${quantity} shares · P&L ${pnl?.let { "₹%+,.2f".format(Locale.ENGLISH,it) } ?: "Unavailable"} (${percent?.let { "%+.2f%%".format(Locale.ENGLISH,it) } ?: "—"})"
-            else "$quantity shares · Est. ${price(amount)}"
+        val info=if(sell) "Qty $quantity · P&L ${pnl?.let { "₹%+,.2f".format(Locale.ENGLISH,it) } ?: "Unavailable"} (${percent?.let { "%+.2f%%".format(Locale.ENGLISH,it) } ?: "—"})"
+            else "Qty $quantity · Est. ${price(amount)}"
         val readable=when(reason) {
             "OPENING_BUY" -> "Opening strength · rising price & volume"
             "VOLUME_DROP_30_PERCENT" -> "Volume fell 30% or more · review exit"
