@@ -15,7 +15,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 @Composable
-fun IndexOverview(report: IndexMarketReport?, enabled: Boolean, onRefresh: () -> Unit, livePrices: LivePriceState = LivePriceState()) {
+fun IndexOverview(report: IndexMarketReport?, enabled: Boolean, onRefresh: () -> Unit, livePrices: LivePriceState = LivePriceState(), compact:Boolean=false) {
     val context = LocalContext.current
     val latestPrices by rememberUpdatedState(livePrices)
     var now by remember { mutableStateOf(Instant.now()) }
@@ -33,15 +33,29 @@ fun IndexOverview(report: IndexMarketReport?, enabled: Boolean, onRefresh: () ->
         } } finally { db.close() }
     }
     Text("Market indices", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-    Text("Nifty 50 · Sensex · Bank Nifty", style = MaterialTheme.typography.titleMedium)
-    Text("Web index rules: three rising 5-minute closes = Bullish; three falling closes = Bearish; otherwise Neutral. No RVOL filter. These do not use your 40 stock places.", style = MaterialTheme.typography.bodySmall)
+    if(!compact) Text("Nifty 50 · Sensex · Bank Nifty", style = MaterialTheme.typography.titleMedium)
+    if(!compact) Text("Web index rules: three rising 5-minute closes = Bullish; three falling closes = Bearish; otherwise Neutral. No RVOL filter. These do not use your 40 stock places.", style = MaterialTheme.typography.bodySmall)
     Button(enabled = enabled, onClick = onRefresh) { Text("Refresh index data") }
     val readings = report?.at(now)?.rows?.associateBy { it.symbol }.orEmpty()
     val names = mapOf("NIFTY50" to "Nifty 50 · NSE", "SENSEX" to "Sensex · BSE", "BANKNIFTY" to "Bank Nifty · NSE")
     StockCatalog.indices.forEach { index ->
         val row = readings[index.symbol] ?: IndexReading(index.symbol)
+        var expanded by remember(index.symbol) { mutableStateOf(false) }
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                TextButton(onClick={expanded=!expanded}) { Text("${names.getValue(index.symbol)} · ${if(row.state==IndexDataState.LIVE) row.signal else "WAIT"} ${if(expanded) "⌃" else "⌄"}") }
+                if(compact && !expanded) {
+                    val quote=livePrices.quotes[index.instrumentKey]
+                    Text("${compactPrice(quote?.price)} · K ${indexNumber(previews[index.symbol]?.context?.stochK ?: row.technicals?.stochK)} / D ${indexNumber(previews[index.symbol]?.context?.stochD ?: row.technicals?.stochD)}")
+                    val local=now.atZone(MarketSession.ZONE);val minute=local.hour*60+local.minute
+                    if(minute in 555 until 930) {
+                        val close=local.toLocalDate().atTime(9,15).atZone(MarketSession.ZONE).toInstant().plusSeconds(((minute-555)/5+1)*300L)
+                        val seconds=java.time.Duration.between(now,close).seconds.coerceAtLeast(0)
+                        Text("Next close ${clockTime(close)} · %02d:%02d".format(seconds/60,seconds%60),style=MaterialTheme.typography.labelSmall)
+                    }
+                    Text("Quote ${compactTime(quote?.tradedAt)} · Candle ${compactTime(row.refreshedAt)}",style=MaterialTheme.typography.labelSmall)
+                    row.lastError?.let { Text(it,style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.error) }
+                } else {
                 Text(names.getValue(index.symbol), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 LivePriceDisplay(index, livePrices)
                 val local = now.atZone(MarketSession.ZONE)
@@ -74,11 +88,12 @@ fun IndexOverview(report: IndexMarketReport?, enabled: Boolean, onRefresh: () ->
                 }
                 Text(if (row.state == IndexDataState.LIVE) row.signal else "WAIT", fontWeight = FontWeight.SemiBold)
                 Text(if (row.reason == "NO_INDEX_SCAN") "Save your token in Settings, then refresh index data." else row.reason.replace('_', ' ').lowercase(Locale.US), style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
     }
     HorizontalDivider(Modifier.padding(vertical = 8.dp))
-    Text("My stock scanner", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+    if(!compact) Text("My stock scanner", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
 }
 
 private fun indexNumber(value: Double?): String = value?.let { String.format(Locale.US, "%.2f", it) } ?: "—"

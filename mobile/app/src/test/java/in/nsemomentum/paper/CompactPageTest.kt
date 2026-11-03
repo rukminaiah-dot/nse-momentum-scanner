@@ -1,5 +1,7 @@
 package com.nsemomentum.paper
 
+import androidx.compose.runtime.*
+import org.junit.Assert.assertEquals
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -49,6 +51,8 @@ class CompactPageTest {
         save("results")
     }
     @Test fun dashboardUsesCompactQualifiedCardsAndDayWeekRows() {
+        var active by mutableStateOf(false)
+        var starts=0;var stops=0;var singles=0;var refreshes=0
         val now=Instant.now();val key="NSE_EQ|DIXON"
         val quote=LiveQuote(key,12319.0,11000.0,now,now)
         val qualified=QualifiedStock("DIXON",now.minusSeconds(900),now,10.97,12319.0,14000.0,10000.0)
@@ -58,16 +62,23 @@ class CompactPageTest {
             pageView=androidx.compose.ui.platform.LocalView.current
             androidx.compose.material3.Surface(color=androidx.compose.material3.MaterialTheme.colorScheme.background) {
                 Dashboard(indexReport=null,onRefreshIndices={},indexRefreshEnabled=false,stockCount=1,favouriteCount=1,customStockCount=0,
-                    scanStatus="Ready",report=report,scanning=false,scanProgress="",autoScanActive=true,autoScanStatus="Running",
+                    scanStatus="Ready",report=report,scanning=false,scanProgress="",autoScanActive=active,autoScanStatus="Running",
                     qualifiedToday=listOf(qualified),catalog=listOf(Stock("DIXON",key)),
                     livePrices=LivePriceState(connected=true,quotes=mapOf(key to quote),markets=mapOf("NSE_EQ" to true)),liveStochastic=mapOf("DIXON" to LiveStochastic(TechnicalContext(12400.0,11800.0,32.5,24.8),now,now)),
                     paperTrades=listOf(PaperTrade("DIXON",now.minusSeconds(3600),11463.0,now.minusSeconds(60),12278.0)),previewSampledAt=now,
-                    onRefreshPrices={},pricesRefreshEnabled=true,weeklySummary=emptyList(),weeklyOutcomes=emptyList(),
-                    onStartFullDayScan={},onStopFullDayScan={},onRunScan={},onCancelScan={})
+                    onRefreshPrices={refreshes++},pricesRefreshEnabled=true,weeklySummary=emptyList(),weeklyOutcomes=emptyList(),
+                    onStartFullDayScan={starts++;active=true},onStopFullDayScan={stops++;active=false},onRunScan={singles++},onCancelScan={})
             }
         } }
         compose.waitForIdle();save("dashboard")
-        compose.onNodeWithText("DIXON").performClick()
+        compose.onNodeWithText("Refresh").assertIsDisplayed()
+        compose.onNodeWithText("Full-day scan").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Stop scan").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Single scan").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Refresh").performClick()
+        compose.runOnIdle { assertEquals(1,starts);assertEquals(1,stops);assertEquals(1,singles);assertEquals(1,refreshes) }
+        compose.onNodeWithText("Market indices").assertExists()
+        compose.onNodeWithText("DIXON").performScrollTo().performClick()
         compose.onNodeWithText("Confirmed K / D").assertExists()
         compose.onNodeWithText("Dashboard").assertExists()
     }

@@ -13,7 +13,7 @@ data class OpeningState(
     val day:String="",val previousK:Double?=null,val previousD:Double?=null,val previousAt:Instant?=null,
     val boughtToday:Boolean=false,val skipped:Boolean=false,val buy:Double?=null,val buyAt:Instant?=null,
     val quantity:Int=0,val peak:Double?=null,val alert:String?=null,val alertAt:Instant?=null,
-    val waitUntil:Instant?=null,val status:String="Waiting for opening data",val trades:List<OpeningTrade> = emptyList(),val recordedAt:Instant?=null
+    val waitUntil:Instant?=null,val status:String="Waiting for opening data",val trades:List<OpeningTrade> = emptyList(),val recordedAt:Instant?=null,val identifiedAt:Instant?=null
 )
 data class OpeningSample(val at:Instant,val fresh:Boolean,val price:Double?,val open:Double?,val previousClose:Double?,
     val k:Double?,val d:Double?,val price60:Double?,val beforeVolume:Long?,val latestVolume:Long?,val continuous:Boolean)
@@ -23,7 +23,7 @@ object OpeningMomentum {
     fun tick(saved:OpeningState,s:OpeningSample):OpeningState {
         val date=s.at.atZone(MarketSession.ZONE).toLocalDate().toString()
         var old=if(saved.day==date) saved else saved.copy(day=date,previousK=null,previousD=null,previousAt=null,
-            boughtToday=false,skipped=false,alert=null,alertAt=null,waitUntil=null)
+            boughtToday=false,skipped=false,identifiedAt=null,alert=null,alertAt=null,waitUntil=null)
         val price=s.price
         if(!s.fresh || price==null || !price.isFinite() || price<=0) return old.copy(previousAt=null,alert=null,alertAt=null,status="Waiting for fresh quote")
         val kd=s.k!=null && s.d!=null && s.k.isFinite() && s.d.isFinite() && s.k in 0.0..100.0 && s.d in 0.0..100.0
@@ -32,6 +32,8 @@ object OpeningMomentum {
         val upward=rising || (old.alert=="OPENING_BUY" && kd && recent && old.previousK!=null && s.k!!>=old.previousK)
         val bearish=kd && recent && old.previousK!=null && old.previousD!=null &&
             s.k!!<s.d!! && s.k<old.previousK && (old.previousK>=old.previousD || old.alert=="KD_BEARISH")
+        val time=s.at.atZone(MarketSession.ZONE).toLocalTime()
+        if(kd && time>=LocalTime.of(9,15) && time<LocalTime.of(9,30) && s.k!!>20 && s.k<50 && s.k>s.d!! && old.identifiedAt==null) old=old.copy(identifiedAt=s.at)
         old=old.copy(previousK=if(kd) s.k else old.previousK,previousD=if(kd) s.d else old.previousD,previousAt=if(kd) s.at else null)
         val openBuy=old.buy
         val reason=if(openBuy!=null && old.buyAt!=null) {

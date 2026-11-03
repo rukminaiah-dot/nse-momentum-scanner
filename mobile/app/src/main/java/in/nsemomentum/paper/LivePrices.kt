@@ -131,14 +131,15 @@ object LivePriceDecoder {
         uri.scheme == "wss" && uri.host?.endsWith(".upstox.com") == true && uri.userInfo == null &&
             uri.port in setOf(-1, 443) && uri.fragment == null
     }.getOrDefault(false)
-    fun subscription(keys: Set<String>): ByteString {
+    fun subscription(keys: Set<String>, method: String = "sub"): ByteString {
+        require(method in setOf("sub","unsub"))
         val indices = StockCatalog.indices.map { it.instrumentKey }.toSet()
         val commodities=keys.filter { it.startsWith("MCX_FO|") }.toSet()
         require(commodities.size<=4 && commodities.all { it.matches(Regex("MCX_FO\\|[0-9]{1,12}")) })
         val equities = keys - indices - commodities
         require(keys.isNotEmpty() && equities.size <= StockCatalog.MAX_ACTIVE * 2 &&
             equities.all { it.matches(Regex("(?:NSE|BSE)_EQ\\|[^\\s,]{1,100}")) })
-        return JSONObject().put("guid", java.util.UUID.randomUUID().toString()).put("method", "sub")
+        return JSONObject().put("guid", java.util.UUID.randomUUID().toString()).put("method", method)
             .put("data", JSONObject().put("mode", "full").put("instrumentKeys", JSONArray(keys.sorted())))
             .toString().toByteArray(Charsets.UTF_8).toByteString()
     }
@@ -150,7 +151,8 @@ object LivePriceDecoder {
             val sameSession = old != null && old.tradedAt.atZone(MarketSession.ZONE).toLocalDate() ==
                 quote.tradedAt.atZone(MarketSession.ZONE).toLocalDate()
             merged[key] = if(sameSession) quote.copy(previousClose=quote.previousClose ?: old?.previousClose,
-                sessionOpen=quote.sessionOpen ?: old?.sessionOpen,sessionOpenDate=quote.sessionOpenDate ?: old?.sessionOpenDate) else quote
+                sessionOpen=quote.sessionOpen ?: old?.sessionOpen,sessionOpenDate=quote.sessionOpenDate ?: old?.sessionOpenDate,
+                volumeToday=quote.volumeToday ?: old?.volumeToday,volumeAt=if(quote.volumeToday!=null) quote.volumeAt else old?.volumeAt) else quote
         }
         return merged
     }
@@ -162,7 +164,8 @@ class UpstoxLivePrices(
         .followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false).build(),
     private val apiBase: String = "https://api.upstox.com",
     private val socketClient: OkHttpClient = OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS).readTimeout(0, TimeUnit.SECONDS)
-        .pingInterval(20, TimeUnit.SECONDS).followRedirects(false).followSslRedirects(false).build()
+        .pingInterval(20, TimeUnit.SECONDS).followRedirects(false).followSslRedirects(false).build(),
+    private val webSockets: WebSocket.Factory = socketClient
 ) {
     internal suspend fun authorize(token: String): String = suspendCancellableCoroutine { continuation ->
         val request = Request.Builder().url("$apiBase/v3/feed/market-data-feed/authorize").get()
@@ -195,8 +198,9 @@ class UpstoxLivePrices(
         data class Data(val bytes: ByteArray) : Event()
         data class End(val auth: Boolean = false) : Event()
     }
-    fun stream(token: String, keys: Set<String>, initialQuotes: Map<String, LiveQuote> = emptyMap()): Flow<LivePriceState> = flow {
-        val subscription = LivePriceDecoder.subscription(keys)
+    fun stream(token: String, keys: Set<String>, initialQuotes: Map<String, LiveQuote> = emptyMap(), requested: kotlinx.coroutines.flow.StateFlow<Set<String>>? = null): Flow<LivePriceState> = flow {
+        var subscribed = requested?.value ?: keys
+        var subscription = LivePriceDecoder.subscription(subscribed)
         require(token.isNotBlank())
         var state = LivePriceState(quotes = initialQuotes.filterKeys { it in keys })
         var failures = 0
@@ -206,8 +210,10 @@ class UpstoxLivePrices(
             var socket: WebSocket? = null
             var authenticationFailed = false
             try {
+                subscribed = requested?.value ?: keys
+                subscription = LivePriceDecoder.subscription(subscribed)
                 val url = authorize(token)
-                socket = socketClient.newWebSocket(Request.Builder().url(url).build(), object : WebSocketListener() {
+                socket = webSockets.newWebSocket(Request.Builder().url(url).build(), object : WebSocketListener() {
                     override fun onOpen(webSocket: WebSocket, response: Response) {
                         if (!webSocket.send(subscription) || events.trySend(Event.Open).isFailure) webSocket.cancel()
                     }
@@ -223,7 +229,16 @@ class UpstoxLivePrices(
                     when (val event = withTimeout(90_000) { events.receive() }) {
                         Event.Open -> { DiagnosticLog.event("LIVE_STREAM","CONNECTED"); state = state.copy(status = "Connected · waiting for market data", connected = true, markets = emptyMap(), connectionId=System.nanoTime()); emit(state) }
                         is Event.Data -> {
-                            val frame = LivePriceDecoder.decode(event.bytes, keys, Instant.now())
+                            val desired=requested?.value ?: keys
+                            if(desired!=subscribed) {
+                                val removed=subscribed-desired;val added=desired-subscribed
+                                if(removed.isNotEmpty()) check(socket.send(LivePriceDecoder.subscription(removed,"unsub")))
+                                if(added.isNotEmpty()) check(socket.send(LivePriceDecoder.subscription(added)))
+                                subscribed=desired
+                                state=state.copy(quotes=state.quotes.filterKeys { it in desired })
+                                DiagnosticLog.event("LIVE_SUBSCRIPTIONS","UPDATED","count=${desired.size}")
+                            }
+                            val frame = LivePriceDecoder.decode(event.bytes, subscribed, Instant.now())
                             state = state.copy(status = "Upstox price stream connected", connected = true,
                                 quotes = LivePriceDecoder.merge(state.quotes, frame.quotes), markets = state.markets + frame.markets)
                             failures = 0

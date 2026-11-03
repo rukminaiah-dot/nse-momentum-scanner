@@ -24,7 +24,7 @@ data class ReversalState(
     val beforeVolume: Long? = null,
     val afterVolume: Long? = null,
     val observationGap: Boolean = true,
-    val quantity:Int=1,val manual:Boolean=false,val recordedAt:Instant?=null,val manualWaitUntil:Instant?=null
+    val quantity:Int=1,val manual:Boolean=false,val recordedAt:Instant?=null,val manualWaitUntil:Instant?=null,val identifiedAt:Instant?=null
 )
 object ReversalStrategy {
     fun stopPercent(buy: Double, peak: Double): Double {
@@ -56,7 +56,9 @@ object ReversalStrategy {
             return interrupted(state,"KD_GAP_LAST_VALID_READING_RETAINED")
         val recent=state.previousAt?.let { Duration.between(it,now).toMillis() in 0..5000 } == true
         val watching=state.watchDate == day
-        val observed=state.copy(previousK=k,previousAt=now,observationGap=false)
+        val identified=state.identifiedAt?.takeIf { it<=now && it.atZone(MarketSession.ZONE).toLocalDate().toString()==day }
+            ?: now.takeIf { k<20 && k>d }
+        val observed=state.copy(previousK=k,previousAt=now,observationGap=false,identifiedAt=identified)
         if (state.confirmationAt != null) {
             if (!recent || state.observationGap || !volumeContinuous)
                 return interrupted(observed,"CONFIRMATION_CANCELLED_DATA_GAP")

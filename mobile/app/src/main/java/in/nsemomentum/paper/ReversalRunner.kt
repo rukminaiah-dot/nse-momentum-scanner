@@ -54,7 +54,7 @@ suspend fun reversalHistory(feed: CandleFeed, token: String, stock: Stock, now: 
     return (past.filter { b -> sessions.any { it.date == b.timestamp.atZone(MarketSession.ZONE).toLocalDate() } } + current).sortedBy { it.timestamp }
 }
 
-data class ReversalRow(val stock: Stock, val state: ReversalState, val preview: LiveStochastic?, val status: String,val opening:OpeningState=OpeningState(),val openingSample:OpeningSample?=null,val previousPreview:LiveStochastic?=null,val signalAt:Instant?=null)
+data class ReversalRow(val stock: Stock, val state: ReversalState, val preview: LiveStochastic?, val status: String,val opening:OpeningState=OpeningState(),val openingSample:OpeningSample?=null,val previousPreview:LiveStochastic?=null,val signalAt:Instant?=null,val volumeSeconds:Long=0)
 data class ReversalSnapshot(val rows: List<ReversalRow> = emptyList(), val updatedAt: Instant? = null,
                             val status: String = "Waiting for live connection",val recordStatus:String?=null)
 
@@ -83,7 +83,18 @@ object ReversalRunner {
         if (job?.isActive == true && selected == config && token == credential) return
         val previousJob=job
         previousJob?.cancel(); config=selected; credential=token
-        job=scope.launch { previousJob?.join(); run(context.applicationContext,token,selected) }
+        job=scope.launch {
+            previousJob?.join()
+            while(isActive) {
+                try { run(context.applicationContext,token,selected) }
+                catch(cancelled:CancellationException) { throw cancelled }
+                catch(error:Exception) {
+                    DiagnosticLog.event("REVERSAL_RUNNER","RECOVERING")
+                    mutable.value=mutable.value.copy(status="Monitor interrupted · retrying",updatedAt=null)
+                    delay(5000)
+                }
+            }
+        }
     }
     @Synchronized fun release(owner: String) {
         owners -= owner
@@ -95,6 +106,7 @@ object ReversalRunner {
         val openingStore=OpeningStore(context)
         var openingStates=openingStore.read()
         var recordMessage:String?=null
+        var lastHealth=Instant.EPOCH
         DiagnosticLog.event("REVERSAL_RUNNER","STARTED")
         val activeOpening=openingStates.filter { it.value.buy!=null && selected.none { s -> s.instrumentKey==it.key } }.map { (key,_) -> Stock(states[key]?.symbol?.ifBlank { key } ?: key,key) }
         val activeMissing=states.filter { it.value.buy != null && selected.none { s -> s.instrumentKey == it.key } }.map { (key,value) -> Stock(value.symbol.ifBlank { key },key) }
@@ -153,15 +165,13 @@ object ReversalRunner {
                 val marketOpen=live.markets[stock.instrumentKey.substringBefore('|')] == true
                 val local=now.atZone(MarketSession.ZONE).toLocalTime()
                 val fresh=quote != null && live.connected && marketOpen &&
-                    java.time.Duration.between(quote.tradedAt,now).toMillis() in -1000..30000 &&
-                    java.time.Duration.between(quote.receivedAt,now).toMillis() in -1000..30000 &&
+                    java.time.Duration.between(quote.tradedAt,now).toMillis() in -1000..50000 &&
+                    java.time.Duration.between(quote.receivedAt,now).toMillis() in -1000..50000 &&
                     local >= java.time.LocalTime.of(9,15) && local < java.time.LocalTime.of(15,30)
                 val preview=LiveStochasticPreview.calculate(history[stock.instrumentKey].orEmpty(),quote,now,live.connected,marketOpen)
                 val old=states[stock.instrumentKey] ?: ReversalState()
                 val volume=volumes.getValue(stock.instrumentKey)
-                val volumeFresh=fresh && quote?.volumeToday != null && quote.volumeAt != null &&
-                    java.time.Duration.between(quote.volumeAt,now).toMillis() in -1000..3000
-                if (volumeFresh) volume.add(quote!!.volumeAt!!,quote.volumeToday!!,live.connectionId) else volume.clear()
+                val volumeFresh=volume.ingest(quote,now,fresh,live.connectionId)
                 val priceWindow=priceWindows.getValue(stock.instrumentKey)
                 if(fresh) priceWindow.add(quote!!.receivedAt,quote.price,live.connectionId) else priceWindow.clear()
                 val earlier=volume.amount(now.minusSeconds(120),now.minusSeconds(60))
@@ -187,19 +197,23 @@ object ReversalRunner {
                 val priorPreview=previousPreviews[stock.instrumentKey]
                 val openingWatch=fresh && local>=java.time.LocalTime.of(9,15) && local<java.time.LocalTime.of(9,30) && preview?.context?.let { it.stochK>20 && it.stochK<50 && it.stochK>it.stochD }==true
                 val wasOpeningWatch=priorPreview?.context?.let { it.stochK>20 && it.stochK<50 && it.stochK>it.stochD }==true
-                val signalChanged=(openingWatch && !wasOpeningWatch) || updated.watchDate!=old.watchDate || opening.alertAt!=previousOpening.alertAt || updated.confirmationAt!=old.confirmationAt || updated.buyAt!=old.buyAt || updated.trades.size!=old.trades.size || (updated.action.startsWith("SELL_REQUIRED") && updated.action!=old.action)
+                val signalChanged=(openingWatch && !wasOpeningWatch) || (updated.watchDate!=null && updated.watchDate!=old.watchDate) || opening.alertAt!=previousOpening.alertAt || updated.confirmationAt!=old.confirmationAt || updated.buyAt!=old.buyAt || updated.trades.size!=old.trades.size || (updated.action.startsWith("SELL_REQUIRED") && updated.action!=old.action)
                 if(signalChanged) signalTimes[stock.instrumentKey]=now
                 val previousPreview=previousPreviews[stock.instrumentKey]
                 if(preview!=null) previousPreviews[stock.instrumentKey]=preview
                 next=next+(stock.instrumentKey to updated.copy(symbol=stock.symbol))
-                ReversalRow(stock,updated.copy(symbol=stock.symbol),preview,errors[stock.instrumentKey] ?: if (fresh) updated.action else "Waiting for fresh live quote / market open",opening,openingSample,previousPreview,signalTimes[stock.instrumentKey])
+                ReversalRow(stock,updated.copy(symbol=stock.symbol),preview,errors[stock.instrumentKey] ?: if (fresh) updated.action else "Waiting for fresh live quote / market open",opening,openingSample,previousPreview,signalTimes[stock.instrumentKey]?.takeIf { it<=now },volume.observedSeconds(now))
             }
             changes.filterKeys { key -> work.none { it.instrumentKey==key } }.forEach { (key,edit) ->
                 if(edit.source==PaperSource.OPENING) nextOpening=nextOpening+(key to PaperRecordEdits.opening(openingStates[key] ?: OpeningState(),edit,now,false))
                 else next=next+(key to PaperRecordEdits.reversal(states[key] ?: ReversalState(),edit,now,false,null,null))
             }
+            if(java.time.Duration.between(lastHealth,now).seconds>=60) {
+                DiagnosticLog.event("REVERSAL_HEALTH","CHECKED","fresh=${rows.count { it.openingSample?.fresh==true }} kd=${rows.count { it.preview!=null }} volume=${rows.count { it.openingSample?.continuous==true }} total=${rows.size}")
+                lastHealth=now
+            }
             val changed=next.any { (key,value) -> val old=states[key] ?: ReversalState()
-                value.quantity!=old.quantity || value.manual!=old.manual || value.recordedAt!=old.recordedAt || value.peakPrice != old.peakPrice || value.symbol != old.symbol || value.watchDate != old.watchDate || value.buy != old.buy || value.buyAt != old.buyAt || value.reached80 != old.reached80 || value.trades != old.trades }
+                value.identifiedAt!=old.identifiedAt || value.quantity!=old.quantity || value.manual!=old.manual || value.recordedAt!=old.recordedAt || value.peakPrice != old.peakPrice || value.symbol != old.symbol || value.watchDate != old.watchDate || value.buy != old.buy || value.buyAt != old.buyAt || value.reached80 != old.reached80 || value.trades != old.trades }
             var reversalSaved=false;var openingSaved=false
             try {
                 rows.filter { row -> row.state.action != states[row.stock.instrumentKey]?.action }.forEach { row ->
@@ -207,7 +221,7 @@ object ReversalRunner {
                 }
                 if (changed) { store.write(next);reversalSaved=true }
                 if(nextOpening.any { (key,s) -> val previous=openingStates[key] ?: OpeningState()
-                    s.recordedAt!=previous.recordedAt || s.quantity!=previous.quantity || s.day!=previous.day || s.boughtToday!=previous.boughtToday || s.skipped!=previous.skipped || s.buy!=previous.buy || s.peak!=previous.peak || s.trades!=previous.trades }) { openingStore.write(nextOpening);openingSaved=true }
+                    s.identifiedAt!=previous.identifiedAt || s.recordedAt!=previous.recordedAt || s.quantity!=previous.quantity || s.day!=previous.day || s.boughtToday!=previous.boughtToday || s.skipped!=previous.skipped || s.buy!=previous.buy || s.peak!=previous.peak || s.trades!=previous.trades }) { openingStore.write(nextOpening);openingSaved=true }
                 changes.forEach { (key,edit) ->
                     val accepted=if(edit.source==PaperSource.OPENING) nextOpening[key]?.recordedAt==now else next[key]?.recordedAt==now
                     val symbol=next[key]?.symbol?.ifBlank { key } ?: key

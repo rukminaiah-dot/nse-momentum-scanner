@@ -19,6 +19,17 @@ class LiveVolumeWindow {
         points.addLast(VolumePoint(at,total))
         while (points.size > 1 && points.first.at < at.minusSeconds(185)) points.removeFirst()
     }
+    /** Partial price frames keep the original volume timestamp; only genuine gaps reset collection. */
+    fun ingest(quote:LiveQuote?,now:Instant,fresh:Boolean,connection:Long):Boolean {
+        val valid=fresh && quote?.volumeToday!=null && quote.volumeAt!=null &&
+            Duration.between(quote.volumeAt,now).toMillis() in -1000..5000
+        if(valid) add(quote!!.volumeAt!!,quote.volumeToday!!,connection) else clear()
+        return valid
+    }
+    fun observedSeconds(now:Instant):Long=points.firstOrNull()?.let { first ->
+        if(points.lastOrNull()?.let { Duration.between(it.at,now).toMillis() in 0..5000 }!=true) 0L
+        else Duration.between(first.at,now).seconds.coerceIn(0,120)
+    } ?: 0L
     fun point(at: Instant): VolumePoint? = points.lastOrNull { it.at <= at }?.takeIf { Duration.between(it.at,at).toMillis() in 0..2000 }
     fun amount(start: Instant,end: Instant): Long? {
         if (end <= start) return null
