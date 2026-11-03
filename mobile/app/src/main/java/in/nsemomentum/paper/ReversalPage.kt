@@ -27,7 +27,7 @@ data class SignalItem(val row:ReversalRow,val source:PaperSource) {
     val buyAt:Instant? get()=if(source==PaperSource.OPENING) row.opening.buyAt else row.state.buyAt
     val quantity:Int get()=if(source==PaperSource.OPENING) row.opening.quantity else row.state.quantity
     val held:Boolean get()=buy!=null && (source==PaperSource.OPENING || row.state.manual)
-    val latest:Instant get()=if(source==PaperSource.OPENING) listOfNotNull(row.opening.alertAt,row.opening.recordedAt,buyAt,row.opening.trades.lastOrNull()?.sellAt).maxOrNull() ?: row.signalAt ?: Instant.EPOCH
+    val latest:Instant get()=if(source==PaperSource.OPENING) listOfNotNull(row.opening.identifiedAt,row.opening.alertAt,row.opening.recordedAt,buyAt,row.opening.trades.lastOrNull()?.sellAt).maxOrNull() ?: row.signalAt ?: Instant.EPOCH
         else listOfNotNull(row.state.identifiedAt,row.signalAt,row.state.recordedAt,buyAt,row.state.confirmationAt,row.state.trades.lastOrNull()?.sellAt).maxOrNull() ?: Instant.EPOCH
 }
 fun unifiedSignals(snapshot:ReversalSnapshot,now:Instant):List<SignalItem> {
@@ -35,7 +35,7 @@ fun unifiedSignals(snapshot:ReversalSnapshot,now:Instant):List<SignalItem> {
     return snapshot.rows.flatMap { row ->
         val k=row.preview?.context?.stochK;val d=row.preview?.context?.stochD
         val openingWatch=row.openingSample?.fresh==true && time>=LocalTime.of(9,15) && time<LocalTime.of(9,30) && k!=null && d!=null && k>20 && k<50 && k>d
-        val opening=openingWatch || row.opening.alert!=null || row.opening.buy!=null || row.opening.trades.lastOrNull()?.sellAt?.atZone(MarketSession.ZONE)?.toLocalDate()==date
+        val opening=row.opening.identifiedAt?.atZone(MarketSession.ZONE)?.toLocalDate()==date || openingWatch || row.opening.alert!=null || row.opening.buy!=null || row.opening.trades.lastOrNull()?.sellAt?.atZone(MarketSession.ZONE)?.toLocalDate()==date
         val reversal=row.state.identifiedAt?.atZone(MarketSession.ZONE)?.toLocalDate()==date || row.state.watchDate==date.toString() || row.state.buy!=null || row.state.trades.lastOrNull()?.sellAt?.atZone(MarketSession.ZONE)?.toLocalDate()==date
         val candidates=listOfNotNull(if(opening) SignalItem(row,PaperSource.OPENING) else null,if(reversal) SignalItem(row,PaperSource.REVERSAL) else null)
         val held=candidates.filter { it.held }
@@ -137,7 +137,7 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
                 }
             }
             Text("Signal ${compactTime(item.latest.takeIf { it!=Instant.EPOCH && it<=now })}${if(!fresh) " · Last data" else ""}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("K/D ${compactTime(displayPreview?.sampledAt)}${if(row.preview==null) " · STALE" else ""} · Quote ${compactTime(quote?.tradedAt)}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("K/D ${compactTime(displayPreview?.sampledAt)}${if(!fresh) " · STALE" else ""} · Quote ${compactTime(quote?.tradedAt)}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             if(!item.held && !canBuy) Text(signalBlocker(row),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             if(expanded) {
                 HorizontalDivider()

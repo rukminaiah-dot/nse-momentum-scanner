@@ -37,6 +37,15 @@ class RefreshContinuityTest {
         assertEquals(1,unifiedSignals(ReversalSnapshot(listOf(row)),at.plusSeconds(1)).size)
         assertTrue(unifiedSignals(ReversalSnapshot(listOf(row)),at.plusSeconds(86400)).isEmpty())
     }
+    @Test fun openingIdentificationRemainsVisibleAfterOpeningWindowWithoutCreatingBuy() {
+        val morning=Instant.parse("2026-11-03T03:50:00Z")
+        val sample=OpeningSample(morning,true,100.0,99.0,98.0,30.0,20.0,null,null,null,false)
+        val watch=OpeningMomentum.tick(OpeningState(),sample)
+        assertEquals(morning,watch.identifiedAt);assertNull(watch.buy)
+        val later=OpeningMomentum.tick(watch,sample.copy(at=morning.plusSeconds(1800),k=70.0,d=80.0))
+        val row=ReversalRow(Stock("TEST",key),ReversalState(),null,"",later)
+        assertEquals(PaperSource.OPENING,unifiedSignals(ReversalSnapshot(listOf(row)),morning.plusSeconds(1800)).single().source)
+    }
     @Test fun staleMonitorAndFutureClockAreNotLabelledLive() {
         assertTrue(monitorStatus(at,true,at.plusSeconds(60)).contains("stale"))
         assertTrue(monitorStatus(at,true,at.minusSeconds(60)).contains("Clock changed"))

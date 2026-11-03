@@ -221,7 +221,7 @@ object ReversalRunner {
                 }
                 if (changed) { store.write(next);reversalSaved=true }
                 if(nextOpening.any { (key,s) -> val previous=openingStates[key] ?: OpeningState()
-                    s.recordedAt!=previous.recordedAt || s.quantity!=previous.quantity || s.day!=previous.day || s.boughtToday!=previous.boughtToday || s.skipped!=previous.skipped || s.buy!=previous.buy || s.peak!=previous.peak || s.trades!=previous.trades }) { openingStore.write(nextOpening);openingSaved=true }
+                    s.identifiedAt!=previous.identifiedAt || s.recordedAt!=previous.recordedAt || s.quantity!=previous.quantity || s.day!=previous.day || s.boughtToday!=previous.boughtToday || s.skipped!=previous.skipped || s.buy!=previous.buy || s.peak!=previous.peak || s.trades!=previous.trades }) { openingStore.write(nextOpening);openingSaved=true }
                 changes.forEach { (key,edit) ->
                     val accepted=if(edit.source==PaperSource.OPENING) nextOpening[key]?.recordedAt==now else next[key]?.recordedAt==now
                     val symbol=next[key]?.symbol?.ifBlank { key } ?: key
