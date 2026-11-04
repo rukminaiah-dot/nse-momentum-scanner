@@ -15,6 +15,6 @@ suspend fun recoverSessionHistory(feed:CandleFeed,token:String,encodedKey:String
         val retry=feed.candles(token,"/v3/historical-candle/$encodedKey/minutes/15/${session.date}/${session.date}")
         if(complete(retry,session)) recovered[session]=retry
     }
-    DiagnosticLog.event("HISTORY_RECOVERY",if(recovered.all { (session,bars)->complete(bars,session) }) "COMPLETE" else "INCOMPLETE","missing=${recovered.count { (session,bars)->!complete(bars,session) }}")
+    DiagnosticLog.event("HISTORY_RECOVERY",if(recovered.all { (session,bars)->complete(bars,session) }) "COMPLETE" else "INCOMPLETE","missing=${recovered.count { (session,bars)->!complete(bars,session) }} date=${sessions.firstOrNull { !complete(recovered.getValue(it),it) }?.date ?: "none"}")
     return sessions.flatMap { recovered.getValue(it) }.sortedBy { it.timestamp }
 }
