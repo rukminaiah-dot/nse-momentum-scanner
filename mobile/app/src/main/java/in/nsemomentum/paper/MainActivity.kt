@@ -777,6 +777,7 @@ internal fun Dashboard(
         }
         Text(if(autoScanActive) "Full-day scan · Running" else if(scanning) "Single scan · Running" else "Full-day scan · OFF",style=MaterialTheme.typography.labelLarge)
         Text(if(autoScanActive) autoScanStatus else scanProgress.ifBlank { scanStatus },style=MaterialTheme.typography.bodySmall)
+        Text(scanHealthSummary(report),style=MaterialTheme.typography.bodySmall)
         if(scanning) TextButton(onClick=onCancelScan) { Text("Cancel scan") }
         IndexOverview(indexReport,indexRefreshEnabled,onRefreshIndices,livePrices,compact=true)
 

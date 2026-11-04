@@ -353,7 +353,7 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
                 )
             }
         }
-        val failed = rows.count { it.reason in setOf("FETCH_FAILED", "RATE_LIMITED", "NETWORK_ERROR") || it.reason.startsWith("UPSTOX_") || it.reason.startsWith("INVALID_") }
+        val failed = rows.count { it.candle==null }
         return ScanReport(rows, scanTime, failed, rows.size)
     }
 

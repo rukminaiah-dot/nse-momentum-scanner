@@ -32,3 +32,16 @@ fun stochasticGapDisplay(context: TechnicalContext): String {
     val gap = String.format(java.util.Locale.US, "%+.2f", context.gap)
     return "K−D gap $gap · ${context.momentum}"
 }
+
+/** Report completeness is distinct from qualification and from the live-price socket. */
+fun scanHealthSummary(report:ScanReport?):String {
+    if(report==null) return "No verified scan result loaded"
+    val stamp=runCatching { java.time.ZonedDateTime.parse(report.scanTime).toInstant() }.getOrNull()
+    val checked=stamp?.let { java.time.format.DateTimeFormatter.ofPattern("dd MMM HH:mm:ss 'IST'",java.util.Locale.US).withZone(MarketSession.ZONE).format(it) } ?: "time unavailable"
+    val ready=report.rows.count { it.candle!=null }
+    val buy=report.rows.count { it.signal=="PAPER_BUY" };val sell=report.rows.count { it.signal=="PAPER_SELL" }
+    val hold=report.rows.count { it.signal=="PAPER_HOLD" }
+    val failures=report.rows.filter { it.candle==null }.groupingBy { it.reason }.eachCount().entries.sortedByDescending { it.value }.take(3)
+    return "Last scan $checked · verified $ready/${report.rows.size} · BUY $buy · SELL $sell · HOLD $hold"+
+        if(failures.isEmpty()) "" else "\nBlocked: "+failures.joinToString(" · ") { "${it.key}: ${it.value}" }
+}

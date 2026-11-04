@@ -36,7 +36,7 @@ suspend fun reversalHistory(feed: CandleFeed, token: String, stock: Stock, now: 
             fetched += feed.candles(token,"/v3/historical-candle/$encoded/minutes/15/$end/$start")
             end=start.minusDays(1)
         }
-        fetched
+        recoverSessionHistory(feed,token,encoded,sessions,fetched,cached)
     }
     require(completeHistory(past)) { "MISSING_REVERSAL_HISTORY" }
     val today = feed.session(token,date,exchange)
@@ -140,9 +140,12 @@ object ReversalRunner {
                     if (done[stock.instrumentKey] != slot) permits.withPermit {
                         try {
                             val database=CandleDatabase(context)
-                            val cached=try { database.bars(stock.instrumentKey) } finally { database.close() }
-                            history[stock.instrumentKey]=reversalHistory(feed,token,stock,now,(cached+history[stock.instrumentKey].orEmpty()).distinctBy { it.timestamp })
-                            verifiedHistory[stock.instrumentKey]=history.getValue(stock.instrumentKey)
+                            val verified=try {
+                                val cached=database.bars(stock.instrumentKey)
+                                reversalHistory(feed,token,stock,now,(cached+history[stock.instrumentKey].orEmpty()).distinctBy { it.timestamp }).also { database.save(stock.instrumentKey,it) }
+                            } finally { database.close() }
+                            history[stock.instrumentKey]=verified
+                            verifiedHistory[stock.instrumentKey]=verified
                             done[stock.instrumentKey]=slot;errors.remove(stock.instrumentKey)
                             DiagnosticLog.event("REVERSAL_HISTORY","READY","bars=${history[stock.instrumentKey]?.size ?: 0}",stock.symbol)
                         } catch (cancelled: CancellationException) { throw cancelled }
@@ -165,8 +168,8 @@ object ReversalRunner {
                 val marketOpen=live.markets[stock.instrumentKey.substringBefore('|')] == true
                 val local=now.atZone(MarketSession.ZONE).toLocalTime()
                 val fresh=quote != null && live.connected && marketOpen &&
-                    java.time.Duration.between(quote.tradedAt,now).toMillis() in -1000..50000 &&
-                    java.time.Duration.between(quote.receivedAt,now).toMillis() in -1000..50000 &&
+                    java.time.Duration.between(quote.tradedAt,now).toMillis() in -1000..30000 &&
+                    java.time.Duration.between(quote.receivedAt,now).toMillis() in -1000..30000 &&
                     local >= java.time.LocalTime.of(9,15) && local < java.time.LocalTime.of(15,30)
                 val preview=LiveStochasticPreview.calculate(history[stock.instrumentKey].orEmpty(),quote,now,live.connected,marketOpen)
                 val old=states[stock.instrumentKey] ?: ReversalState()

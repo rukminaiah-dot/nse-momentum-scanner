@@ -55,7 +55,7 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
     val signals=unifiedSignals(snapshot,now)
     fun edit(trade:UiTrade,operation:PaperOperation) { trade.source?.let { source -> request=RecordRequest(trade.key,trade.symbol,source,operation,trade.buyAt,if(operation==PaperOperation.EDIT_BUY) trade.buy else trade.sell,trade.quantity) } }
     if(help) AlertDialog(onDismissRequest={help=false},title={Text("Rules & alerts")},text={Column(Modifier.heightIn(max=480.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-        Text("Opening: 09:17–09:30, 20<K<50, K>D, positive open and rising price. Volume is informational for BUY.")
+        Text("Opening: 09:17–09:30, 20<K<50, K>D and K rising; open above previous close. Current price need not rise or stay above open. Volume is informational for BUY.")
         Text("Reversal: K>D below 20; observed cross above 20 with K>D. No volume requirement or 60s volume wait for BUY.")
         Text("Initial stop −1%; profit protection advances in 0.25-point steps. MUST SELL flags an urgent exit; manual positions stay open until SELL is recorded.")
         Text("Prices entered here are unverified paper records. Original automatic history is retained and labelled. Records are local and are not included in the existing backup. Avg % is the mean closed-trade return; P&L includes recorded quantity, before costs.")
@@ -119,7 +119,7 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
                 Text(compactPrice(quote?.price),style=MaterialTheme.typography.bodyMedium,fontWeight=FontWeight.Medium)
                 Text(quote?.changePercent?.let { "%+.2f%% today".format(Locale.US,it) } ?: "—",style=MaterialTheme.typography.bodySmall,color=profitColor(quote?.changePercent))
             }
-            Text("K ${k?.let { "%.1f".format(Locale.US,it) } ?: "—"} · D ${d?.let { "%.1f".format(Locale.US,it) } ?: "—"} · Vol 60s ${ratio?.let { "%.2f×".format(Locale.US,it) } ?: "collecting ${row.volumeSeconds}/120s"}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("K ${k?.let { "%.1f".format(Locale.US,it) } ?: "—"} · D ${d?.let { "%.1f".format(Locale.US,it) } ?: "—"} · Vol 60s ${ratio?.let { "%.2f×".format(Locale.US,it) } ?: if(now.atZone(MarketSession.ZONE).toLocalTime()>=LocalTime.of(15,30) || now.atZone(MarketSession.ZONE).toLocalTime()<LocalTime.of(9,15)) "session closed" else "collecting ${row.volumeSeconds}/120s"}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             if(item.held) {
                 TextButton(onClick={onRecord(PaperOperation.EDIT_BUY,item.buyAt,item.buy,item.quantity)},contentPadding=PaddingValues(0.dp)) { Text("BUY ${compactPrice(item.buy)} ✎ · Qty ${item.quantity}",fontSize=12.sp) }
                 val pnl=quote?.price?.let { (it-item.buy!!)*item.quantity }
@@ -138,7 +138,7 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
             }
             Text("Signal ${compactTime(item.latest.takeIf { it!=Instant.EPOCH && it<=now })}${if(!fresh) " · Last data" else ""}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             Text("K/D ${compactTime(displayPreview?.sampledAt)}${if(!fresh) " · STALE" else ""} · Quote ${compactTime(quote?.tradedAt)}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-            if(!item.held && !canBuy) Text(if(item.source==PaperSource.OPENING) row.opening.status else signalBlocker(row),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            if(!item.held && !canBuy) Text(if(item.source==PaperSource.OPENING) row.opening.status else signalBlocker(row,now),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             if(expanded) {
                 HorizontalDivider()
                 val priceChange=if(sample?.price60!=null && quote!=null) (quote.price/sample.price60-1)*100 else null
@@ -197,7 +197,10 @@ fun monitorStatus(updated:Instant?,connected:Boolean,now:Instant):String {
         else -> "Monitor ${compactTime(updated)} · ${if(connected) "connected" else "disconnected"}"
     }
 }
-fun signalBlocker(row:ReversalRow):String=when {
+fun signalBlocker(row:ReversalRow,now:Instant=Instant.now()):String=when {
+    now.atZone(MarketSession.ZONE).toLocalTime()>=LocalTime.of(15,30) -> "Session closed · last available data"
+    StockSessionExit.entriesClosed(now) -> "New entries closed at 15:10 IST"
+    now.atZone(MarketSession.ZONE).toLocalTime()<LocalTime.of(9,15) -> "Waiting for 09:15 IST session"
     row.preview==null -> "K/D unavailable · waiting for fresh quote/history"
     row.state.action=="PRE_CROSS_VOLUME_UNAVAILABLE_NEW_CROSS_REQUIRED" -> "Cross seen · preceding 60s volume unavailable · new cross required"
     row.state.action=="BUY_CONFIRMED_K_CROSS_20" -> "BUY · K crossed above 20 with K>D"
