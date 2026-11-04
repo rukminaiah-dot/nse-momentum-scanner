@@ -86,7 +86,7 @@ class UpstoxPaperScanner(
                 }
             } }.awaitAll()
         }.sortedWith(compareByDescending<ScanRow> { it.relativeVolume ?: -1.0 }.thenBy { it.symbol })
-        ScanReport(rows, now.atZone(MarketSession.ZONE).toString(), rows.count { isFeedError(it.reason) }, rows.size)
+        ScanReport(rows, now.atZone(MarketSession.ZONE).toString(), rows.count { it.candle==null }, rows.size)
     }
 
     private suspend fun scanOne(
@@ -113,10 +113,11 @@ class UpstoxPaperScanner(
                 history += bars
                 end = start.minusDays(1)
             }
-            // Validate the raw response before cache upserts can conceal duplicates or missing slots.
-            if (!historyReady(history))
+            val recovered=recoverSessionHistory(feed,token,encoded,sessions,history,cached)
+            // Validate complete sessions before publishing qualification or signals.
+            if (!historyReady(recovered))
                 return ScanRow(symbol, reason = if (isIndex) "NO_VERIFIED_21_SESSION_HISTORY" else "NO_VERIFIED_20_SESSION_BASELINE")
-            database.save(key, history)
+            database.save(key, recovered)
             cached = database.bars(key)
         }
         val intraday = feed.candles(token, "/v3/historical-candle/intraday/$encoded/minutes/15")

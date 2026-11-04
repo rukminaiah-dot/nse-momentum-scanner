@@ -82,6 +82,13 @@ class CompactPageTest {
         compose.onNodeWithText("Confirmed K / D").assertExists()
         compose.onNodeWithText("Dashboard").assertExists()
     }
+    @Test fun confirmedDashboardBuyIsVisibleWithoutLivePriceSocket() {
+        val at=Instant.parse("2026-11-04T04:30:00Z")
+        val row=ScanRow("TEST",signal="PAPER_BUY",reason="BULLISH_ALIGNMENT",candle=Candle(at.minusSeconds(900),100.0,101.0,99.0,100.0,200.0))
+        compose.setContent { PaperUiTheme { CompactVolumeCard("TEST",2.0,2.0,null,null,row,emptyList(),false,false,at) } }
+        compose.onNodeWithText("BUY ⌄").assertExists()
+        compose.onNodeWithText("Quote unavailable / last data · —").assertExists()
+    }
     private fun save(name:String) {
         compose.runOnIdle {
             val image=android.graphics.Bitmap.createBitmap(pageView.width,pageView.height,android.graphics.Bitmap.Config.ARGB_8888)

@@ -13,6 +13,11 @@ class PaperSignalDisplayTest {
         assertTrue(paperSignalDisplay(row("PAPER_SELL"), stamp.plusSeconds(900)).startsWith("SELL · PAPER"))
         assertTrue(paperSignalDisplay(row("WAIT"), stamp.plusSeconds(900)).contains("15M_FILTERS_PASSED"))
     }
+    @Test fun historyFailuresAreVisibleAsBlockedDataRatherThanZeroQualifications() {
+        val report=ScanReport(listOf(ScanRow("TEST",reason="NO_VERIFIED_20_SESSION_BASELINE")),stamp.toString(),1,1)
+        assertTrue(scanHealthSummary(report).contains("verified 0/1"))
+        assertTrue(scanHealthSummary(report).contains("NO_VERIFIED_20_SESSION_BASELINE: 1"))
+    }
     @Test fun missingStaleAndIncompleteCandlesCannotDisplayCurrentBuy() {
         assertTrue(paperSignalDisplay(null, stamp).startsWith("WAIT"))
         assertTrue(paperSignalDisplay(row("PAPER_BUY"), stamp.plusSeconds(899)).startsWith("WAIT"))

@@ -49,11 +49,10 @@ object OpeningMomentum {
         } else {
             val time=s.at.atZone(MarketSession.ZONE).toLocalTime()
             val window=time>=LocalTime.of(9,17) && time<LocalTime.of(9,30)
-            val positive=s.open!=null && s.previousClose!=null && s.open>0 && s.previousClose>0 && s.open>s.previousClose && price>s.open
-            if(!old.boughtToday && !old.skipped && window && kd && s.k!!>20 && s.k<50 && s.k>s.d!! && upward && positive &&
-                s.price60!=null && price>s.price60) "OPENING_BUY" else null
+            val positive=s.open!=null && s.previousClose!=null && s.open>0 && s.previousClose>0 && s.open>s.previousClose
+            if(!old.boughtToday && !old.skipped && window && kd && s.k!!>20 && s.k<50 && s.k>s.d!! && upward && positive) "OPENING_BUY" else null
         }
-        if(reason==null) return old.copy(alert=null,alertAt=null,status=if(openBuy!=null) "Paper position open" else "Watching opening 20<K<50, K>D, rising price · volume for information only")
+        if(reason==null) return old.copy(alert=null,alertAt=null,status=if(openBuy!=null) "Paper position open" else "Watching opening 20<K<50, K>D, K rising and positive open · price movement/volume do not filter BUY")
         if(old.waitUntil?.let { s.at<it }==true) return old.copy(alert=null,alertAt=null,status="Waiting · paper position unchanged")
         if(old.alertAt?.let { Duration.between(it,s.at).seconds>=60 }==true) return old.copy(alert=null,alertAt=null,waitUntil=s.at.plusSeconds(30),status="Approval expired · rechecking")
         return old.copy(alert=reason,alertAt=if(old.alert==reason) old.alertAt ?: s.at else s.at,status="Approval required · PAPER ONLY")

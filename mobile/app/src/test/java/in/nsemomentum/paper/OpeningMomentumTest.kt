@@ -38,13 +38,22 @@ class OpeningMomentumTest {
     }
     @Test fun everyEntryConditionAndFreshApprovalIsRequired() {
         val samples=listOf(sample(1,k=50.0),sample(1,k=28.0),sample(1,d=35.0),sample(1).copy(open=99.0),
-            sample(1,price=101.0),sample(1).copy(price60=103.0),sample(1).copy(fresh=false),sample(1).copy(open=null),sample(1).copy(k=null),
+            sample(1).copy(fresh=false),sample(1).copy(open=null),sample(1).copy(k=null),
             sample(1).copy(at=Instant.parse("2026-11-03T03:46:59Z")),sample(1).copy(at=Instant.parse("2026-11-03T04:00:00Z")))
         samples.forEach { assertNull(OpeningMomentum.tick(seed(),it).alert) }
         val p=alert()
         assertNull(OpeningMomentum.approve(p,sample(2,k=31.0).copy(fresh=false),OpeningApproval("TEST",p.alertAt!!,OpeningChoice.BUY,1)).buy)
         assertNull(OpeningMomentum.approve(p,sample(2,k=31.0),OpeningApproval("TEST",p.alertAt!!.minusSeconds(1),OpeningChoice.BUY,1)).buy)
         for(q in listOf(0,-1,1000001)) assertNull(OpeningMomentum.approve(p,sample(2,k=31.0),OpeningApproval("TEST",p.alertAt!!,OpeningChoice.BUY,q)).buy)
+    }
+    @Test fun buyAllowsFallingPriceBelowOpenAndMissingPriceWindow() {
+        for(s in listOf(sample(1,price=100.5).copy(price60=103.0),sample(1,price=100.0).copy(price60=null))) {
+            val pending=OpeningMomentum.tick(seed(),s)
+            assertEquals("OPENING_BUY",pending.alert)
+            assertNotNull(OpeningMomentum.approve(pending,s.copy(at=s.at.plusSeconds(1),k=31.0),OpeningApproval("TEST",pending.alertAt!!,OpeningChoice.BUY)).buy)
+        }
+        assertNull(OpeningMomentum.tick(seed(),sample(1).copy(open=100.0,previousClose=100.0)).alert)
+        assertNull(OpeningMomentum.tick(seed(),sample(1,k=28.0)).alert)
     }
     @Test fun buyDoesNotRequireAvailableRisingOrContinuousVolume() {
         for(s in listOf(sample(1).copy(beforeVolume=null,latestVolume=null,continuous=false),

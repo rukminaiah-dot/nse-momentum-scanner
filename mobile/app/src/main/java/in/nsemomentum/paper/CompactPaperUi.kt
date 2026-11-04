@@ -130,12 +130,11 @@ object TradeResults {
     }
 }
 
-@Composable fun CompactVolumeCard(symbol:String,peak:Double,latest:Double?,quote:LiveQuote?,preview:LiveStochastic?,row:ScanRow?,trades:List<PaperTrade>,connected:Boolean,marketOpen:Boolean) {
+@Composable fun CompactVolumeCard(symbol:String,peak:Double,latest:Double?,quote:LiveQuote?,preview:LiveStochastic?,row:ScanRow?,trades:List<PaperTrade>,connected:Boolean,marketOpen:Boolean,now:Instant=Instant.now()) {
     var expanded by remember(symbol) { mutableStateOf(false) }
-    val now=Instant.now()
     val fresh=quote!=null && connected && marketOpen && java.time.Duration.between(quote.tradedAt,now).seconds in 0..30
     val display=paperSignalDisplay(row,now)
-    val signal=if(!fresh) "WAIT" else when { display.startsWith("BUY ·")->"BUY";display.startsWith("SELL ·")->"SELL";display.startsWith("BUY ACTIVE")->"HOLD";else->"WAIT" }
+    val signal=when { display.startsWith("BUY ·")->"BUY";display.startsWith("SELL ·")->"SELL";display.startsWith("BUY ACTIVE")->"HOLD";else->"WAIT" }
     val live=preview?.takeIf { fresh && java.time.Duration.between(it.sampledAt,now).seconds in 0..20 }
     Surface(Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),color=MaterialTheme.colorScheme.surface) {
         Column(Modifier.padding(13.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
@@ -148,7 +147,8 @@ object TradeResults {
                 Text(quote?.changePercent?.let { "%+.2f%% today".format(Locale.US,it) } ?: "—",style=MaterialTheme.typography.bodySmall,color=profitColor(quote?.changePercent))
             }
             Text("K ${live?.context?.stochK?.let { "%.1f".format(Locale.US,it) } ?: "—"} · D ${live?.context?.stochD?.let { "%.1f".format(Locale.US,it) } ?: "—"} · RVOL ${latest?.let { "%.2f×".format(Locale.US,it) } ?: "—"}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("${if(fresh) "Live" else "Last data"} · ${compactTime(quote?.tradedAt)}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Confirmed 15m · ${compactTime(row?.candle?.timestamp?.plusSeconds(900))}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Quote ${if(fresh) "live" else "unavailable / last data"} · ${compactTime(quote?.tradedAt)}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             if(expanded) {
                 HorizontalDivider()
                 DetailLine("Momentum · live 15m",live?.context?.let { if(it.stochK>it.stochD) "Bullish" else if(it.stochK<it.stochD) "Bearish" else "Neutral" } ?: "Unavailable")
