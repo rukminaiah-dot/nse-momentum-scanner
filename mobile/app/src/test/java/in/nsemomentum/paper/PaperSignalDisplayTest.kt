@@ -16,6 +16,7 @@ class PaperSignalDisplayTest {
     @Test fun historyFailuresAreVisibleAsBlockedDataRatherThanZeroQualifications() {
         val report=ScanReport(listOf(ScanRow("TEST",reason="NO_VERIFIED_20_SESSION_BASELINE")),stamp.toString(),1,1)
         assertTrue(scanHealthSummary(report).contains("verified 0/1"))
+        assertTrue(scanHealthSummary(report).contains("26 Oct 10:00:00 IST"))
         assertTrue(scanHealthSummary(report).contains("NO_VERIFIED_20_SESSION_BASELINE: 1"))
     }
     @Test fun missingStaleAndIncompleteCandlesCannotDisplayCurrentBuy() {
