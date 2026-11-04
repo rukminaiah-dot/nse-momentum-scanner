@@ -22,10 +22,11 @@ class BuyPathVerificationTest {
         context.deleteDatabase("paper_candles.db")
         java.io.File(context.filesDir,"diagnostics").deleteRecursively()
         DiagnosticLog.initialize(context)
-        val prior=generateSequence(date.minusDays(1)) { it.minusDays(1) }.filter { it.dayOfWeek.value<=5 }.take(20).toList()
+        val dashboardDate=LocalDate.parse("2026-10-22")
+        val prior=generateSequence(dashboardDate.minusDays(1)) { it.minusDays(1) }.filter { it.dayOfWeek.value<=5 }.take(20).toList()
         fun bar(at:Instant,close:Double=100.0,volume:Double=100.0)=Candle(at,100.0,101.0,99.0,close,volume)
         val history=prior.flatMap { session(it).slots().map { at -> bar(at) } }
-        val today=session(date)
+        val today=session(dashboardDate)
         var intraday=listOf(bar(today.start,100.8,100.0))
         val feed=object:CandleFeed {
             override suspend fun session(token:String,date:LocalDate)=if(date.dayOfWeek.value<=5) this@BuyPathVerificationTest.session(date) else null
