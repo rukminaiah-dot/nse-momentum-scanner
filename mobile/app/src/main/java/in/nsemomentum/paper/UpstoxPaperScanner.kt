@@ -76,6 +76,7 @@ class UpstoxPaperScanner(
                     catch (error: CancellationException) { throw error }
                     catch (error: Exception) {
                         if (error.message in setOf("UPSTOX_AUTH_REQUIRED", "LOCAL_RATE_BUDGET_EXHAUSTED")) throw error
+                        DiagnosticLog.event("SCAN_BLOCKED",DiagnosticLog.errorCode(error),symbol=symbol)
                         ScanRow(symbol, reason = safeReason(error))
                     }
                     progressLock.withLock {
@@ -107,16 +108,18 @@ class UpstoxPaperScanner(
             val history = mutableListOf<Candle>()
             while (end >= oldest) {
                 val start = maxOf(oldest, end.minusDays(27))
-                val bars = feed.candles(token, "/v3/historical-candle/$encoded/minutes/15/$end/$start")
+                val bars = HistoryDiagnostics.fetch(feed,token,"/v3/historical-candle/$encoded/minutes/15/$end/$start",symbol,start,end)
                 if (bars.any { it.timestamp.atZone(MarketSession.ZONE).toLocalDate() !in start..end })
                     throw IOException("INVALID_CANDLE_DATE")
                 history += bars
                 end = start.minusDays(1)
             }
-            val recovered=recoverSessionHistory(feed,token,encoded,sessions,history,cached)
+            val recovered=recoverSessionHistory(feed,token,encoded,sessions,history,cached,symbol)
             // Validate complete sessions before publishing qualification or signals.
-            if (!historyReady(recovered))
+            if (!historyReady(recovered)) {
+                DiagnosticLog.event("SCAN_BLOCKED",if(isIndex) "NO_VERIFIED_21_SESSION_HISTORY" else "NO_VERIFIED_20_SESSION_BASELINE",symbol=symbol)
                 return ScanRow(symbol, reason = if (isIndex) "NO_VERIFIED_21_SESSION_HISTORY" else "NO_VERIFIED_20_SESSION_BASELINE")
+            }
             database.save(key, recovered)
             cached = database.bars(key)
         }
@@ -124,8 +127,11 @@ class UpstoxPaperScanner(
         if (intraday.any { !PaperStrategy.validCandle(it) || it.timestamp !in today.slots() } ||
             intraday.map { it.timestamp }.distinct().size != intraday.size) throw IOException("INVALID_INTRADAY_CANDLES")
         val complete = intraday.filter { it.timestamp <= target }
-        if (complete.map { it.timestamp }.toSet() != today.slots().filter { it <= target }.toSet())
+        if (complete.map { it.timestamp }.toSet() != today.slots().filter { it <= target }.toSet()) {
+            HistoryDiagnostics.day("INTRADAY_BLOCKED",today,complete,symbol,expected=today.slots().filter { it <= target }.toSet())
+            DiagnosticLog.event("SCAN_BLOCKED","MISSING_COMPLETED_15M_CANDLE",symbol=symbol)
             return ScanRow(symbol, reason = "MISSING_COMPLETED_15M_CANDLE")
+        }
         // Only fresh intraday input can establish today's latest bar; cache cannot mask feed gaps.
         val latest = complete.single { it.timestamp == target }
         val baseline = if (isIndex) null else PaperStrategy.sameSlotAverage(latest, cached, sessions)
@@ -173,3 +179,4 @@ class UpstoxPaperScanner(
         reason == "NETWORK_ERROR" || reason.startsWith("UPSTOX_") || reason.startsWith("INVALID_") ||
         reason == "DUPLICATE_CANDLE" || reason == "MISSING_COMPLETED_15M_CANDLE"
 }
+

@@ -31,4 +31,18 @@ class DiagnosticLogTest {
         assertFalse(exported.contains("secret-two"))
         assertFalse(exported.contains("secret-three"))
     }
+
+    @Test fun allMissingSlotsFitExportAndDuplicateErrorsKeepTheirCode() {
+        val context=RuntimeEnvironment.getApplication() as Context
+        java.io.File(context.filesDir,"diagnostics").deleteRecursively()
+        val date=java.time.LocalDate.parse("2026-11-03")
+        val session=MarketSession(date,date.atTime(9,15).atZone(MarketSession.ZONE).toInstant(),date.atTime(15,30).atZone(MarketSession.ZONE).toInstant())
+        HistoryDiagnostics.day("BLOCKED",session,emptyList(),"TCS",{e,r,n,s -> DiagnosticLog.record(context,e,r,n,s)})
+        val exported=DiagnosticLog.export(context)
+        assertTrue(exported.contains("date=2026-11-03 expected=25 received=0 missing=25 extra=0 invalid=0 duplicate=0 symbol=TCS"))
+        val slots=session.slots().joinToString(",") { val t=it.atZone(MarketSession.ZONE); "%02d%02d".format(java.util.Locale.ROOT,t.hour,t.minute) }
+        assertTrue(exported.contains("date=2026-11-03 slots=$slots symbol=TCS"))
+        assertEquals("DUPLICATE_CANDLE",DiagnosticLog.errorCode(java.io.IOException("DUPLICATE_CANDLE")))
+        assertEquals("REQUEST_FAILED",DiagnosticLog.errorCode(java.io.IOException("Bearer private-token")))
+    }
 }

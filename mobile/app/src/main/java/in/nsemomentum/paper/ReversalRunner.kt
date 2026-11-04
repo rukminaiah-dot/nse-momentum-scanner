@@ -33,10 +33,10 @@ suspend fun reversalHistory(feed: CandleFeed, token: String, stock: Stock, now: 
         val oldest=sessions.minOf { it.date }
         while (end >= oldest) {
             val start=maxOf(oldest,end.minusDays(27))
-            fetched += feed.candles(token,"/v3/historical-candle/$encoded/minutes/15/$end/$start")
+            fetched += HistoryDiagnostics.fetch(feed,token,"/v3/historical-candle/$encoded/minutes/15/$end/$start",stock.symbol,start,end)
             end=start.minusDays(1)
         }
-        recoverSessionHistory(feed,token,encoded,sessions,fetched,cached)
+        recoverSessionHistory(feed,token,encoded,sessions,fetched,cached,stock.symbol)
     }
     require(completeHistory(past)) { "MISSING_REVERSAL_HISTORY" }
     val today = feed.session(token,date,exchange)
@@ -48,7 +48,9 @@ suspend fun reversalHistory(feed: CandleFeed, token: String, stock: Stock, now: 
             else feed.candles(token,"/v3/historical-candle/intraday/$encoded/minutes/15")
         require(bars.map { it.timestamp }.distinct().size == bars.size && bars.all { PaperStrategy.validCandle(it) && it.timestamp in today.slots() }) { "INVALID_INTRADAY_CANDLES" }
         val complete = bars.filter { it.timestamp.plusSeconds(900) <= now }
-        require(complete.map { it.timestamp }.toSet() == today.slots().filter { it.plusSeconds(900) <= now }.toSet()) { "MISSING_COMPLETED_15M_CANDLE" }
+        if(complete.map { it.timestamp }.toSet() != expected)
+            HistoryDiagnostics.day("INTRADAY_BLOCKED",today,complete,stock.symbol,expected=expected)
+        require(complete.map { it.timestamp }.toSet() == expected) { "MISSING_COMPLETED_15M_CANDLE" }
         complete
     } else emptyList()
     return (past.filter { b -> sessions.any { it.date == b.timestamp.atZone(MarketSession.ZONE).toLocalDate() } } + current).sortedBy { it.timestamp }
@@ -252,3 +254,4 @@ object ReversalRunner {
         } } finally { historyJob.cancel();LiveMarketHub.release("reversal") }
     }
 }
+
