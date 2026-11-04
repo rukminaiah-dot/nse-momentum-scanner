@@ -173,10 +173,12 @@ private fun PaperScannerApp() {
     }
     var reversalSnapshot by remember { mutableStateOf(ReversalRunner.state.value) }
     OpeningApprovalDialog(reversalSnapshot,livePrices)
-    val reversalStocks = stocks.filter { it.symbol in favourites && "_EQ|" in it.instrumentKey }.toList()
-    LaunchedEffect(reversalStocks, tokenConfigured, liveTokenRevision) {
+    val reversalStocks = reversalMonitorSelection(stocks.filter { it.symbol in favourites })
+    // Reconnecting prices with the same token must not cancel/reload strategy state.
+    val reversalToken = remember(tokenConfigured,liveTokenRevision) { tokenStore.read() }
+    LaunchedEffect(reversalStocks, reversalToken) {
         priceLifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            val saved = tokenStore.read()
+            val saved = reversalToken
             if (!saved.isNullOrBlank()) {
                 StockSessionCloser.acquire("screen",context,saved)
                 ReversalRunner.acquire("screen",context,saved,reversalStocks)
@@ -968,3 +970,4 @@ private fun MessagePage(title: String, detail: String, modifier: Modifier = Modi
         }
     }
 }
+
