@@ -42,6 +42,9 @@ fun scanHealthSummary(report:ScanReport?):String {
     val buy=report.rows.count { it.signal=="PAPER_BUY" };val sell=report.rows.count { it.signal=="PAPER_SELL" }
     val hold=report.rows.count { it.signal=="PAPER_HOLD" }
     val failures=report.rows.filter { it.candle==null }.groupingBy { it.reason }.eachCount().entries.sortedByDescending { it.value }.take(3)
+    val waiting=report.rows.filter { it.candle!=null && it.signal=="WAIT" }.groupingBy { it.reason }.eachCount().entries.sortedByDescending { it.value }
     return "Last scan $checked · verified $ready/${report.rows.size} · BUY $buy · SELL $sell · HOLD $hold"+
-        if(failures.isEmpty()) "" else "\nBlocked: "+failures.joinToString(" · ") { "${it.key}: ${it.value}" }
+        (if(failures.isEmpty()) "" else "\nBlocked: "+failures.joinToString(" · ") { "${it.key}: ${it.value}" })+
+        (if(waiting.isEmpty()) "" else "\nWaiting: "+waiting.joinToString(" · ") { "${it.key}: ${it.value}" })
 }
+

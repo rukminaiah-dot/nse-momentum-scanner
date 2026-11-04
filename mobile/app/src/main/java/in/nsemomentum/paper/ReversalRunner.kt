@@ -56,6 +56,11 @@ suspend fun reversalHistory(feed: CandleFeed, token: String, stock: Stock, now: 
     return (past.filter { b -> sessions.any { it.date == b.timestamp.atZone(MarketSession.ZONE).toLocalDate() } } + current).sortedBy { it.timestamp }
 }
 
+/** Display-only custom-stock flags must not restart a live strategy. */
+internal fun reversalMonitorSelection(stocks:List<Stock>):List<Stock> = stocks
+    .filter { "_EQ|" in it.instrumentKey }.distinctBy { it.instrumentKey }
+    .map { Stock(it.symbol,it.instrumentKey) }.sortedBy { it.instrumentKey }
+
 data class ReversalRow(val stock: Stock, val state: ReversalState, val preview: LiveStochastic?, val status: String,val opening:OpeningState=OpeningState(),val openingSample:OpeningSample?=null,val previousPreview:LiveStochastic?=null,val signalAt:Instant?=null,val volumeSeconds:Long=0)
 data class ReversalSnapshot(val rows: List<ReversalRow> = emptyList(), val updatedAt: Instant? = null,
                             val status: String = "Waiting for live connection",val recordStatus:String?=null)
@@ -81,9 +86,11 @@ object ReversalRunner {
     }
     @Synchronized fun acquire(owner: String, context: Context, token: String, stocks: List<Stock>) {
         owners += owner
-        val selected = stocks.filter { "_EQ|" in it.instrumentKey }.distinctBy { it.instrumentKey }.sortedBy { it.instrumentKey }
+        val selected = reversalMonitorSelection(stocks)
         if (job?.isActive == true && selected == config && token == credential) return
         val previousJob=job
+        val cause=when { previousJob?.isActive!=true -> "STARTING"; token!=credential -> "TOKEN_CHANGED"; else -> "SELECTION_CHANGED" }
+        DiagnosticLog.event("REVERSAL_LIFECYCLE",cause,"screen=${if("screen" in owners) 1 else 0} service=${if("service" in owners) 1 else 0} stocks=${selected.size}")
         previousJob?.cancel(); config=selected; credential=token
         job=scope.launch {
             previousJob?.join()
@@ -99,8 +106,11 @@ object ReversalRunner {
         }
     }
     @Synchronized fun release(owner: String) {
-        owners -= owner
-        if (owners.isEmpty()) { job?.cancel();job=null;credential=null }
+        val removed=owners.remove(owner)
+        if (removed && owners.isEmpty()) {
+            DiagnosticLog.event("REVERSAL_LIFECYCLE","LAST_OWNER_RELEASED","screen=${if(owner=="screen") 1 else 0} service=${if(owner=="service") 1 else 0}")
+            job?.cancel();job=null;credential=null
+        }
     }
     private suspend fun run(context: Context, token: String, selected: List<Stock>) = coroutineScope {
         val store=ReversalStore(context)

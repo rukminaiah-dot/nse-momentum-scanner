@@ -211,6 +211,7 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
         try {
             db.delete("latest_scan_rows", null, null)
             report.rows.forEach { row ->
+                DiagnosticLog.event("SIGNAL_REASON",row.reason,symbol=row.symbol)
                 DiagnosticLog.event("SIGNAL_CHECK",row.signal, "rvol=${row.relativeVolume ?: -1.0} k=${row.technicals?.stochK ?: -1.0} d=${row.technicals?.stochD ?: -1.0}", row.symbol)
                 db.insertWithOnConflict("latest_scan_rows", null, latestRowValues(row, scannedAt), SQLiteDatabase.CONFLICT_REPLACE)
                 val candle = row.candle
@@ -455,3 +456,4 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
         row.candle?.let { put("open", it.open); put("high", it.high); put("low", it.low); put("close", it.close); put("volume", it.volume) }
     }
 }
+
