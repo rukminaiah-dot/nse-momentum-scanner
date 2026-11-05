@@ -59,6 +59,12 @@ object PaperStrategy {
         return volumes.average().takeIf { it > 0 && it.isFinite() }
     }
 
+    fun verifiedSessions(bars:List<Candle>,sessions:List<MarketSession>):Boolean =
+        sessions.size==20 && sessions.map { it.date }.distinct().size==20 && sessions.all { session ->
+            val day=bars.filter { it.timestamp.atZone(marketZone).toLocalDate()==session.date }
+            session.isRegular() && day.size==25 && day.all(::validCandle) && day.map { it.timestamp }.toSet()==session.slots().toSet()
+        }
+
     fun validCandle(bar: Candle): Boolean =
         listOf(bar.open, bar.high, bar.low, bar.close, bar.volume).all { it.isFinite() } &&
             minOf(bar.open, bar.high, bar.low, bar.close) > 0 && bar.volume >= 0 &&
@@ -76,7 +82,7 @@ object PaperStrategy {
         if (currentVolume >= 0 && baseline > 0 && currentVolume.isFinite() && baseline.isFinite())
             currentVolume / baseline else null
 
-    /** Simple paper-only crossover strategy after volume qualification, using full verified history. */
+    /** Completed-candle K/D strategy; relative volume is informational only. */
     fun evaluate(bars: List<Candle>, now: Instant, sameSlotAverageVolume: Double?,
                  qualifiedToday: Boolean = false, hasActiveBuy: Boolean = false): PaperSignal {
         fun wait(reason: String) = PaperSignal(reason = reason)
@@ -95,7 +101,6 @@ object PaperStrategy {
             return wait("STALE_OR_INCOMPLETE_15M_CANDLE")
         if (bars.any { !validCandle(it) }) return wait("INVALID_CANDLE")
         val rvol = sameSlotAverageVolume?.let { relativeVolume(latest.volume, it) }
-        if (!qualifiedToday && !hasActiveBuy && (rvol == null || rvol < 1.5)) return wait("NOT_SHORTLISTED_TODAY")
         if (StockSessionExit.entriesClosed(now)) return wait("SESSION_1510_WAITING_FRESH_PRICE_EXIT")
         val closes = bars.map { it.close }
         val (k, d) = stochRsi(closes)
@@ -154,3 +159,4 @@ object PaperStrategy {
         return k to d
     }
 }
+

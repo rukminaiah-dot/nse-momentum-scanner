@@ -347,7 +347,7 @@ private fun PaperScannerApp() {
             while (true) {
                 val now = java.time.Instant.now()
                 val state = latestLivePrices
-                val instruments = latestStocks.filter { stock -> latestQualified.any { it.symbol == stock.symbol } && stock.symbol in latestFavourites }
+                val instruments = latestStocks.filter { stock -> stock.symbol in latestFavourites }
                 val snapshot = withContext(Dispatchers.IO) {
                     instruments.mapNotNull { stock ->
                         LiveStochasticPreview.calculate(database.bars(stock.instrumentKey), state.quotes[stock.instrumentKey], now,
@@ -662,7 +662,7 @@ private fun PaperScannerApp() {
                             Text("Prices stream while this app is open. Last-trade times show quote freshness. Paper signals use completed 15-minute candles.", style = MaterialTheme.typography.bodySmall)
                             Spacer(Modifier.height(12.dp))
                             Text("15-MINUTE PAPER SIGNALS", fontWeight = FontWeight.Bold)
-                            Text("Volume qualifies stocks once for the day. BUY: qualified today and confirmed K above D, without an EMA filter. SELL after BUY: K is below D (including a missed crossover). Completed 15-minute candles only; K−D distance is context, not a filter. Indices keep their separate rules.", style = MaterialTheme.typography.bodySmall) }
+                            Text("BUY: confirmed K above D, without an EMA or volume filter. SELL after BUY: K is below D (including a missed crossover). Completed 15-minute candles only; K−D distance is context, not a filter. 15m RVOL is display-only. Indices keep their separate rules.", style = MaterialTheme.typography.bodySmall) }
                         items(selectedStocks, key = { it.symbol }) { stock ->
                             val row = bySymbol[stock.symbol]
                             Card(Modifier.fillMaxWidth()) {
@@ -783,20 +783,21 @@ internal fun Dashboard(
         if(scanning) TextButton(onClick=onCancelScan) { Text("Cancel scan") }
         IndexOverview(indexReport,indexRefreshEnabled,onRefreshIndices,livePrices,compact=true)
 
-        CompactHeader("Qualified stocks","${qualifiedToday.size} · Volume strategy")
-        if(qualifiedToday.isEmpty()) Text(if(autoScanActive || scanning) "No qualified stocks yet · check scan status above" else "Start a scan to find today’s volume-qualified stocks",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
-        qualifiedToday.sortedByDescending { stock -> paperTrades.filter { it.symbol==stock.symbol }.maxOfOrNull { it.soldAt ?: it.boughtAt } ?: java.time.Instant.EPOCH }.forEach { stock ->
+        val activeSymbols=livePrices.quotes.keys
+        val displayed=catalog.filter { stock -> report?.rows?.any { it.symbol==stock.symbol }==true || stock.instrumentKey in activeSymbols && "_EQ|" in stock.instrumentKey }
+        CompactHeader("Scanned stocks","${displayed.size} · K/D strategy")
+        if(displayed.isEmpty()) Text("Start a scan to load completed 15-minute signals and volume comparisons",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        displayed.sortedByDescending { stock -> paperTrades.filter { it.symbol==stock.symbol }.maxOfOrNull { it.soldAt ?: it.boughtAt } ?: java.time.Instant.EPOCH }.forEach { stock ->
             val row=report?.rows?.singleOrNull { it.symbol==stock.symbol }
-            val instrument=catalog.singleOrNull { it.symbol==stock.symbol }
-            val quote=instrument?.let { livePrices.quotes[it.instrumentKey] }
+            val quote=livePrices.quotes[stock.instrumentKey]
             val preview=liveStochastic[stock.symbol]
             val ownTrades=paperTrades.filter { it.symbol==stock.symbol }
-            CompactVolumeCard(stock.symbol,stock.peakRelativeVolume,row?.relativeVolume,quote,preview,row,ownTrades,livePrices.connected,
-                instrument?.let { livePrices.markets[it.instrumentKey.substringBefore('|')] }==true)
+            CompactVolumeCard(stock.symbol,qualifiedToday.firstOrNull { it.symbol==stock.symbol }?.peakRelativeVolume ?: 0.0,row?.relativeVolume,quote,preview,row,ownTrades,livePrices.connected,
+                livePrices.markets[stock.instrumentKey.substringBefore('|')]==true)
         }
         Text("Socket ${if(livePrices.connected) "connected" else "disconnected"} · K/D check ${compactTime(previewSampledAt)}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         PaperQuantityBar()
-        Text("Manual quantity is used on Signals; volume history uses one share.",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Manual quantity is used on Signals; completed-candle paper history uses one share.",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         CompactResults(TradeResults.volume(paperTrades))
         TextButton(onClick={legacyExpanded=!legacyExpanded}) { Text("Legacy analysis ${if(legacyExpanded) "⌃" else "⌄"}") }
         if(legacyExpanded) PaperWeeklyChart(weeklySummary,weeklyOutcomes)

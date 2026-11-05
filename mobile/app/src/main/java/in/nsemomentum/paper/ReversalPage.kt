@@ -100,8 +100,8 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
     val row=item.row;val quote=prices.quotes[row.stock.instrumentKey];val sample=row.openingSample
     val displayPreview=row.preview ?: row.previousPreview
     val k=displayPreview?.context?.stochK;val d=displayPreview?.context?.stochD;val pk=row.previousPreview?.context?.stochK;val pd=row.previousPreview?.context?.stochD
-    val ratio=if(sample?.continuous==true && (sample.beforeVolume ?: 0)>0 && sample.latestVolume!=null) sample.latestVolume.toDouble()/sample.beforeVolume!! else null
-    val urgent=item.held && row.preview!=null && (ratio?.let { it<=.70 }==true || (k!=null && d!=null && pk!=null && k<d && k<pk))
+    val ratio=row.candleVolume?.ratio
+    val urgent=item.held && row.preview!=null && (k!=null && d!=null && pk!=null && k<d && k<pk)
     val required=if(item.source==PaperSource.OPENING) row.opening.alert?.takeIf { it!="OPENING_BUY" }!=null else row.state.action.contains("SELL_")
     val fresh=sample?.fresh==true && row.preview!=null && java.time.Duration.between(sample.at,now).seconds in 0..5 && java.time.Duration.between(row.preview.sampledAt,now).seconds in 0..5
     val canBuy=row.preview!=null && if(item.source==PaperSource.OPENING) row.opening.alert=="OPENING_BUY" else row.state.buy!=null && !row.state.manual && k!=null && d!=null && k>d
@@ -119,7 +119,7 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
                 Text(compactPrice(quote?.price),style=MaterialTheme.typography.bodyMedium,fontWeight=FontWeight.Medium)
                 Text(quote?.changePercent?.let { "%+.2f%% today".format(Locale.US,it) } ?: "—",style=MaterialTheme.typography.bodySmall,color=profitColor(quote?.changePercent))
             }
-            Text("K ${k?.let { "%.1f".format(Locale.US,it) } ?: "—"} · D ${d?.let { "%.1f".format(Locale.US,it) } ?: "—"} · Vol 60s ${ratio?.let { "%.2f×".format(Locale.US,it) } ?: if(now.atZone(MarketSession.ZONE).toLocalTime()>=LocalTime.of(15,30) || now.atZone(MarketSession.ZONE).toLocalTime()<LocalTime.of(9,15)) "session closed" else "collecting ${row.volumeSeconds}/120s"}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("K ${k?.let { "%.1f".format(Locale.US,it) } ?: "—"} · D ${d?.let { "%.1f".format(Locale.US,it) } ?: "—"} · 15m RVOL ${ratio?.let { "%.2f×".format(Locale.US,it) } ?: "unavailable"}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             if(item.held) {
                 TextButton(onClick={onRecord(PaperOperation.EDIT_BUY,item.buyAt,item.buy,item.quantity)},contentPadding=PaddingValues(0.dp)) { Text("BUY ${compactPrice(item.buy)} ✎ · Qty ${item.quantity}",fontSize=12.sp) }
                 val pnl=quote?.price?.let { (it-item.buy!!)*item.quantity }
@@ -151,8 +151,10 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
                 DetailLine("Previous K / D",if(pk!=null && pd!=null) "%.2f / %.2f".format(Locale.US,pk,pd) else "—")
                 DetailLine("Previous reading",compactTime(row.previousPreview?.sampledAt))
                 DetailLine("K − D",if(k!=null && d!=null) "%+.2f".format(Locale.US,k-d) else "—")
-                DetailLine("Latest / prior 60s volume",if(sample?.continuous==true) "${sample.latestVolume} / ${sample.beforeVolume} shares" else "Unavailable")
-                DetailLine("Volume × · latest/prior 60s",ratio?.let { "%.2f× (%+.0f%%)".format(Locale.US,it,(it-1)*100) } ?: "Unavailable")
+                DetailLine("Completed 15m volume",row.candleVolume?.volume?.let { "%.0f shares".format(Locale.US,it) } ?: "Unavailable")
+                DetailLine("20-session same-slot average",row.candleVolume?.average?.let { "%.0f shares".format(Locale.US,it) } ?: "Unavailable")
+                DetailLine("15m RVOL · display only",ratio?.let { "%.2f×".format(Locale.US,it) } ?: "Unavailable")
+                DetailLine("Volume candle close",compactTime(row.candleVolume?.candleStart?.plusSeconds(900)))
                 DetailLine("Open / previous close","${compactPrice(sample?.open)} / ${compactPrice(quote?.previousClose)}")
                 if(item.buy!=null) {
                     val peak=if(item.source==PaperSource.OPENING) row.opening.peak else row.state.peakPrice
@@ -209,3 +211,4 @@ fun signalBlocker(row:ReversalRow,now:Instant=Instant.now()):String=when {
     row.state.action=="SHORTLISTED_BELOW_20_WAITING_FOR_CROSS" -> "Waiting for K to cross 20"
     else -> reversalActionLabel(row.state.action)
 }
+

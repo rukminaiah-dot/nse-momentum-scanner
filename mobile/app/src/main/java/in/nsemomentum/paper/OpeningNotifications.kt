@@ -34,7 +34,7 @@ object OpeningNoticeFormatter {
         val sell=state.buy!=null
         val quantity=if(sell) state.quantity else preset.takeIf { it in 1..1000000 } ?: 1
         val sample=row.openingSample
-        val ratio=if(sample?.continuous==true && (sample.beforeVolume ?: 0)>0 && sample.latestVolume!=null) sample.latestVolume.toDouble()/sample.beforeVolume!! else null
+        val ratio=row.candleVolume?.ratio
         val change=quote?.changePercent
         val amount=quote?.price?.takeIf { it.isFinite() && it>0 }?.let { it*quantity }
         val pnl=if(sell && quote!=null && state.buy!=null) (quote.price-state.buy)*quantity else null
@@ -52,7 +52,7 @@ object OpeningNoticeFormatter {
         val tick=quote?.tradedAt?.let(clock::format) ?: "Unavailable"
         return OpeningNotice("${row.stock.symbol}  •  ${if(sell) "SELL" else "BUY"}  •  PAPER",price(quote?.price),
             change?.let { "%+.2f%% today".format(Locale.ENGLISH,it) } ?: "Day change unavailable",
-            "K ${metric(sample?.k)}    D ${metric(sample?.d)}    VOL ${if(ratio==null) "—" else metric(ratio)+"×"}",
+            "K ${metric(sample?.k)}    D ${metric(sample?.d)}    VOL 15m ${if(ratio==null) "—" else metric(ratio)+"×"}",
             info,readable,"Expires ${clock.format(at.plusSeconds(60))} · ${(remaining+999)/1000}s left\nPrice $tick · 15m live K/D · no real orders",
             quantity,sell,change!=null && change>=0,remaining)
     }
@@ -157,3 +157,4 @@ class OpeningActionReceiver:BroadcastReceiver() {
         }
     }
 }
+

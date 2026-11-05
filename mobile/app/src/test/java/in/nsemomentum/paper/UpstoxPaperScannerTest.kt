@@ -43,6 +43,20 @@ class UpstoxPaperScannerTest {
         val report = UpstoxPaperScanner(store,feed).scan("test",listOf(universe.first()),setOf("ONE"),today.start.plusSeconds(901))
         assertEquals("PAPER_SELL",report.rows.single().signal)
     }
+    @Test fun unqualifiedStockWithZeroVolumeBaselineStillBuysWithVerifiedKd()=runBlocking {
+        val feed=object:CandleFeed {
+            override suspend fun session(token:String,date:LocalDate)=if(date.dayOfWeek.value>5 || date==holiday) null else regular(date)
+            override suspend fun candles(token:String,path:String):List<Candle> {
+                if(path.contains("intraday")) return listOf(bar(today.start,0.0).copy(close=10.8))
+                val parts=path.split('/');val start=LocalDate.parse(parts.last());val end=LocalDate.parse(parts[parts.lastIndex-1])
+                return history.filter { it.timestamp.atZone(MarketSession.ZONE).toLocalDate() in start..end }.map { it.copy(volume=0.0) }
+            }
+        }
+        val report=UpstoxPaperScanner(MemoryStore(),feed).scan("test",listOf(universe.first()),setOf("ONE"),today.start.plusSeconds(901))
+        assertEquals("PAPER_BUY",report.rows.single().signal)
+        assertNull(report.rows.single().relativeVolume)
+        assertNull(report.rows.single().averageSlotVolume)
+    }
     private inner class Feed : CandleFeed {
         val paths = mutableListOf<String>()
         var missingDate: LocalDate? = null
@@ -150,3 +164,4 @@ class UpstoxPaperScannerTest {
         assertTrue(feed.paths.isEmpty())
     }
 }
+

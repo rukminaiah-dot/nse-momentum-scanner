@@ -24,8 +24,8 @@ class OpeningNotificationsTest {
     private val at=Instant.parse("2026-11-03T03:48:00Z")
     private val stock=Stock("DIXON","NSE_EQ|TEST")
     private fun row(sell:Boolean=false)=ReversalRow(stock,ReversalState(),null,"",OpeningState(day="2026-11-03",buy=if(sell) 100.0 else null,
-        buyAt=if(sell) at.minusSeconds(60) else null,quantity=if(sell) 3 else 0,alert=if(sell) "VOLUME_DROP_30_PERCENT" else "OPENING_BUY",alertAt=at),
-        OpeningSample(at,true,102.0,101.0,100.0,32.5,24.8,101.5,100,140,true))
+        buyAt=if(sell) at.minusSeconds(60) else null,quantity=if(sell) 3 else 0,alert=if(sell) "KD_BEARISH" else "OPENING_BUY",alertAt=at),
+        OpeningSample(at,true,102.0,101.0,100.0,32.5,24.8,101.5,100,140,true),candleVolume=CandleVolumeComparison(at.minusSeconds(900),140.0,100.0,1.4))
     private val quote=LiveQuote(stock.instrumentKey,102.0,100.0,at,at)
     @Before fun clearNotifications() {
         val context=RuntimeEnvironment.getApplication() as Context
@@ -38,10 +38,10 @@ class OpeningNotificationsTest {
         assertTrue(n.metrics.contains("K 32.50"));assertTrue(n.metrics.contains("D 24.80"));assertTrue(n.metrics.contains("1.40×"))
         assertTrue(n.context.contains("₹204.00"));assertTrue(n.footer.contains("09:19:00 IST"));assertEquals(50000L,n.remainingMillis)
         assertNull(OpeningNoticeFormatter.create(row(),quote,at.plusSeconds(60),2))
-        val missing=OpeningNoticeFormatter.create(row().copy(openingSample=null),null,at,1)!!
-        assertEquals("Unavailable",missing.price);assertTrue(missing.metrics.contains("VOL —"))
+        val missing=OpeningNoticeFormatter.create(row().copy(openingSample=null,candleVolume=null),null,at,1)!!
+        assertEquals("Unavailable",missing.price);assertTrue(missing.metrics.contains("VOL 15m —"))
         val sell=OpeningNoticeFormatter.create(row(true),quote,at,9)!!
-        assertEquals(3,sell.quantity);assertTrue(sell.context.contains("₹+6.00"));assertTrue(sell.reason.contains("30%"))
+        assertEquals(3,sell.quantity);assertTrue(sell.context.contains("₹+6.00"));assertTrue(sell.reason.contains("K crossed below D"))
     }
     @Test fun notificationActionsArePaperBroadcastsAndUpdatesDoNotExtendOneMinuteExpiry() {
         val context=RuntimeEnvironment.getApplication() as Context
@@ -65,8 +65,8 @@ class OpeningNotificationsTest {
         assertTrue(ReversalRunner.state.value.rows.isEmpty()) // stopped runner cannot replay a BUY
     }
     @Test fun expiredAndMissingIndicatorsNeverProduceFakeValues() {
-        val n=OpeningNoticeFormatter.create(row().copy(openingSample=row().openingSample!!.copy(beforeVolume=0)),quote,at,1)!!
-        assertTrue(n.metrics.contains("VOL —"))
+        val n=OpeningNoticeFormatter.create(row().copy(candleVolume=null),quote,at,1)!!
+        assertTrue(n.metrics.contains("VOL 15m —"))
         assertNull(OpeningNoticeFormatter.create(row(),quote,at.minusSeconds(1),1))
         assertNull(OpeningNoticeFormatter.create(row().copy(opening=OpeningState()),quote,at,1))
     }
@@ -90,3 +90,4 @@ class OpeningNotificationsTest {
         }
     }
 }
+

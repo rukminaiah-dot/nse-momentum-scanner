@@ -42,7 +42,7 @@ class CompactPageTest {
         save("signals")
         compose.onAllNodesWithText("HDFCBANK").onFirst().performClick()
         compose.onNodeWithText("Trend snapshot").assertExists()
-        compose.onNodeWithText("Latest / prior 60s volume").assertExists()
+        compose.onNodeWithText("Completed 15m volume").assertExists()
         save("expanded")
         compose.onAllNodesWithText("HDFCBANK").onFirst().performClick()
         compose.onNodeWithText("SELL",useUnmergedTree=true).assertExists()
@@ -98,3 +98,4 @@ class CompactPageTest {
         }
     }
 }
+

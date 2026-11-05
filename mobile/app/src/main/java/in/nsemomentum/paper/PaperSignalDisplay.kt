@@ -16,7 +16,7 @@ fun paperSignalDisplay(row: ScanRow?, now: Instant = Instant.now()): String {
         else -> "WAIT"
     }
     val reason = when (row.reason) {
-        "BULLISH_ALIGNMENT" -> "Qualified today and K above D"
+        "BULLISH_ALIGNMENT" -> "Confirmed K above D"
         "BEARISH_CROSS_EXIT" -> "K below D after BUY · exit"
         "BUY_ACTIVE_WAITING_BEARISH_CROSS" -> "Waiting for K to cross below D"
         "NOT_SHORTLISTED_TODAY" -> "Waiting for volume qualification"
