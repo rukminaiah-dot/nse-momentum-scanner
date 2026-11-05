@@ -17,7 +17,7 @@ class BuyPathVerificationTest {
     private val date=LocalDate.parse("2026-11-04")
     private fun session(day:LocalDate)=MarketSession(day,day.atTime(9,15).atZone(MarketSession.ZONE).toInstant(),day.atTime(15,30).atZone(MarketSession.ZONE).toInstant())
 
-    @Test fun dashboardLowVolumeBuyReachesDatabaseAndDisplayWithoutQualificationOrSocket()=runBlocking {
+    @Test fun dashboardWaitExplainsVolumeGateThenEligibleBuyReachesDatabaseAndDisplayWithoutSocket()=runBlocking {
         val context=RuntimeEnvironment.getApplication() as Context
         context.deleteDatabase("paper_candles.db")
         java.io.File(context.filesDir,"diagnostics").deleteRecursively()
@@ -41,19 +41,19 @@ class BuyPathVerificationTest {
             val scanner=UpstoxPaperScanner(db,feed)
             val wait=scanner.scan("test",listOf("TEST" to "NSE_EQ|TEST"),setOf("TEST"),today.start.plusSeconds(901))
             db.recordScanReport(wait)
-            assertEquals("BULLISH_ALIGNMENT",wait.rows.single().reason)
-            assertTrue(db.hasActivePaperBuy("TEST"))
-            assertTrue(scanHealthSummary(wait).contains("BUY 1"))
-            assertTrue(DiagnosticLog.export(context).contains("SIGNAL_REASON BULLISH_ALIGNMENT"))
+            assertEquals("NOT_SHORTLISTED_TODAY",wait.rows.single().reason)
+            assertFalse(db.hasActivePaperBuy("TEST"))
+            assertTrue(scanHealthSummary(wait).contains("Waiting: NOT_SHORTLISTED_TODAY: 1"))
+            assertTrue(DiagnosticLog.export(context).contains("SIGNAL_REASON NOT_SHORTLISTED_TODAY"))
             intraday=intraday+bar(today.start.plusSeconds(900),100.9,200.0)
             val at=today.start.plusSeconds(1801)
             val buy=scanner.scan("test",listOf("TEST" to "NSE_EQ|TEST"),setOf("TEST"),at)
             db.recordScanReport(buy)
-            assertEquals("PAPER_HOLD",buy.rows.single().signal)
+            assertEquals("PAPER_BUY",buy.rows.single().signal)
             assertTrue(db.hasActivePaperBuy("TEST"))
             assertEquals(1,db.paperTradeHistory().size)
             assertTrue(paperSignalDisplay(db.latestScanReport()!!.rows.single(),at).startsWith("BUY"))
-            assertTrue(scanHealthSummary(db.latestScanReport()).contains("HOLD 1"))
+            assertTrue(scanHealthSummary(db.latestScanReport()).contains("BUY 1"))
             assertTrue(DiagnosticLog.export(context).contains("SIGNAL_REASON BULLISH_ALIGNMENT"))
         } finally { db.close() }
     }

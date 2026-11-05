@@ -19,7 +19,7 @@ fun paperSignalDisplay(row: ScanRow?, now: Instant = Instant.now()): String {
         "BULLISH_ALIGNMENT" -> "Confirmed K above D"
         "BEARISH_CROSS_EXIT" -> "K below D after BUY · exit"
         "BUY_ACTIVE_WAITING_BEARISH_CROSS" -> "Waiting for K to cross below D"
-        "NOT_SHORTLISTED_TODAY" -> "Previous volume-filter result · run a new scan"
+        "NOT_SHORTLISTED_TODAY" -> "Waiting for 15m volume selection (1.5× 20-session average)"
         "EMA_TREND_NOT_UP" -> "EMA20 is not above EMA50"
         "SESSION_1510_WAITING_FRESH_PRICE_EXIT" -> "No new BUYs after 15:10; open trades exit on a fresh quote"
         "NO_BULLISH_CROSS" -> "Waiting for confirmed K above D"

@@ -158,7 +158,7 @@ object TradeResults {
                 DetailLine("20-session same-slot average",row?.averageSlotVolume?.let { "%.0f shares".format(Locale.US,it) } ?: "Unavailable")
                 DetailLine("15m RVOL · display only",latest?.let { "%.2f×".format(Locale.US,it) } ?: "Unavailable")
                 Text(paperSignalDisplay(row),style=MaterialTheme.typography.bodySmall)
-                Text("RVOL compares completed 15m volume with the same slot in 20 prior trading sessions. It does not filter BUY or SELL.",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("RVOL compares completed 15m volume with the same slot in 20 prior trading sessions. Dashboard selection requires ≥1.5× once per day; selected stocks then use K>D for BUY.",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 PaperTradesTable(trades,quote?.price,quote?.label(now,connected,marketOpen))
             }
         }

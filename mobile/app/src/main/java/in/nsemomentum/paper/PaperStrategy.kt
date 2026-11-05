@@ -82,7 +82,7 @@ object PaperStrategy {
         if (currentVolume >= 0 && baseline > 0 && currentVolume.isFinite() && baseline.isFinite())
             currentVolume / baseline else null
 
-    /** Completed-candle K/D strategy; relative volume is informational only. */
+    /** Select once per day at 1.5x same-slot volume, then use completed-candle K/D. */
     fun evaluate(bars: List<Candle>, now: Instant, sameSlotAverageVolume: Double?,
                  qualifiedToday: Boolean = false, hasActiveBuy: Boolean = false): PaperSignal {
         fun wait(reason: String) = PaperSignal(reason = reason)
@@ -101,6 +101,7 @@ object PaperStrategy {
             return wait("STALE_OR_INCOMPLETE_15M_CANDLE")
         if (bars.any { !validCandle(it) }) return wait("INVALID_CANDLE")
         val rvol = sameSlotAverageVolume?.let { relativeVolume(latest.volume, it) }
+        if (!qualifiedToday && !hasActiveBuy && (rvol == null || rvol < 1.5)) return wait("NOT_SHORTLISTED_TODAY")
         if (StockSessionExit.entriesClosed(now)) return wait("SESSION_1510_WAITING_FRESH_PRICE_EXIT")
         val closes = bars.map { it.close }
         val (k, d) = stochRsi(closes)

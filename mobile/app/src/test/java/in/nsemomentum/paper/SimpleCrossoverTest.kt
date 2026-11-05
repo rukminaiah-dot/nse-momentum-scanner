@@ -21,7 +21,7 @@ class SimpleCrossoverTest {
     }
     @Test fun qualifiedStockIsStillAnalyzedWhenLatestVolumeFalls() {
         val bars = candles(50.0); val now = bars.last().timestamp.plusSeconds(901)
-        assertEquals("PAPER_BUY", PaperStrategy.evaluate(bars, now, 100.0).signal)
+        assertEquals("NOT_SHORTLISTED_TODAY", PaperStrategy.evaluate(bars, now, 100.0).reason)
         assertEquals("PAPER_BUY", PaperStrategy.evaluate(bars, now, 100.0, qualifiedToday = true).signal)
     }
     @Test fun sellRequiresExistingBuyAndDoesNotRequireOverboughtOrDownwardEmaTrend() {

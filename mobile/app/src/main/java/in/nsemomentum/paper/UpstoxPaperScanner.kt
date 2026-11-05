@@ -150,7 +150,8 @@ class UpstoxPaperScanner(
                 evaluated.copy(signal = recorded, reason = if (recorded == "PAPER_BUY") "BULLISH_ALIGNMENT" else "BEARISH_CROSS_EXIT")
             else evaluated
         } else PaperSignal(
-            signal = "WAIT", reason = "FAVOURITE_ONLY_FOR_TECHNICALS")
+            signal = if ((rvol ?: 0.0) >= 1.5) "VOLUME_QUALIFIED" else "WAIT",
+            reason = if ((rvol ?: 0.0) >= 1.5) "FAVOURITE_ONLY_FOR_TECHNICALS" else "VOLUME_BELOW_THRESHOLD")
         val previousCloseTime = sessions.first().slots().last()
         val previousClose = cached.singleOrNull { it.timestamp == previousCloseTime }?.close
         val dailyChange = previousClose?.takeIf { it > 0.0 }?.let { ((latest.close - it) / it) * 100.0 }

@@ -49,4 +49,35 @@ class DashboardPipelineTest {
             assertEquals(1,db.paperTradeHistory().size);assertEquals(1,db.qualifiedStocks(date).size)
         } finally { db.close() }
     }
+
+    @Test fun volumeSelectsOnceThenLowVolumeKdBuyDoesNotNeedAnotherVolumeSpike()=runBlocking {
+        val context=RuntimeEnvironment.getApplication() as Context;context.deleteDatabase("paper_candles.db")
+        val prior=generateSequence(date.minusDays(1)) { it.minusDays(1) }.filter { it.dayOfWeek.value<=5 }.take(20).toList()
+        fun bar(at:java.time.Instant,volume:Double=100.0,close:Double=10.5)=Candle(at,10.0,11.0,9.0,close,volume)
+        val history=prior.flatMap { session(it).slots().map { at->bar(at) } }
+        val today=session(date);var intraday=listOf(bar(today.start,150.0,10.2))
+        val feed=object:CandleFeed {
+            override suspend fun session(token:String,date:LocalDate)=if(date.dayOfWeek.value<=5) this@DashboardPipelineTest.session(date) else null
+            override suspend fun candles(token:String,path:String):List<Candle> {
+                if(path.contains("intraday")) return intraday
+                val parts=path.split('/');val first=LocalDate.parse(parts.last());val last=LocalDate.parse(parts[parts.lastIndex-1])
+                return history.filter { it.timestamp.atZone(MarketSession.ZONE).toLocalDate() in first..last }
+            }
+        }
+        val db=CandleDatabase(context)
+        try {
+            val scanner=UpstoxPaperScanner(db,feed)
+            val selected=scanner.scan("test",listOf("TEST" to "NSE_EQ|TEST"),setOf("TEST"),today.start.plusSeconds(901))
+            db.recordScanReport(selected)
+            assertEquals(1.5,selected.rows.single().relativeVolume!!,0.0)
+            assertEquals("WAIT",selected.rows.single().signal)
+            assertTrue(db.qualifiedOn("TEST",date));assertFalse(db.hasActivePaperBuy("TEST"))
+            intraday=intraday+bar(today.start.plusSeconds(900),50.0,10.8)
+            val buy=scanner.scan("test",listOf("TEST" to "NSE_EQ|TEST"),setOf("TEST"),today.start.plusSeconds(1801))
+            db.recordScanReport(buy)
+            assertEquals(.5,buy.rows.single().relativeVolume!!,0.0)
+            assertEquals("PAPER_BUY",buy.rows.single().signal)
+            assertTrue(db.hasActivePaperBuy("TEST"));assertEquals(1,db.qualifiedStocks(date).size)
+        } finally { db.close() }
+    }
 }

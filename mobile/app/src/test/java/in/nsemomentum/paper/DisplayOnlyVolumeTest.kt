@@ -28,11 +28,11 @@ class DisplayOnlyVolumeTest {
         assertNull(completedCandleVolume(history()+current,today.start.plusSeconds(899)))
         assertNull(completedCandleVolume(history()+current,today.start.plusSeconds(1801)))
     }
-    @Test fun volumeRatioNeverChangesAnEligibleKdDecision() {
+    @Test fun afterDashboardSelectionVolumeRatioDoesNotRecheckBuyOrHold() {
         for(active in listOf(false,true)) for(baseline in listOf<Double?>(null,0.0,10.0,1000000.0)) {
             val closes=prior.sortedBy { it.date }.flatMap { s -> s.slots().map { at -> Candle(at,100.0,101.0,99.0,100.0,100.0) } }
             val bars=closes+Candle(today.start,100.0,101.0,99.0,100.8,0.0)
-            val result=PaperStrategy.evaluate(bars,today.start.plusSeconds(901),baseline,qualifiedToday=false,hasActiveBuy=active)
+            val result=PaperStrategy.evaluate(bars,today.start.plusSeconds(901),baseline,qualifiedToday=true,hasActiveBuy=active)
             assertEquals(if(active) "PAPER_HOLD" else "PAPER_BUY",result.signal)
         }
     }

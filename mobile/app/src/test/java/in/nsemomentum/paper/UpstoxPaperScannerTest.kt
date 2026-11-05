@@ -43,7 +43,7 @@ class UpstoxPaperScannerTest {
         val report = UpstoxPaperScanner(store,feed).scan("test",listOf(universe.first()),setOf("ONE"),today.start.plusSeconds(901))
         assertEquals("PAPER_SELL",report.rows.single().signal)
     }
-    @Test fun unqualifiedStockWithZeroVolumeBaselineStillBuysWithVerifiedKd()=runBlocking {
+    @Test fun zeroVolumeBaselineCannotNewlySelectDashboardStock()=runBlocking {
         val feed=object:CandleFeed {
             override suspend fun session(token:String,date:LocalDate)=if(date.dayOfWeek.value>5 || date==holiday) null else regular(date)
             override suspend fun candles(token:String,path:String):List<Candle> {
@@ -53,7 +53,8 @@ class UpstoxPaperScannerTest {
             }
         }
         val report=UpstoxPaperScanner(MemoryStore(),feed).scan("test",listOf(universe.first()),setOf("ONE"),today.start.plusSeconds(901))
-        assertEquals("PAPER_BUY",report.rows.single().signal)
+        assertEquals("WAIT",report.rows.single().signal)
+        assertEquals("NOT_SHORTLISTED_TODAY",report.rows.single().reason)
         assertNull(report.rows.single().relativeVolume)
         assertNull(report.rows.single().averageSlotVolume)
     }
