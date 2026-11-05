@@ -55,8 +55,8 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
     val signals=unifiedSignals(snapshot,now)
     fun edit(trade:UiTrade,operation:PaperOperation) { trade.source?.let { source -> request=RecordRequest(trade.key,trade.symbol,source,operation,trade.buyAt,if(operation==PaperOperation.EDIT_BUY) trade.buy else trade.sell,trade.quantity) } }
     if(help) AlertDialog(onDismissRequest={help=false},title={Text("Rules & alerts")},text={Column(Modifier.heightIn(max=480.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-        Text("Opening: 09:17–09:30, 20<K<50, K>D and K rising; open above previous close. Current price need not rise or stay above open. Volume is informational for BUY.")
-        Text("Reversal: K>D below 20; observed cross above 20 with K>D. No volume requirement or 60s volume wait for BUY.")
+        Text("Opening: 09:17–09:30, 20<K<50, K>D and K rising; open above previous close. Current price need not rise or stay above open. 15m volume is informational only.")
+        Text("Reversal: K>D below 20; observed cross above 20 with K>D. 15m volume is informational only; no volume requirement for BUY or SELL.")
         Text("Initial stop −1%; profit protection advances in 0.25-point steps. MUST SELL flags an urgent exit; manual positions stay open until SELL is recorded.")
         Text("Prices entered here are unverified paper records. Original automatic history is retained and labelled. Records are local and are not included in the existing backup. Avg % is the mean closed-trade return; P&L includes recorded quantity, before costs.")
         OpeningNotificationPermission(showQuantity=false)

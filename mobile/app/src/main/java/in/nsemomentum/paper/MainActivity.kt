@@ -148,7 +148,6 @@ private fun PaperScannerApp() {
     var livePrices by remember { mutableStateOf(LivePriceState(status = "Save your Upstox token in Settings for live prices.")) }
     var liveTokenRevision by remember { mutableStateOf(0) }
     val latestLivePrices by rememberUpdatedState(livePrices)
-    val latestQualified by rememberUpdatedState(qualifiedToday)
     val latestStocks by rememberUpdatedState(stocks.toList())
     val latestFavourites by rememberUpdatedState(favourites.toSet())
     val priceLifecycle = LocalLifecycleOwner.current.lifecycle
@@ -607,7 +606,7 @@ private fun PaperScannerApp() {
                                             style = MaterialTheme.typography.labelSmall
                                         )
                                         qualifiedBySymbol[stock.symbol]?.let { qualified ->
-                                            Text("QUALIFIED TODAY · peak RVOL ${formatPrice(qualified.peakRelativeVolume)}×", style = MaterialTheme.typography.labelSmall)
+                                            Text("Recorded peak RVOL ${formatPrice(qualified.peakRelativeVolume)}×", style = MaterialTheme.typography.labelSmall)
                                         }
                                         Text(stock.instrumentKey, style = MaterialTheme.typography.labelSmall)
                                     }
