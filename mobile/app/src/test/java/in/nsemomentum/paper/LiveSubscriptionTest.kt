@@ -30,6 +30,7 @@ class LiveSubscriptionTest {
         val server=MockWebServer();server.start()
         server.enqueue(MockResponse().setBody("""{"status":"success","data":{"authorized_redirect_uri":"wss://feed.upstox.com/test"}}"""))
         val commands=Channel<JSONObject>(10);val states=Channel<LivePriceState>(20)
+        var initialFrameSent=false
         var connections=0;lateinit var listener:WebSocketListener;lateinit var socket:WebSocket
         val factory=WebSocket.Factory { request,l ->
             connections++;listener=l
@@ -37,7 +38,12 @@ class LiveSubscriptionTest {
                 override fun request()=request
                 override fun queueSize()=0L
                 override fun send(text:String)=false
-                override fun send(bytes:ByteString):Boolean=commands.trySend(JSONObject(bytes.utf8())).isSuccess
+                override fun send(bytes:ByteString):Boolean {
+                    val sent=commands.trySend(JSONObject(bytes.utf8())).isSuccess
+                    // Immediate provider response must never appear with connectionId=0.
+                    if(!initialFrameSent) { initialFrameSent=true;l.onMessage(this,frame("NSE_EQ|TEST")) }
+                    return sent
+                }
                 override fun close(code:Int,reason:String?)=true
                 override fun cancel() {}
             }
@@ -51,7 +57,7 @@ class LiveSubscriptionTest {
         suspend fun quote():LivePriceState=withTimeout(5000) { var state=states.receive();while(state.quotes[key]==null) state=states.receive();state }
         try {
             withTimeout(5000) { assertEquals("sub",commands.receive().getString("method")) }
-            listener.onMessage(socket,frame(key));val first=quote()
+            listener.onMessage(socket,frame(key));val first=quote();assertNotEquals(0L,first.connectionId)
             desired.value=setOf(key,commodity)
             listener.onMessage(socket,frame(key))
             withTimeout(5000) { val add=commands.receive();assertEquals("sub",add.getString("method"));assertEquals(commodity,add.getJSONObject("data").getJSONArray("instrumentKeys").getString(0)) }
@@ -63,3 +69,4 @@ class LiveSubscriptionTest {
         } finally { job.cancelAndJoin();server.shutdown() }
     }
 }
+

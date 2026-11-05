@@ -42,7 +42,6 @@ object OpeningMomentum {
             when {
                 StockSessionExit.due(old.buyAt!!,s.at) -> "SESSION_1510"
                 price<=stop -> "PRICE_STOP"
-                s.continuous && (s.beforeVolume ?: 0)>0 && s.latestVolume!=null && s.latestVolume.toDouble()<=s.beforeVolume!!*.70 -> "VOLUME_DROP_30_PERCENT"
                 bearish -> "KD_BEARISH"
                 else -> null
             }
@@ -89,3 +88,4 @@ class OpeningPriceWindow {
     }
     fun previous(now:Instant):Double?=points.lastOrNull { it.first<=now.minusSeconds(60) }?.takeIf { Duration.between(it.first,now.minusSeconds(60)).toMillis() in 0..2000 }?.second
 }
+

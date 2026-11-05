@@ -73,17 +73,16 @@ class OpeningMomentumTest {
         val bought=OpeningMomentum.approve(p,sample(2,k=31.0),command.copy(choice=OpeningChoice.BUY,quantity=2))
         assertEquals(2,OpeningMomentum.approve(bought,sample(3,k=32.0),command.copy(choice=OpeningChoice.BUY,quantity=9)).quantity)
     }
-    @Test fun thirtyPercentVolumeDropAndBearishCrossRequestSellButWaitHolds() {
+    @Test fun volumeDropDoesNotRequestSellButBearishCrossStillDoes() {
         val active=OpeningState(day="2026-11-03",buy=102.0,buyAt=at,quantity=4,peak=102.0,boughtToday=true,previousK=30.0,previousD=29.0,previousAt=at)
-        val volume=OpeningMomentum.tick(active,sample(1).copy(latestVolume=70))
-        assertEquals("VOLUME_DROP_30_PERCENT",volume.alert);assertNotNull(volume.buy)
-        val held=OpeningMomentum.approve(volume,sample(2,k=31.0).copy(latestVolume=70),OpeningApproval("TEST",volume.alertAt!!,OpeningChoice.WAIT))
-        assertNotNull(held.buy);assertTrue(held.trades.isEmpty())
-        val closed=OpeningMomentum.approve(volume,sample(2,k=31.0).copy(latestVolume=70),OpeningApproval("TEST",volume.alertAt!!,OpeningChoice.SELL))
+        for(volume in listOf(0L,1L,70L,71L,10000L)) {
+            val held=OpeningMomentum.tick(active,sample(1).copy(latestVolume=volume))
+            assertNull(held.alert);assertNotNull(held.buy);assertTrue(held.trades.isEmpty())
+        }
+        val bearish=OpeningMomentum.tick(active,sample(1,k=28.0,d=29.0))
+        assertEquals("KD_BEARISH",bearish.alert)
+        val closed=OpeningMomentum.approve(bearish,sample(2,k=27.0,d=29.0),OpeningApproval("TEST",bearish.alertAt!!,OpeningChoice.SELL))
         assertNull(closed.buy);assertEquals(4,closed.trades.single().quantity)
-        assertEquals("KD_BEARISH",OpeningMomentum.tick(active,sample(1,k=28.0,d=29.0)).alert)
-        assertNull(OpeningMomentum.tick(active,sample(1).copy(latestVolume=71)).alert)
-        assertNull(OpeningMomentum.tick(closed,sample(3,k=32.0)).alert)
     }
     @Test fun stopsAndSessionExitStillRequireApprovalWithoutKd() {
         val active=OpeningState(day="2026-11-03",buy=100.0,buyAt=at,quantity=1,peak=100.75)
@@ -99,3 +98,4 @@ class OpeningMomentumTest {
         w.add(at.plusSeconds(121),221.0,2);assertNull(w.previous(at.plusSeconds(121)))
     }
 }
+

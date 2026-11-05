@@ -154,11 +154,14 @@ object TradeResults {
                 DetailLine("Momentum · live 15m",live?.context?.let { if(it.stochK>it.stochD) "Bullish" else if(it.stochK<it.stochD) "Bearish" else "Neutral" } ?: "Unavailable")
                 DetailLine("Live K / D",live?.context?.let { "%.2f / %.2f".format(Locale.US,it.stochK,it.stochD) } ?: "Unavailable")
                 DetailLine("Confirmed K / D",row?.technicals?.let { "%.2f / %.2f".format(Locale.US,it.stochK,it.stochD) } ?: "Unavailable")
-                DetailLine("Peak / latest RVOL","%.2f× / %s".format(Locale.US,peak,latest?.let { "%.2f×".format(Locale.US,it) } ?: "—"))
+                DetailLine("Completed 15m volume",row?.candle?.volume?.let { "%.0f shares".format(Locale.US,it) } ?: "Unavailable")
+                DetailLine("20-session same-slot average",row?.averageSlotVolume?.let { "%.0f shares".format(Locale.US,it) } ?: "Unavailable")
+                DetailLine("15m RVOL · display only",latest?.let { "%.2f×".format(Locale.US,it) } ?: "Unavailable")
                 Text(paperSignalDisplay(row),style=MaterialTheme.typography.bodySmall)
-                Text("RVOL compares completed 15m volume with the same slot in 20 prior sessions.",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("RVOL compares completed 15m volume with the same slot in 20 prior trading sessions. Dashboard selection requires ≥1.5× once per day; selected stocks then use K>D for BUY.",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 PaperTradesTable(trades,quote?.price,quote?.label(now,connected,marketOpen))
             }
         }
     }
 }
+

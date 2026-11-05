@@ -100,7 +100,7 @@ class UpstoxPaperScanner(
         var cached = database.bars(key)
         fun historyReady(bars: List<Candle>): Boolean = if (isIndex)
             IndexPaperStrategy.verifiedHistory(bars, sessions)
-        else PaperStrategy.sameSlotAverage(Candle(target, 1.0, 1.0, 1.0, 1.0, 0.0), bars, sessions) != null
+        else PaperStrategy.verifiedSessions(bars,sessions)
         if (!historyReady(cached)) {
             // At most 28 calendar days per request, safely inside V3's one-month limit.
             var end = today.date.minusDays(1)
@@ -135,12 +135,10 @@ class UpstoxPaperScanner(
         // Only fresh intraday input can establish today's latest bar; cache cannot mask feed gaps.
         val latest = complete.single { it.timestamp == target }
         val baseline = if (isIndex) null else PaperStrategy.sameSlotAverage(latest, cached, sessions)
-        if (!isIndex && baseline == null) return ScanRow(symbol, reason = "NO_VERIFIED_20_SESSION_BASELINE")
         database.save(key, complete)
         val allBars = cached.filter { bar -> sessions.any { it.date == bar.timestamp.atZone(MarketSession.ZONE).toLocalDate() } } + complete
         val ordered = allBars.sortedBy { it.timestamp }
         val rvol = baseline?.let { PaperStrategy.relativeVolume(latest.volume, it) }
-        if (!isIndex && rvol == null) return ScanRow(symbol, reason = "INVALID_VOLUME")
         val context = if (symbol in favourites) PaperStrategy.context(ordered) else null
         val result = if (isIndex) IndexPaperStrategy.evaluate(ordered, sessions, now)
         else if (symbol in favourites) {

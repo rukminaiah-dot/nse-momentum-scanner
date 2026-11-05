@@ -61,7 +61,7 @@ internal fun reversalMonitorSelection(stocks:List<Stock>):List<Stock> = stocks
     .filter { "_EQ|" in it.instrumentKey }.distinctBy { it.instrumentKey }
     .map { Stock(it.symbol,it.instrumentKey) }.sortedBy { it.instrumentKey }
 
-data class ReversalRow(val stock: Stock, val state: ReversalState, val preview: LiveStochastic?, val status: String,val opening:OpeningState=OpeningState(),val openingSample:OpeningSample?=null,val previousPreview:LiveStochastic?=null,val signalAt:Instant?=null,val volumeSeconds:Long=0)
+data class ReversalRow(val stock: Stock, val state: ReversalState, val preview: LiveStochastic?, val status: String,val opening:OpeningState=OpeningState(),val openingSample:OpeningSample?=null,val previousPreview:LiveStochastic?=null,val signalAt:Instant?=null,val volumeSeconds:Long=0,val candleVolume:CandleVolumeComparison?=null)
 data class ReversalSnapshot(val rows: List<ReversalRow> = emptyList(), val updatedAt: Instant? = null,
                             val status: String = "Waiting for live connection",val recordStatus:String?=null)
 
@@ -125,9 +125,9 @@ object ReversalRunner {
         val work=(selected+activeMissing+activeOpening).distinctBy { it.instrumentKey }
         val previousPreviews=mutableMapOf<String,LiveStochastic>()
         val signalTimes=mutableMapOf<String,Instant>()
-        val volumes=work.associate { it.instrumentKey to LiveVolumeWindow() }
         val priceWindows=work.associate { it.instrumentKey to OpeningPriceWindow() }
         val history=ConcurrentHashMap<String,List<Candle>>().apply { work.forEach { s -> verifiedHistory[s.instrumentKey]?.let { put(s.instrumentKey,it) } } }
+        val candleVolumes=ConcurrentHashMap<String,CandleVolumeComparison>()
         val errors=ConcurrentHashMap<String,String>()
         val done=ConcurrentHashMap<String,Long>()
         val underlying=UpstoxCandleFeed()
@@ -157,6 +157,7 @@ object ReversalRunner {
                                 reversalHistory(feed,token,stock,now,(cached+history[stock.instrumentKey].orEmpty()).distinctBy { it.timestamp }).also { database.save(stock.instrumentKey,it) }
                             } finally { database.close() }
                             history[stock.instrumentKey]=verified
+                            completedCandleVolume(verified,now)?.let { candleVolumes[stock.instrumentKey]=it } ?: candleVolumes.remove(stock.instrumentKey)
                             verifiedHistory[stock.instrumentKey]=verified
                             done[stock.instrumentKey]=slot;errors.remove(stock.instrumentKey)
                             DiagnosticLog.event("REVERSAL_HISTORY","READY","bars=${history[stock.instrumentKey]?.size ?: 0}",stock.symbol)
@@ -185,17 +186,13 @@ object ReversalRunner {
                     local >= java.time.LocalTime.of(9,15) && local < java.time.LocalTime.of(15,30)
                 val preview=LiveStochasticPreview.calculate(history[stock.instrumentKey].orEmpty(),quote,now,live.connected,marketOpen)
                 val old=states[stock.instrumentKey] ?: ReversalState()
-                val volume=volumes.getValue(stock.instrumentKey)
-                val volumeFresh=volume.ingest(quote,now,fresh,live.connectionId)
                 val priceWindow=priceWindows.getValue(stock.instrumentKey)
                 if(fresh) priceWindow.add(quote!!.receivedAt,quote.price,live.connectionId) else priceWindow.clear()
-                val earlier=volume.amount(now.minusSeconds(120),now.minusSeconds(60))
-                val latest=volume.amount(now.minusSeconds(60),now)
                 val currentDate=now.atZone(MarketSession.ZONE).toLocalDate()
                 val officialOpen=quote?.sessionOpen?.takeIf { quote.sessionOpenDate==currentDate }
                     ?: history[stock.instrumentKey]?.firstOrNull { it.timestamp==currentDate.atTime(9,15).atZone(MarketSession.ZONE).toInstant() }?.open
                 val openingSample=OpeningSample(now,fresh,quote?.price,officialOpen,quote?.previousClose,preview?.context?.stochK,
-                    preview?.context?.stochD,priceWindow.previous(now),earlier,latest,volumeFresh && earlier!=null && latest!=null)
+                    preview?.context?.stochD,priceWindow.previous(now),null,null,false)
                 val previousOpening=openingStates[stock.instrumentKey] ?: OpeningState()
                 var opening=commands[stock.instrumentKey]?.let { OpeningMomentum.approve(previousOpening,openingSample,it) }
                     ?: OpeningMomentum.tick(previousOpening,openingSample)
@@ -212,14 +209,14 @@ object ReversalRunner {
                 val previousPreview=previousPreviews[stock.instrumentKey]
                 if(preview!=null) previousPreviews[stock.instrumentKey]=preview
                 next=next+(stock.instrumentKey to updated.copy(symbol=stock.symbol))
-                ReversalRow(stock,updated.copy(symbol=stock.symbol),preview,errors[stock.instrumentKey] ?: if (fresh) updated.action else "Waiting for fresh live quote / market open",opening,openingSample,previousPreview,signalTimes[stock.instrumentKey]?.takeIf { it<=now },volume.observedSeconds(now))
+                ReversalRow(stock,updated.copy(symbol=stock.symbol),preview,errors[stock.instrumentKey] ?: if (fresh) updated.action else "Waiting for fresh live quote / market open",opening,openingSample,previousPreview,signalTimes[stock.instrumentKey]?.takeIf { it<=now },candleVolume=candleVolumes[stock.instrumentKey]?.takeIf { it.candleStart.atZone(MarketSession.ZONE).toLocalDate()==now.atZone(MarketSession.ZONE).toLocalDate() })
             }
             changes.filterKeys { key -> work.none { it.instrumentKey==key } }.forEach { (key,edit) ->
                 if(edit.source==PaperSource.OPENING) nextOpening=nextOpening+(key to PaperRecordEdits.opening(openingStates[key] ?: OpeningState(),edit,now,false))
                 else next=next+(key to PaperRecordEdits.reversal(states[key] ?: ReversalState(),edit,now,false,null,null))
             }
             if(java.time.Duration.between(lastHealth,now).seconds>=60) {
-                DiagnosticLog.event("REVERSAL_HEALTH","CHECKED","fresh=${rows.count { it.openingSample?.fresh==true }} kd=${rows.count { it.preview!=null }} volume=${rows.count { it.openingSample?.continuous==true }} total=${rows.size}")
+                DiagnosticLog.event("REVERSAL_HEALTH","CHECKED","fresh=${rows.count { it.openingSample?.fresh==true }} kd=${rows.count { it.preview!=null }} volume15m=${rows.count { it.candleVolume?.ratio!=null }} total=${rows.size}")
                 lastHealth=now
             }
             val changed=next.any { (key,value) -> val old=states[key] ?: ReversalState()

@@ -52,3 +52,4 @@ class SimpleCrossoverTest {
         assertEquals("PAPER_BUY", PaperStrategy.crossoverSignal(49.0,50.0,50.01,50.0,false).signal)
     }
 }
+

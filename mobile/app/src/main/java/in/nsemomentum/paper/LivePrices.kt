@@ -215,7 +215,8 @@ class UpstoxLivePrices(
                 val url = authorize(token)
                 socket = webSockets.newWebSocket(Request.Builder().url(url).build(), object : WebSocketListener() {
                     override fun onOpen(webSocket: WebSocket, response: Response) {
-                        if (!webSocket.send(subscription) || events.trySend(Event.Open).isFailure) webSocket.cancel()
+                        // Publish the connection epoch before a subscription can trigger an immediate quote.
+                        if (events.trySend(Event.Open).isFailure || !webSocket.send(subscription)) webSocket.cancel()
                     }
                     override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
                         if (bytes.size > 2 * 1024 * 1024 || events.trySend(Event.Data(bytes.toByteArray())).isFailure) webSocket.cancel()
@@ -264,3 +265,4 @@ class UpstoxLivePrices(
         }
     }.flowOn(Dispatchers.IO).conflate()
 }
+
