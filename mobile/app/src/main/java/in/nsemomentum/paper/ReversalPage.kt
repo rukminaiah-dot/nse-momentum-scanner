@@ -38,9 +38,9 @@ fun unifiedSignals(snapshot:ReversalSnapshot,now:Instant):List<SignalItem> {
         val opening=row.opening.identifiedAt?.atZone(MarketSession.ZONE)?.toLocalDate()==date || openingWatch || row.opening.buy!=null || row.opening.trades.lastOrNull()?.sellAt?.atZone(MarketSession.ZONE)?.toLocalDate()==date
         val reversal=row.state.identifiedAt?.atZone(MarketSession.ZONE)?.toLocalDate()==date || row.state.watchDate==date.toString() || row.state.buy!=null || row.state.trades.lastOrNull()?.sellAt?.atZone(MarketSession.ZONE)?.toLocalDate()==date
         val candidates=listOfNotNull(if(opening) SignalItem(row,PaperSource.OPENING) else null,if(reversal) SignalItem(row,PaperSource.REVERSAL) else null)
-        val held=candidates.filter { it.held }
+        val positions=candidates.filter { it.buy!=null }
         val active=candidates.filter { item -> if(item.source==PaperSource.OPENING) openingWatch || row.opening.buy!=null else row.state.watchDate==date.toString() || row.state.buy!=null }
-        if(held.isNotEmpty()) held else listOfNotNull((active.ifEmpty { candidates }).maxByOrNull { it.latest })
+        if(positions.isNotEmpty()) positions else listOfNotNull((active.ifEmpty { candidates }).maxByOrNull { it.latest })
     }.sortedWith(compareByDescending<SignalItem> { it.latest.takeIf { t->t<=now } ?: Instant.EPOCH }.thenBy { it.id })
 }
 data class RecordRequest(val key:String,val symbol:String,val source:PaperSource,val operation:PaperOperation,val at:Instant?,val price:Double?,val quantity:Int)
@@ -124,7 +124,7 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
                     Button(onClick={onRecord(PaperOperation.SELL,item.buyAt,quote?.price,item.quantity)},colors=ButtonDefaults.buttonColors(containerColor=MaterialTheme.colorScheme.error)) { Text("SELL") }
                 }
             } else if(canBuy) {
-                Button(enabled=fresh,onClick={onRecord(PaperOperation.BUY,item.buyAt,quote?.price,defaultQuantity)}) { Text("⊕ BUY") }
+                Button(enabled=fresh,onClick={onRecord(PaperOperation.BUY,item.buyAt,quote?.price,defaultQuantity)}) { Text("Record BUY price") }
             } else if(lastTrade!=null && lastTrade.sellAt?.atZone(MarketSession.ZONE)?.toLocalDate()==LocalDate.now(MarketSession.ZONE)) {
                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick={onRecord(PaperOperation.EDIT_BUY,lastTrade.buyAt,lastTrade.buy,lastTrade.quantity)},contentPadding=PaddingValues(0.dp)) { Text("BUY ${compactPrice(lastTrade.buy)} ✎",fontSize=12.sp) }

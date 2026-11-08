@@ -49,6 +49,13 @@ class PaperRecordEditsTest {
         val setup=row.copy(state=held.copy(manual=false))
         assertEquals(PaperSource.REVERSAL,unifiedSignals(ReversalSnapshot(listOf(setup)),at).single().source)
     }
+    @Test fun bothAutomaticPositionsAreVisibleWhenTheSameStockQualifies() {
+        val opening=OpeningState(day="2026-11-03",buy=100.0,buyAt=at,quantity=2,automatic=true)
+        val reversal=ReversalState(buy=101.0,buyAt=at.plusSeconds(1))
+        val row=ReversalRow(Stock("TEST","NSE_EQ|TEST"),reversal,null,"",opening)
+        val sources=unifiedSignals(ReversalSnapshot(listOf(row)),at.plusSeconds(2)).map { it.source }
+        assertEquals(setOf(PaperSource.OPENING,PaperSource.REVERSAL),sources.toSet())
+    }
     @Test fun summariesCountOnlyClosedTradesUseQuantityAndIstDay() {
         val trades=listOf(UiTrade("T","TEST",PaperSource.OPENING,at,100.0,at.plusSeconds(20),102.0,3),UiTrade("X","OPEN",PaperSource.REVERSAL,at,100.0,null,null))
         val total=TradeResults.totals(trades)
