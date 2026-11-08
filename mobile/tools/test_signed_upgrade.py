@@ -61,7 +61,7 @@ def wait_for_schema(local, version):
     for _ in range(30):
         try:
             adb("pull", DATABASE, local)
-            with closing(sqlite3.connect(f"{local.as_uri()}?mode=ro")) as db:
+            with closing(sqlite3.connect(f"{local.as_uri()}?mode=ro", uri=True)) as db:
                 if db.execute("PRAGMA user_version").fetchone() == (version,):
                     return
         except (subprocess.CalledProcessError, sqlite3.Error):
@@ -119,7 +119,7 @@ def verify_upgrade(previous, candidate, report, temp):
     wait_for_schema(local_db, 5)
     adb("shell", "am", "force-stop", PACKAGE)
     adb("pull", DATABASE, local_db)
-    with closing(sqlite3.connect(f"{local_db.as_uri()}?mode=ro")) as db:
+    with closing(sqlite3.connect(f"{local_db.as_uri()}?mode=ro", uri=True)) as db:
         rows = db.execute(
             "SELECT symbol, signal_time, direction, price, profit_review FROM paper_signal_events ORDER BY signal_time"
         ).fetchall()
