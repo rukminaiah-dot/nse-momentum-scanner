@@ -8,7 +8,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZonedDateTime
 
-class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candles.db", null, 4), CandleStore {
+class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candles.db", null, 5), CandleStore {
     override fun onCreate(db: SQLiteDatabase) {
         createCandles(db)
         createHistoryAttempts(db)
@@ -29,6 +29,7 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
                 if (column !in existing) db.execSQL("ALTER TABLE latest_scan_rows ADD COLUMN $column REAL")
             }
         }
+        if (oldVersion == 4) db.execSQL("ALTER TABLE paper_signal_events ADD COLUMN profit_review INTEGER NOT NULL DEFAULT 0")
     }
 
     private fun createCandles(db: SQLiteDatabase) {
@@ -113,7 +114,7 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
     private fun createSignalEvents(db: SQLiteDatabase) {
         db.execSQL("""CREATE TABLE IF NOT EXISTS paper_signal_events(
             symbol TEXT NOT NULL, signal_time TEXT NOT NULL, direction INTEGER NOT NULL,
-            price REAL NOT NULL, PRIMARY KEY(symbol, signal_time))""")
+            price REAL NOT NULL, profit_review INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(symbol, signal_time))""")
     }
 
     override fun qualifiedOn(symbol: String, date: LocalDate): Boolean = readableDatabase.rawQuery(
@@ -136,8 +137,17 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
         try {
             val buy = lastSignal(db, symbol) ?: return false
             if (buy.direction != 1 || now <= buy.time || quote.tradedAt < buy.time) return false
-            val reason = if (StockSessionExit.due(buy.time, now)) "SESSION_1510"
-                else StockSessionExit.priceExit(buy.price, quote.price) ?: return false
+            val profitReview = buy.profitReview || StockSessionExit.reachedProfitReview(buy.price, quote.price)
+            if (profitReview && !buy.profitReview) {
+                db.execSQL("UPDATE paper_signal_events SET profit_review=1 WHERE symbol=? AND signal_time=?",
+                    arrayOf(symbol, buy.time.toString()))
+            }
+            val ratio = if (profitReview) latestCompletedVolumeRatio(db, symbol, now) else null
+            val reason = StockSessionExit.exitReason(buy.time, now, buy.price, quote.price, profitReview, ratio)
+            if (reason == null) {
+                db.setTransactionSuccessful()
+                return false
+            }
             val row = ContentValues().apply {
                 put("symbol", symbol)
                 put("signal_time", now.toString())
@@ -147,8 +157,7 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
             val added = db.insertWithOnConflict("paper_signal_events", null, row, SQLiteDatabase.CONFLICT_IGNORE) != -1L
             db.setTransactionSuccessful()
             if (added) {
-                val event = if (reason == "SESSION_1510") "STOCK_TIMED_EXIT" else "STOCK_PRICE_EXIT"
-                DiagnosticLog.event(event, reason, symbol = symbol)
+                DiagnosticLog.event("STOCK_QUOTE_EXIT", reason, "rvol=${ratio ?: "unavailable"}", symbol)
             }
             return added
         } finally {
@@ -162,11 +171,21 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
         "SELECT direction FROM paper_signal_events WHERE symbol=? AND signal_time=?", arrayOf(symbol, candleStart.plusSeconds(900).toString())
     ).use { if (it.moveToFirst()) (if (it.getInt(0) == 1) "PAPER_BUY" else "PAPER_SELL") else null }
 
-    private data class LedgerSignal(val time: Instant, val direction: Int, val price: Double)
+    private fun latestCompletedVolumeRatio(db: SQLiteDatabase, symbol: String, now: Instant): Double? {
+        val candleStart = Instant.ofEpochSecond((now.epochSecond / 900 - 1) * 900)
+        if (!isLatestCompletedCandle(candleStart, now)) return null
+        return db.rawQuery("SELECT relative_volume FROM latest_scan_rows WHERE symbol=? AND candle_time=?",
+            arrayOf(symbol, candleStart.toString())).use { cursor ->
+            if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getDouble(0) else null
+        }
+    }
 
+    private data class LedgerSignal(val time: Instant, val direction: Int, val price: Double, val profitReview: Boolean)
+
+    // Strip Z before sorting so a fractional-second exit sorts after an exact-second entry.
     private fun lastSignal(db: SQLiteDatabase, symbol: String): LedgerSignal? = db.rawQuery(
-        "SELECT signal_time,direction,price FROM paper_signal_events WHERE symbol=? ORDER BY signal_time DESC LIMIT 1", arrayOf(symbol)
-    ).use { if (it.moveToFirst()) LedgerSignal(Instant.parse(it.getString(0)), it.getInt(1), it.getDouble(2)) else null }
+        "SELECT signal_time,direction,price,profit_review FROM paper_signal_events WHERE symbol=? ORDER BY rtrim(signal_time, 'Z') DESC LIMIT 1", arrayOf(symbol)
+    ).use { if (it.moveToFirst()) LedgerSignal(Instant.parse(it.getString(0)), it.getInt(1), it.getDouble(2), it.getInt(3) != 0) else null }
 
     private fun recordSignalEvent(db: SQLiteDatabase, row: ScanRow) {
         val candle = row.candle ?: return

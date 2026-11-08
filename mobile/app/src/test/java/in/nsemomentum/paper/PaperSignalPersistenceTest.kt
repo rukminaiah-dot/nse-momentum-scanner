@@ -49,23 +49,39 @@ class PaperSignalPersistenceTest {
         return db.closePaperBuyOnQuote("TEST", quote, state, now)
     }
 
-    @Test fun quoteExitRequiresFreshPostEntryQuoteAndClosesOnlyOnce() {
+    @Test fun stopExitRequiresFreshPostEntryQuoteAndClosesOnlyOnce() {
         val context = RuntimeEnvironment.getApplication() as Context
-        for (price in listOf(99.99, 103.02)) {
-            context.deleteDatabase("paper_candles.db")
-            withDatabase(context) { db ->
-                save(db, row("PAPER_BUY"))
-                val boughtAt = start.plusSeconds(900)
-                val now = boughtAt.plusSeconds(1)
-                assertFalse(closeOnQuote(db, price, now, boughtAt.minusSeconds(1)))
-                assertFalse(closeOnQuote(db, price, now.plusSeconds(31), now))
-                assertFalse(closeOnQuote(db, 103.01, now))
-                assertTrue(closeOnQuote(db, price, now))
-                assertFalse(closeOnQuote(db, price, now.plusSeconds(1)))
-                save(db, row("PAPER_SELL", 900))
-                assertEquals(price, db.paperTradeHistory().single().sell!!, 0.0)
-                assertEquals(now, db.paperTradeHistory().single().soldAt)
-            }
+        context.deleteDatabase("paper_candles.db")
+        withDatabase(context) { db ->
+            save(db, row("PAPER_BUY"))
+            val boughtAt = start.plusSeconds(900)
+            val now = boughtAt.plusMillis(250)
+            assertFalse(closeOnQuote(db, 99.99, now, boughtAt.minusSeconds(1)))
+            assertFalse(closeOnQuote(db, 99.99, now.plusSeconds(31), now))
+            assertFalse(closeOnQuote(db, 100.0, now))
+            assertTrue(closeOnQuote(db, 99.99, now))
+            assertFalse(closeOnQuote(db, 99.98, now.plusMillis(250)))
+            save(db, row("PAPER_SELL", 900))
+            assertEquals(99.99, db.paperTradeHistory().single().sell!!, 0.0)
+            assertEquals(now, db.paperTradeHistory().single().soldAt)
+        }
+    }
+
+    @Test fun profitReviewSurvivesRestartAndIgnoresOldVolume() {
+        val context = RuntimeEnvironment.getApplication() as Context
+        context.deleteDatabase("paper_candles.db")
+        val entryClose = start.plusSeconds(900)
+        val nextClose = entryClose.plusSeconds(900)
+        withDatabase(context) { db ->
+            save(db, row("PAPER_BUY"))
+            assertFalse(closeOnQuote(db, 103.02, entryClose.plusSeconds(1)))
+            assertFalse(closeOnQuote(db, 105.0, entryClose.plusSeconds(2)))
+        }
+        withDatabase(context) { db ->
+            assertFalse(closeOnQuote(db, 102.0, nextClose.plusSeconds(1)))
+            save(db, row("PAPER_HOLD", 900).copy(relativeVolume = 1.49))
+            assertTrue(closeOnQuote(db, 102.0, nextClose.plusSeconds(2)))
+            assertEquals(102.0, db.paperTradeHistory().single().sell!!, 0.0)
         }
     }
 

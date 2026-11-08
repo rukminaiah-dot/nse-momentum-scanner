@@ -30,21 +30,23 @@ object ReversalStrategy {
         confirmationAt=null,beforeVolume=null,afterVolume=null,observationGap=true,action=reason)
 
     fun tick(state: ReversalState, price: Double, k: Double?, d: Double?, now: Instant,
-             before: Long? = null, after: Long? = null, volumeContinuous: Boolean = false): ReversalState {
+             before: Long? = null, after: Long? = null, volumeContinuous: Boolean = false, volumeRatio: Double? = null): ReversalState {
         if (!price.isFinite() || price <= 0) return interrupted(state,"INVALID_QUOTE")
         val day=now.atZone(MarketSession.ZONE).toLocalDate().toString()
         if (state.buy != null && state.buyAt != null) {
             val active=state.copy(peakPrice=maxOf(state.buy,state.peakPrice ?: state.buy,price),
                 confirmationAt=null)
-            val reason = if (StockSessionExit.due(state.buyAt, now)) "SESSION_1510"
-                else StockSessionExit.priceExit(state.buy, price)
-                    ?: "KD_BEARISH".takeIf { k != null && d != null && k in 0.0..100.0 && d in 0.0..100.0 && k < d }
+            val profitReview = StockSessionExit.reachedProfitReview(state.buy, active.peakPrice!!)
+            val bearish = k != null && d != null && k in 0.0..100.0 && d in 0.0..100.0 && k < d
+            val reason = StockSessionExit.exitReason(state.buyAt, now, state.buy, price, profitReview, volumeRatio, bearish)
             if (reason != null) {
-                if(state.manual) return active.copy(action=if(state.manualWaitUntil?.let { now<it }==true) "WAIT_SELL_$reason" else "SELL_REQUIRED_$reason")
-                val trade=ReversalTrade(state.buyAt,state.buy,now,price,reason,state.entryPolicy ?: if (state.beforeVolume == null) "LEGACY_ENTRY_STEP_EXIT" else "VOLUME_STEP_V2",state.beforeVolume,state.afterVolume)
+                val policy = if (state.manual) "MANUAL_RECORD" else state.entryPolicy
+                    ?: if (state.beforeVolume == null) "LEGACY_ENTRY_STEP_EXIT" else "VOLUME_STEP_V2"
+                val trade = ReversalTrade(state.buyAt, state.buy, now, price, reason, policy,
+                    state.beforeVolume, state.afterVolume, state.quantity, state.manual)
                 return ReversalState(trades=state.trades+trade,symbol=state.symbol,action="SELL_$reason",previousK=k,previousAt=now)
             }
-            return active.copy(action="BUY_ACTIVE_INITIAL_STOP")
+            return active.copy(action=if (profitReview) "BUY_ACTIVE_PROFIT_REVIEW" else "BUY_ACTIVE_INITIAL_STOP")
         }
         if (StockSessionExit.entriesClosed(now)) return interrupted(state,"NO_NEW_BUYS_AFTER_1510")
         if (k == null || d == null || !k.isFinite() || !d.isFinite() || k !in 0.0..100.0 || d !in 0.0..100.0)

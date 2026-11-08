@@ -8,16 +8,16 @@ import org.json.JSONArray
 
 object StockSessionExit {
     fun stopPrice(buy: Double): Double = buy * 0.99
-    fun targetPrice(buy: Double): Double = buy * 1.02
+    fun profitReviewPrice(buy: Double): Double = buy * 1.02
+    fun reachedProfitReview(buy: Double, price: Double): Boolean = price >= profitReviewPrice(buy) - buy * 1e-12
 
-    fun priceExit(buy: Double, price: Double): String? {
-        if (!buy.isFinite() || buy <= 0 || !price.isFinite() || price <= 0) return null
-        val tolerance = buy * 1e-12
-        return when {
-            price <= stopPrice(buy) + tolerance -> "STOP_1_PERCENT"
-            price >= targetPrice(buy) - tolerance -> "TARGET_2_PERCENT"
-            else -> null
-        }
+    fun exitReason(boughtAt: Instant, now: Instant, buy: Double, price: Double,
+                   profitReview: Boolean, volumeRatio: Double?, bearish: Boolean = false): String? = when {
+        due(boughtAt, now) -> "SESSION_1510"
+        price <= stopPrice(buy) + buy * 1e-12 -> "STOP_1_PERCENT"
+        bearish -> "KD_BEARISH"
+        profitReview && volumeRatio != null && volumeRatio in 0.0..<1.5 -> "VOLUME_BELOW_1_5X_AFTER_2_PERCENT"
+        else -> null
     }
 
     val cutoff: LocalTime = LocalTime.of(15,10)

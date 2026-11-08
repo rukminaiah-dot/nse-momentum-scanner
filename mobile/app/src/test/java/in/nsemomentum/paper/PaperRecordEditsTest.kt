@@ -7,16 +7,13 @@ import org.junit.Test
 class PaperRecordEditsTest {
     private val at=Instant.parse("2026-11-03T04:00:00Z")
     private fun command(op:PaperOperation,price:Double?=100.0,qty:Int=2,stamp:Instant?=at)=PaperRecordEdit("TEST",PaperSource.REVERSAL,op,stamp,price,qty)
-    @Test fun manualReversalStopsRequestSellAndNeverCloseWithoutUserRecord() {
+    @Test fun manualReversalEntryAutomaticallyClosesOnceAtStop() {
         val signal=ReversalState(buy=100.0,buyAt=at)
         val bought=PaperRecordEdits.reversal(signal,command(PaperOperation.BUY,101.0),at.plusSeconds(1),true,30.0,20.0)
         assertTrue(bought.manual);assertEquals(2,bought.quantity)
-        val stopped=ReversalStrategy.tick(bought,98.0,null,null,at.plusSeconds(2))
-        assertNotNull(stopped.buy);assertTrue(stopped.trades.isEmpty());assertTrue(stopped.action.startsWith("SELL_REQUIRED"))
-        val waited=PaperRecordEdits.reversal(stopped,command(PaperOperation.WAIT,null),at.plusSeconds(3),true,null,null)
-        assertNotNull(waited.buy)
-        val closed=PaperRecordEdits.reversal(waited,command(PaperOperation.SELL,99.0),at.plusSeconds(4),false,null,null)
-        assertNull(closed.buy);assertEquals(-4.0,closed.trades.single().gross,0.0)
+        val closed=ReversalStrategy.tick(bought,98.0,null,null,at.plusSeconds(2))
+        assertNull(closed.buy)
+        assertEquals(-6.0,closed.trades.single().gross,0.0)
         assertTrue(closed.trades.single().manual)
         assertEquals(1,PaperRecordEdits.reversal(closed,command(PaperOperation.SELL,99.0),at.plusSeconds(5),true,null,null).trades.size)
     }
@@ -62,3 +59,4 @@ class PaperRecordEditsTest {
         assertTrue(TradeResults.onDate(trades,java.time.LocalDate.parse("2026-11-02")).isEmpty())
     }
 }
+

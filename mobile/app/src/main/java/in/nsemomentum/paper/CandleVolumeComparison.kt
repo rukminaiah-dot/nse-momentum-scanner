@@ -5,6 +5,12 @@ import java.time.LocalDate
 
 data class CandleVolumeComparison(val candleStart:Instant,val volume:Double,val average:Double?,val ratio:Double?)
 
+fun isLatestCompletedCandle(start: Instant, now: Instant): Boolean {
+    val close = start.plusSeconds(900)
+    return now >= close && now < close.plusSeconds(900) &&
+        start.atZone(MarketSession.ZONE).toLocalDate() == now.atZone(MarketSession.ZONE).toLocalDate()
+}
+
 /** Input is history already verified by reversalHistory; never builds candles from live quote volume. */
 fun completedCandleVolume(verifiedHistory:List<Candle>,now:Instant):CandleVolumeComparison? {
     val date=now.atZone(MarketSession.ZONE).toLocalDate()

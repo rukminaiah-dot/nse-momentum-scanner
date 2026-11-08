@@ -191,25 +191,26 @@ object ReversalRunner {
                 val currentDate=now.atZone(MarketSession.ZONE).toLocalDate()
                 val officialOpen=quote?.sessionOpen?.takeIf { quote.sessionOpenDate==currentDate }
                     ?: history[stock.instrumentKey]?.firstOrNull { it.timestamp==currentDate.atTime(9,15).atZone(MarketSession.ZONE).toInstant() }?.open
+                val candleVolume = candleVolumes[stock.instrumentKey]?.takeIf { isLatestCompletedCandle(it.candleStart, now) }
                 val openingSample=OpeningSample(now,fresh,quote?.price,officialOpen,quote?.previousClose,preview?.context?.stochK,
-                    preview?.context?.stochD,priceWindow.previous(now),null,null,false)
+                    preview?.context?.stochD,priceWindow.previous(now),null,null,false,candleVolume?.ratio)
                 val previousOpening=openingStates[stock.instrumentKey] ?: OpeningState()
                 var opening=commands[stock.instrumentKey]?.let { OpeningMomentum.approve(previousOpening,openingSample,it) }
                     ?: OpeningMomentum.tick(previousOpening,openingSample)
                 changes[stock.instrumentKey]?.takeIf { it.source==PaperSource.OPENING }?.let { opening=PaperRecordEdits.opening(opening,it,now,fresh) }
                 nextOpening=nextOpening+(stock.instrumentKey to opening)
-                var updated=if (fresh) ReversalStrategy.tick(old,quote!!.price,preview?.context?.stochK,preview?.context?.stochD,now)
+                var updated=if (fresh) ReversalStrategy.tick(old,quote!!.price,preview?.context?.stochK,preview?.context?.stochD,now,volumeRatio=candleVolume?.ratio)
                     else ReversalStrategy.interrupted(old,if (old.buy != null) "BUY_ACTIVE_WAITING_FRESH_QUOTE" else "QUOTE_GAP_LAST_VALID_K_RETAINED")
                 changes[stock.instrumentKey]?.takeIf { it.source==PaperSource.REVERSAL }?.let { updated=PaperRecordEdits.reversal(updated,it,now,fresh,preview?.context?.stochK,preview?.context?.stochD) }
                 val priorPreview=previousPreviews[stock.instrumentKey]
                 val openingWatch=fresh && local>=java.time.LocalTime.of(9,15) && local<java.time.LocalTime.of(9,30) && preview?.context?.let { it.stochK>20 && it.stochK<50 && it.stochK>it.stochD }==true
                 val wasOpeningWatch=priorPreview?.context?.let { it.stochK>20 && it.stochK<50 && it.stochK>it.stochD }==true
-                val signalChanged=(openingWatch && !wasOpeningWatch) || (updated.watchDate!=null && updated.watchDate!=old.watchDate) || opening.alertAt!=previousOpening.alertAt || updated.confirmationAt!=old.confirmationAt || updated.buyAt!=old.buyAt || updated.trades.size!=old.trades.size || (updated.action.startsWith("SELL_REQUIRED") && updated.action!=old.action)
+                val signalChanged=(openingWatch && !wasOpeningWatch) || (updated.watchDate!=null && updated.watchDate!=old.watchDate) || opening.alertAt!=previousOpening.alertAt || updated.confirmationAt!=old.confirmationAt || updated.buyAt!=old.buyAt || updated.trades.size!=old.trades.size || opening.trades.size!=previousOpening.trades.size
                 if(signalChanged) signalTimes[stock.instrumentKey]=now
                 val previousPreview=previousPreviews[stock.instrumentKey]
                 if(preview!=null) previousPreviews[stock.instrumentKey]=preview
                 next=next+(stock.instrumentKey to updated.copy(symbol=stock.symbol))
-                ReversalRow(stock,updated.copy(symbol=stock.symbol),preview,errors[stock.instrumentKey] ?: if (fresh) updated.action else "Waiting for fresh live quote / market open",opening,openingSample,previousPreview,signalTimes[stock.instrumentKey]?.takeIf { it<=now },candleVolume=candleVolumes[stock.instrumentKey]?.takeIf { it.candleStart.atZone(MarketSession.ZONE).toLocalDate()==now.atZone(MarketSession.ZONE).toLocalDate() })
+                ReversalRow(stock,updated.copy(symbol=stock.symbol),preview,errors[stock.instrumentKey] ?: if (fresh) updated.action else "Waiting for fresh live quote / market open",opening,openingSample,previousPreview,signalTimes[stock.instrumentKey]?.takeIf { it<=now },candleVolume=candleVolume)
             }
             changes.filterKeys { key -> work.none { it.instrumentKey==key } }.forEach { (key,edit) ->
                 if(edit.source==PaperSource.OPENING) nextOpening=nextOpening+(key to PaperRecordEdits.opening(openingStates[key] ?: OpeningState(),edit,now,false))
@@ -239,6 +240,8 @@ object ReversalRunner {
                     val previous=openingStates[row.stock.instrumentKey]
                     if(row.opening.alertAt!=null && row.opening.alertAt!=previous?.alertAt)
                         DiagnosticLog.event("OPENING_ALERT",row.opening.alert ?: "WAIT",symbol=row.stock.symbol)
+                    if (row.opening.trades.size > (previous?.trades?.size ?: 0))
+                        DiagnosticLog.event("OPENING_SIGNAL",row.opening.trades.last().reason,symbol=row.stock.symbol)
                     OpeningNotifications.update(context,row,live,now)
                     commands[row.stock.instrumentKey]?.let { command ->
                         OpeningNotifications.result(context,row.stock,previous ?: OpeningState(),row.opening,command)

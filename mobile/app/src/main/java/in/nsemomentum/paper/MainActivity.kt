@@ -662,7 +662,7 @@ private fun PaperScannerApp() {
                             Text("Prices stream while this app is open. Last-trade times show quote freshness. Paper signals use completed 15-minute candles.", style = MaterialTheme.typography.bodySmall)
                             Spacer(Modifier.height(12.dp))
                             Text("15-MINUTE PAPER SIGNALS", fontWeight = FontWeight.Bold)
-                            Text("Volume qualifies stocks once for the day. BUY: qualified today and confirmed K above D, without an EMA filter. SELL: completed-candle K below D, a 1% stop loss, a 2% profit target, or the 15:10 cutoff. Price and time exits use fresh live quotes. Indices keep their separate rules.", style = MaterialTheme.typography.bodySmall) }
+                            Text("Volume qualifies stocks once for the day. BUY requires a shortlist and confirmed K>D. Automatic SELL triggers at a 1% loss, completed-candle K<D, or 15:10 IST. After +2%, verified 15m relative volume below 1.5× also triggers SELL. Price, volume and time exits use fresh quotes.", style = MaterialTheme.typography.bodySmall) }
                         items(selectedStocks, key = { it.symbol }) { stock ->
                             val row = bySymbol[stock.symbol]
                             Card(Modifier.fillMaxWidth()) {

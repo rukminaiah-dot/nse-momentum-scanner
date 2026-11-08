@@ -23,12 +23,15 @@ class ReversalStoreTest {
         assertNull(restored.previousK);assertNull(restored.confirmationAt)
         assertEquals(now,restored.identifiedAt)
         assertNotNull(ReversalStrategy.tick(restored,100.7,null,null,now.plusSeconds(1)).buy)
-        val closed=ReversalStrategy.tick(restored,102.0,null,null,now.plusSeconds(2))
+        val armed=ReversalStrategy.tick(restored,102.0,null,null,now.plusSeconds(2))
+        ReversalStore(context).write(mapOf("NSE_EQ|TEST" to armed))
+        val reloaded=ReversalStore(context).read().getValue("NSE_EQ|TEST")
+        val closed=ReversalStrategy.tick(reloaded,101.0,null,null,now.plusSeconds(3),volumeRatio=1.49)
         ReversalStore(context).write(mapOf("NSE_EQ|TEST" to closed))
         val t=ReversalStore(context).read().getValue("NSE_EQ|TEST").trades.single()
         assertEquals("VOLUME_STEP_V2",t.policy);assertEquals(150L,t.afterVolume!!)
     }
-    @Test fun restartKeepsManualApprovalAndQuantitySoStopsCannotAutoCloseIt() {
+    @Test fun restartKeepsManualEntryAndQuantityForAutomaticStop() {
         val context=RuntimeEnvironment.getApplication() as Context
         val at=Instant.parse("2026-11-03T04:00:00Z")
         val store=ReversalStore(context)
@@ -36,12 +39,12 @@ class ReversalStoreTest {
         store.write(mapOf("TEST" to manual))
         val saved=store.read().getValue("TEST")
         assertTrue(saved.manual);assertEquals(4,saved.quantity);assertEquals(at,saved.recordedAt)
-        val exit=ReversalStrategy.tick(saved,98.0,null,null,at.plusSeconds(1))
-        assertNotNull(exit.buy);assertTrue(exit.trades.isEmpty())
-        val closed=PaperRecordEdits.reversal(exit,PaperRecordEdit("TEST",PaperSource.REVERSAL,PaperOperation.SELL,at,99.0,4),at.plusSeconds(2),false,null,null)
+        val closed=ReversalStrategy.tick(saved,98.0,null,null,at.plusSeconds(1))
+        assertNull(closed.buy)
+        assertEquals("STOP_1_PERCENT",closed.trades.single().reason)
         store.write(mapOf("TEST" to closed))
         val trade=store.read().getValue("TEST").trades.single()
-        assertTrue(trade.manual);assertEquals(4,trade.quantity);assertEquals(-4.0,trade.gross,0.0)
+        assertTrue(trade.manual);assertEquals(4,trade.quantity);assertEquals(-8.0,trade.gross,0.0)
     }
     @Test fun kdOnlyEntryKeepsItsPolicyAcrossRestartAndExit() {
         val context=RuntimeEnvironment.getApplication() as Context
@@ -60,7 +63,7 @@ class ReversalStoreTest {
             """{"NSE_EQ|TEST":{"symbol":"TEST","buy":100.0,"buyAt":"2026-10-30T05:00:00Z","reached80":true,"trades":[["2026-10-29T05:00:00Z",100.0,"2026-10-29T06:00:00Z",101.0,"K_BACK_BELOW_80"]]}}""").commit()
         val restored=ReversalStore(context).read().getValue("NSE_EQ|TEST")
         assertNull(restored.peakPrice)
-        assertEquals("STOP_1_PERCENT",StockSessionExit.priceExit(restored.buy!!,99.0))
+        assertEquals(99.0,StockSessionExit.stopPrice(restored.buy!!),0.0)
         assertEquals("LEGACY_80",restored.trades.single().policy)
     }
 }

@@ -46,7 +46,6 @@ object OpeningNoticeFormatter {
             "VOLUME_DROP_30_PERCENT" -> "Volume fell 30% or more · review exit"
             "KD_BEARISH" -> "K is below D"
             "STOP_1_PERCENT" -> "1% stop loss reached"
-            "TARGET_2_PERCENT" -> "2% profit target reached"
             "PRICE_STOP" -> "Price stop / profit protection reached"
             "SESSION_1510" -> "15:10 exit · approval required"
             else -> reason.replace('_',' ')
@@ -70,8 +69,8 @@ object OpeningNotifications {
     private fun allowed(context:Context)=Build.VERSION.SDK_INT<33 || context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED
     private fun manager(context:Context)=context.getSystemService(NotificationManager::class.java)
     private fun channel(context:Context) {
-        manager(context).createNotificationChannel(NotificationChannel(CHANNEL,"Paper BUY & SELL approvals",NotificationManager.IMPORTANCE_HIGH).apply {
-            description="One-minute paper trade approvals with direct BUY, SELL and SKIP buttons"
+        manager(context).createNotificationChannel(NotificationChannel(CHANNEL,"Paper Opening BUY approvals",NotificationManager.IMPORTANCE_HIGH).apply {
+            description="One-minute Opening BUY approvals with direct BUY and SKIP buttons"
             enableVibration(true);lockscreenVisibility=android.app.Notification.VISIBILITY_PUBLIC
         })
     }
