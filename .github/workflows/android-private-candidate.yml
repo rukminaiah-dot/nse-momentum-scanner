@@ -109,11 +109,7 @@ jobs:
           adb shell settings put global window_animation_scale 0
           adb shell settings put global transition_animation_scale 0
           adb shell settings put global animator_duration_scale 0
-          adb install "$RUNNER_TEMP/previous-android-candidate/app-release.apk"
-          adb shell dumpsys package com.nsemomentum.paper.scanner | grep versionName
-          adb install -r mobile/app/build/outputs/apk/release/app-release.apk
-          adb shell dumpsys package com.nsemomentum.paper.scanner | grep versionName
-          adb shell am start -W -n com.nsemomentum.paper.scanner/com.nsemomentum.paper.MainActivity
+          python mobile/tools/test_signed_upgrade.py "$RUNNER_TEMP/previous-android-candidate/app-release.apk" mobile/app/build/outputs/apk/release/app-release.apk mobile/app/build/outputs/apk/release/android-candidate.json
           adb install mobile/app/build/outputs/apk/debug/app-debug.apk
           adb install mobile/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
           adb shell am instrument -w -r com.nsemomentum.paper.scanner.dev.test/androidx.test.runner.AndroidJUnitRunner > "$RUNNER_TEMP/dialog-tests.txt"
@@ -123,6 +119,7 @@ jobs:
           adb exec-out run-as com.nsemomentum.paper.scanner.dev cat files/sell-form.png > mobile/app/build/outputs/page-previews/sell-form.png
           adb exec-out run-as com.nsemomentum.paper.scanner.dev cat files/edit-buy-form.png > mobile/app/build/outputs/page-previews/edit-buy-form.png
           echo 'Prior-to-current APK upgrade and manual-price dialog tests passed on Android 16.'
+          cat mobile/app/build/outputs/apk/release/android-candidate.json
       - uses: actions/upload-artifact@v4
         with:
           name: android-permanent-signed-candidate

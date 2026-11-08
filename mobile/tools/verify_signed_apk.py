@@ -27,6 +27,16 @@ def inspect(apk, build_tools):
     return {"packageName": match[1], "versionCode": int(match[2]), "versionName": match[3], "signingSha256": signers[0].lower()}
 
 
+def check_packaged_manifest(apk, build_tools):
+    manifest = subprocess.check_output(
+        [str(build_tools / "aapt"), "dump", "xmltree", str(apk), "AndroidManifest.xml"],
+        text=True,
+    )
+    for entry in ("android.permission.REQUEST_INSTALL_PACKAGES", f"{PACKAGE}.updates"):
+        if f'"{entry}"' in manifest:
+            raise ValueError(f"Installer entry is present in the packaged manifest: {entry}")
+
+
 def validate(candidate, expected_sha256, previous=None, package=PACKAGE):
     if not re.fullmatch(r"[a-fA-F0-9]{64}", expected_sha256 or ""):
         raise ValueError("Permanent public signing fingerprint is missing or invalid.")
@@ -53,8 +63,10 @@ def main():
     previous = inspect(args.previous_apk, args.build_tools) if args.previous_apk else None
     report = dict(validate(candidate, args.expected_sha256, previous), sha256=hashlib.sha256(args.apk.read_bytes()).hexdigest(), commit=args.commit,
                   previousApkChecked=previous is not None, deviceUpdateVerified=False)
+    check_packaged_manifest(args.apk, args.build_tools)
+    report["installerEntriesAbsent"] = True
     args.report.write_text(json.dumps(report, indent=2) + "\n")
-    print("Candidate package, signature and pinned certificate verified. Device update testing is still required.")
+    print("Candidate package, signature, pinned certificate and packaged manifest verified.")
 
 
 if __name__ == "__main__":

@@ -850,55 +850,36 @@ private fun SettingsPage(
     modifier: Modifier = Modifier
 ) {
     var tokenInput by remember { mutableStateOf("") }
-    val updateContext = LocalContext.current
+    val context = LocalContext.current
     var diagnosticStatus by remember { mutableStateOf("") }
     val diagnosticScope = rememberCoroutineScope()
     val exportLog = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
         if (uri != null) diagnosticScope.launch {
             diagnosticStatus = try {
                 withContext(Dispatchers.IO) {
-                    val text = DiagnosticLog.export(updateContext)
-                    val output = updateContext.contentResolver.openOutputStream(uri) ?: error("Could not open destination")
+                    val text = DiagnosticLog.export(context)
+                    val output = context.contentResolver.openOutputStream(uri) ?: error("Could not open destination")
                     output.use { it.write(text.toByteArray(Charsets.UTF_8)) }
                 }
                 "Diagnostic log saved"
             } catch (_: Exception) { "Could not save file · use Copy diagnostic summary" }
         }
     }
-    val updateScope = rememberCoroutineScope()
     val installedVersion = remember {
         runCatching {
             @Suppress("DEPRECATION")
-            val info = updateContext.packageManager.getPackageInfo(updateContext.packageName, 0)
+            val info = context.packageManager.getPackageInfo(context.packageName, 0)
             info.versionName ?: "Unavailable"
         }.getOrDefault("Unavailable")
     }
-    var updating by remember { mutableStateOf(false) }
-    var updateStatus by remember { mutableStateOf("Updates require a privately signed release. Existing app data is preserved.") }
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("App version: $installedVersion", style = MaterialTheme.typography.titleMedium)
-        Text("App updates", style = MaterialTheme.typography.titleMedium)
-        Button(enabled = !updating && backupEnabled, onClick = {
-            updating = true
-            updateStatus = "Checking and verifying update…"
-            updateScope.launch {
-                try {
-                    val installer = withContext(Dispatchers.IO) { ApkUpdates(updateContext).prepare() }
-                    updateContext.startActivity(installer)
-                    updateStatus = "Follow Android's installation prompt. If installation is not allowed, enable it for this app and retry."
-                } catch (cancelled: CancellationException) { throw cancelled }
-                catch (error: Exception) {
-                    updateStatus = error.message?.takeIf { it.length < 180 } ?: "Update unavailable; existing app is unchanged."
-                } finally { updating = false }
-            }
-        }) { Text(if (updating) "Checking update…" else "Download verified update") }
-        Text(updateStatus, style = MaterialTheme.typography.bodySmall)
         Text("Diagnostics", style = MaterialTheme.typography.titleMedium)
         Button(onClick = { exportLog.launch("nse-diagnostic-log.txt") }) { Text("Export diagnostic log") }
         Button(onClick = {
             diagnosticScope.launch {
-                val text = withContext(Dispatchers.IO) { DiagnosticLog.export(updateContext) }
-                val clipboard = updateContext.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                val text = withContext(Dispatchers.IO) { DiagnosticLog.export(context) }
+                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                 clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NSE diagnostics",text.takeLast(60000)))
                 diagnosticStatus = "Diagnostic summary copied"
             }

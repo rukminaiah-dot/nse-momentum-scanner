@@ -120,10 +120,8 @@ and verify that selections, settings, token access and paper history survive.
 The metadata verifier can compare two APKs with `--previous-apk`; this checks
 identity/version compatibility, not actual phone data preservation.
 
-The in-app update button needs an explicitly approved published release and
-update manifest. That channel is not published by these setup steps. Android
-still asks the user to approve installation. Live Upstox and phone background
-operation remain separate validations.
+Download signed updates from the private GitHub Actions workflow. Live Upstox
+and phone background operation remain separate validations.
 
 Official references:
 - https://developer.android.com/studio/publish/app-signing

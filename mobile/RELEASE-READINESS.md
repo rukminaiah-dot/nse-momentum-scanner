@@ -43,10 +43,6 @@ There is no broker order endpoint. The web production implementation is unchange
   proven available. Its certificate and package must be compared before update.
 - Do not uninstall the existing app. If an original-key update is impossible,
   create a new stable package and migrate only data the old app can export.
-- The in-app updater is implemented but a signed release channel has not been
-  published. Debug builds refuse updates. Release builds require a newer version,
-  matching package, SHA256, and the installed signing certificate before opening
-  Android's confirmation. End-to-end real-device installation remains unverified.
 - Live NSE/BSE/indices data, realme background behavior, backup/restore and two
   consecutive signed installations retaining data still require device tests.
 - No profitability or historical performance is established by synthetic tests.
@@ -64,20 +60,7 @@ The job verifies the public ANDROID_SIGNING_CERT_SHA256 environment variable.
 The workflow runs on experimental pushes and explicitly skips signing when
 configuration is absent; a successful status check alone is not a signed build.
 
-Before enabling downloads in the app, retain one signing identity, use an HTTPS
-release manifest with package/version/SHA256, verify package and signing certificate
-against the installed app before invoking Android's installer, reject downgrades,
-and require the user's installation confirmation. Publishing that channel needs
-explicit approval. Google Play is not used for this stage.
-
-## Update channel contract (not published)
-
-A release tagged `android-paper-VERSION` must contain `android-update.json` with
-`packageName`, numeric `versionCode`, HTTPS GitHub release `apkUrl`, and SHA256
-`sha256`, plus the privately signed APK asset. Publishing requires explicit user
-approval. The updater sends no Upstox token, rejects downgrades and foreign
-packages/certificates, and leaves Android to ask the user to allow installation.
-The current candidate does not create a release or publish update metadata.
+Download signed candidates from the private GitHub Actions workflow.
 
 ## Test gates for 0.8.0 preview
 
