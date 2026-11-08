@@ -33,15 +33,13 @@ class PaperRecordEditsTest {
         assertEquals(9.0,s.trades.single().gross,0.0)
         assertEquals((104.0/101-1)*100,s.trades.single().percent,1e-8)
     }
-    @Test fun openingManualRecordNeedsCurrentSetupButSellsAndCorrectionsAreUserRecords() {
-        val pending=OpeningState(alert="OPENING_BUY",alertAt=at,day="2026-11-03")
-        assertNull(PaperRecordEdits.opening(pending,command(PaperOperation.BUY),at,false).buy)
-        val bought=PaperRecordEdits.opening(pending,command(PaperOperation.BUY,100.0,3),at,true)
-        assertEquals(3,bought.quantity)
-        val closed=PaperRecordEdits.opening(bought,command(PaperOperation.SELL,101.0),at.plusSeconds(5),false)
+    @Test fun openingRecordsCanBeCorrectedAfterAnAutomaticEntry() {
+        val opening=OpeningState(day="2026-11-03",buy=100.0,buyAt=at,quantity=3,automatic=true)
+        val closed=PaperRecordEdits.opening(opening,command(PaperOperation.SELL,101.0),at.plusSeconds(5))
         assertNull(closed.buy);assertEquals(3.0,closed.trades.single().gross,0.0)
-        val corrected=PaperRecordEdits.opening(closed,command(PaperOperation.EDIT_SELL,102.0),at.plusSeconds(6),false)
+        val corrected=PaperRecordEdits.opening(closed,command(PaperOperation.EDIT_SELL,102.0),at.plusSeconds(6))
         assertEquals(6.0,corrected.trades.single().gross,0.0)
+        assertFalse(corrected.trades.single().automatic)
     }
     @Test fun closedOtherStrategyCannotHideCurrentManualPositionOrBuySetup() {
         val closed=OpeningState(trades=listOf(OpeningTrade(at.minusSeconds(60),100.0,at,101.0,1,"TEST")))

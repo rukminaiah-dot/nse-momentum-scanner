@@ -172,7 +172,6 @@ private fun PaperScannerApp() {
         }
     }
     var reversalSnapshot by remember { mutableStateOf(ReversalRunner.state.value) }
-    OpeningApprovalDialog(reversalSnapshot,livePrices)
     val reversalStocks = reversalMonitorSelection(stocks.filter { it.symbol in favourites })
     // Reconnecting prices with the same token must not cancel/reload strategy state.
     val reversalToken = remember(tokenConfigured,liveTokenRevision) { tokenStore.read() }
@@ -796,7 +795,7 @@ internal fun Dashboard(
         }
         Text("Socket ${if(livePrices.connected) "connected" else "disconnected"} · K/D check ${compactTime(previewSampledAt)}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         PaperQuantityBar()
-        Text("Manual quantity is used on Signals; volume history uses one share.",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Paper quantity applies to automatic Opening BUYs and manual entries on Signals. Dashboard trades use one share.",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         CompactResults(TradeResults.volume(paperTrades))
         TextButton(onClick={legacyExpanded=!legacyExpanded}) { Text("Legacy analysis ${if(legacyExpanded) "⌃" else "⌄"}") }
         if(legacyExpanded) PaperWeeklyChart(weeklySummary,weeklyOutcomes)

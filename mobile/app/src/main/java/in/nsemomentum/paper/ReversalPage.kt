@@ -27,7 +27,7 @@ data class SignalItem(val row:ReversalRow,val source:PaperSource) {
     val buyAt:Instant? get()=if(source==PaperSource.OPENING) row.opening.buyAt else row.state.buyAt
     val quantity:Int get()=if(source==PaperSource.OPENING) row.opening.quantity else row.state.quantity
     val held:Boolean get()=buy!=null && (source==PaperSource.OPENING || row.state.manual)
-    val latest:Instant get()=if(source==PaperSource.OPENING) listOfNotNull(row.opening.identifiedAt,row.opening.alertAt,row.opening.recordedAt,buyAt,row.opening.trades.lastOrNull()?.sellAt).maxOrNull() ?: row.signalAt ?: Instant.EPOCH
+    val latest:Instant get()=if(source==PaperSource.OPENING) listOfNotNull(row.opening.identifiedAt,row.opening.recordedAt,buyAt,row.opening.trades.lastOrNull()?.sellAt).maxOrNull() ?: row.signalAt ?: Instant.EPOCH
         else listOfNotNull(row.state.identifiedAt,row.signalAt,row.state.recordedAt,buyAt,row.state.confirmationAt,row.state.trades.lastOrNull()?.sellAt).maxOrNull() ?: Instant.EPOCH
 }
 fun unifiedSignals(snapshot:ReversalSnapshot,now:Instant):List<SignalItem> {
@@ -35,11 +35,11 @@ fun unifiedSignals(snapshot:ReversalSnapshot,now:Instant):List<SignalItem> {
     return snapshot.rows.flatMap { row ->
         val k=row.preview?.context?.stochK;val d=row.preview?.context?.stochD
         val openingWatch=row.openingSample?.fresh==true && time>=LocalTime.of(9,15) && time<LocalTime.of(9,30) && k!=null && d!=null && k>20 && k<50 && k>d
-        val opening=row.opening.identifiedAt?.atZone(MarketSession.ZONE)?.toLocalDate()==date || openingWatch || row.opening.alert!=null || row.opening.buy!=null || row.opening.trades.lastOrNull()?.sellAt?.atZone(MarketSession.ZONE)?.toLocalDate()==date
+        val opening=row.opening.identifiedAt?.atZone(MarketSession.ZONE)?.toLocalDate()==date || openingWatch || row.opening.buy!=null || row.opening.trades.lastOrNull()?.sellAt?.atZone(MarketSession.ZONE)?.toLocalDate()==date
         val reversal=row.state.identifiedAt?.atZone(MarketSession.ZONE)?.toLocalDate()==date || row.state.watchDate==date.toString() || row.state.buy!=null || row.state.trades.lastOrNull()?.sellAt?.atZone(MarketSession.ZONE)?.toLocalDate()==date
         val candidates=listOfNotNull(if(opening) SignalItem(row,PaperSource.OPENING) else null,if(reversal) SignalItem(row,PaperSource.REVERSAL) else null)
         val held=candidates.filter { it.held }
-        val active=candidates.filter { item -> if(item.source==PaperSource.OPENING) openingWatch || row.opening.alert!=null || row.opening.buy!=null else row.state.watchDate==date.toString() || row.state.buy!=null }
+        val active=candidates.filter { item -> if(item.source==PaperSource.OPENING) openingWatch || row.opening.buy!=null else row.state.watchDate==date.toString() || row.state.buy!=null }
         if(held.isNotEmpty()) held else listOfNotNull((active.ifEmpty { candidates }).maxByOrNull { it.latest })
     }.sortedWith(compareByDescending<SignalItem> { it.latest.takeIf { t->t<=now } ?: Instant.EPOCH }.thenBy { it.id })
 }
@@ -55,11 +55,11 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
     val signals=unifiedSignals(snapshot,now)
     fun edit(trade:UiTrade,operation:PaperOperation) { trade.source?.let { source -> request=RecordRequest(trade.key,trade.symbol,source,operation,trade.buyAt,if(operation==PaperOperation.EDIT_BUY) trade.buy else trade.sell,trade.quantity) } }
     if(help) AlertDialog(onDismissRequest={help=false},title={Text("Rules & alerts")},text={Column(Modifier.heightIn(max=480.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-        Text("Opening: 09:17–09:30, 20<K<50, K>D and K rising; open above previous close. Opening BUY requires approval.")
+        Text("Opening: 09:17–09:30, 20<K<50, K>D and K rising; open above previous close. Opening BUY is automatic.")
         Text("Reversal BUY follows an observed cross above 20 with K>D after shortlisting below 20.")
         Text("Automatic SELL triggers at a 1% loss, live K<D, or 15:10 IST. After +2%, verified 15m relative volume below 1.5× also triggers SELL.")
         Text("Prices entered here are unverified paper records. Original automatic history is retained and labelled. Records are local and are not included in the existing backup. Avg % is the mean closed-trade return; P&L includes recorded quantity, before costs.")
-        OpeningNotificationPermission(showQuantity=false)
+        OpeningNotificationPermission()
     }},confirmButton={TextButton(onClick={help=false}) { Text("Done") }})
     request?.let { r -> PaperRecordDialog(r,onDismiss={request=null},onSave={price,qty ->
         val queued=ReversalRunner.record(PaperRecordEdit(r.key,r.source,r.operation,r.at,price,qty))
@@ -100,7 +100,7 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
     val k=displayPreview?.context?.stochK;val d=displayPreview?.context?.stochD;val pk=row.previousPreview?.context?.stochK;val pd=row.previousPreview?.context?.stochD
     val ratio=row.candleVolume?.ratio
     val fresh=sample?.fresh==true && row.preview!=null && java.time.Duration.between(sample.at,now).seconds in 0..5 && java.time.Duration.between(row.preview.sampledAt,now).seconds in 0..5
-    val canBuy=row.preview!=null && if(item.source==PaperSource.OPENING) row.opening.alert=="OPENING_BUY" else row.state.buy!=null && !row.state.manual && k!=null && d!=null && k>d
+    val canBuy=row.preview!=null && item.source==PaperSource.REVERSAL && row.state.buy!=null && !row.state.manual && k!=null && d!=null && k>d
     val lastTrade=TradeResults.reversal(ReversalSnapshot(listOf(row))).filter { it.source==item.source }.maxByOrNull { it.sellAt ?: Instant.EPOCH }
     val closedToday=lastTrade?.sellAt?.atZone(MarketSession.ZONE)?.toLocalDate()==LocalDate.now(MarketSession.ZONE)
     val label=when { item.held->"BOUGHT";canBuy->"BUY SIGNAL";closedToday->"CLOSED";item.buy==null && item.latest!=Instant.EPOCH->"IDENTIFIED";else->"WATCH" }
@@ -124,7 +124,7 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
                     Button(onClick={onRecord(PaperOperation.SELL,item.buyAt,quote?.price,item.quantity)},colors=ButtonDefaults.buttonColors(containerColor=MaterialTheme.colorScheme.error)) { Text("SELL") }
                 }
             } else if(canBuy) {
-                Button(enabled=fresh,onClick={onRecord(PaperOperation.BUY,if(item.source==PaperSource.OPENING) row.opening.alertAt else item.buyAt,quote?.price,defaultQuantity)}) { Text("⊕ BUY") }
+                Button(enabled=fresh,onClick={onRecord(PaperOperation.BUY,item.buyAt,quote?.price,defaultQuantity)}) { Text("⊕ BUY") }
             } else if(lastTrade!=null && lastTrade.sellAt?.atZone(MarketSession.ZONE)?.toLocalDate()==LocalDate.now(MarketSession.ZONE)) {
                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick={onRecord(PaperOperation.EDIT_BUY,lastTrade.buyAt,lastTrade.buy,lastTrade.quantity)},contentPadding=PaddingValues(0.dp)) { Text("BUY ${compactPrice(lastTrade.buy)} ✎",fontSize=12.sp) }
@@ -155,7 +155,7 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
                     DetailLine("1% stop loss", compactPrice(StockSessionExit.stopPrice(buy)))
                     DetailLine("Volume exit starts at +2%", compactPrice(StockSessionExit.profitReviewPrice(buy)))
                 }
-                Text(if(item.source==PaperSource.OPENING) row.opening.alert?.replace('_',' ') ?: row.opening.status else reversalActionLabel(row.state.action),style=MaterialTheme.typography.bodySmall)
+                Text(if(item.source==PaperSource.OPENING) row.opening.status else reversalActionLabel(row.state.action),style=MaterialTheme.typography.bodySmall)
                 if(row.status!=row.state.action && row.status.contains("FAILED")) Text(row.status,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error)
                 Text("Quote ${compactTime(quote?.tradedAt)} · provisional live K/D",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }

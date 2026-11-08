@@ -4,32 +4,28 @@ import java.time.Duration
 import java.time.Instant
 import java.time.LocalTime
 
-/** Opening paper entries require approval and rule-based exits are automatic. */
-data class OpeningTrade(val buyAt:Instant,val buy:Double,val sellAt:Instant,val sell:Double,val quantity:Int,val reason:String) {
+/** Automatic Opening paper entries and exits. */
+data class OpeningTrade(val buyAt:Instant,val buy:Double,val sellAt:Instant,val sell:Double,val quantity:Int,val reason:String,val automatic:Boolean=false) {
     val gross:Double get()=(sell-buy)*quantity
     val percent:Double get()=(sell/buy-1)*100
 }
 data class OpeningState(
     val day:String="",val previousK:Double?=null,val previousD:Double?=null,val previousAt:Instant?=null,
     val boughtToday:Boolean=false,val skipped:Boolean=false,val buy:Double?=null,val buyAt:Instant?=null,
-    val quantity:Int=0,val peak:Double?=null,val alert:String?=null,val alertAt:Instant?=null,
-    val waitUntil:Instant?=null,val status:String="Waiting for opening data",val trades:List<OpeningTrade> = emptyList(),val recordedAt:Instant?=null,val identifiedAt:Instant?=null
+    val quantity:Int=0,val peak:Double?=null,val automatic:Boolean=false,val status:String="Waiting for opening data",val trades:List<OpeningTrade> = emptyList(),val recordedAt:Instant?=null,val identifiedAt:Instant?=null
 )
 data class OpeningSample(val at:Instant,val fresh:Boolean,val price:Double?,val open:Double?,val previousClose:Double?,
     val k:Double?,val d:Double?,val price60:Double?,val beforeVolume:Long?,val latestVolume:Long?,val continuous:Boolean,val volumeRatio:Double?=null)
-enum class OpeningChoice { BUY, SELL, WAIT, SKIP }
-data class OpeningApproval(val key:String,val alertAt:Instant,val choice:OpeningChoice,val quantity:Int=1)
 object OpeningMomentum {
-    fun tick(saved:OpeningState,s:OpeningSample):OpeningState {
+    fun tick(saved:OpeningState,s:OpeningSample,quantity:Int=1):OpeningState {
         val date=s.at.atZone(MarketSession.ZONE).toLocalDate().toString()
         var old=if(saved.day==date) saved else saved.copy(day=date,previousK=null,previousD=null,previousAt=null,
-            boughtToday=false,skipped=false,identifiedAt=null,alert=null,alertAt=null,waitUntil=null)
+            boughtToday=false,skipped=false,identifiedAt=null)
         val price=s.price
-        if(!s.fresh || price==null || !price.isFinite() || price<=0) return old.copy(previousAt=null,alert=null,alertAt=null,status="Waiting for fresh quote")
+        if(!s.fresh || price==null || !price.isFinite() || price<=0) return old.copy(previousAt=null,status="Waiting for fresh quote")
         val kd=s.k!=null && s.d!=null && s.k.isFinite() && s.d.isFinite() && s.k in 0.0..100.0 && s.d in 0.0..100.0
         val recent=old.previousAt?.let { Duration.between(it,s.at).toMillis() in 1..5000 }==true
         val rising=kd && recent && old.previousK!=null && s.k!!>old.previousK
-        val upward=rising || (old.alert=="OPENING_BUY" && kd && recent && old.previousK!=null && s.k!!>=old.previousK)
         val time=s.at.atZone(MarketSession.ZONE).toLocalTime()
         if(kd && time>=LocalTime.of(9,15) && time<LocalTime.of(9,30) && s.k!!>20 && s.k<50 && s.k>s.d!! && old.identifiedAt==null) old=old.copy(identifiedAt=s.at)
         old=old.copy(previousK=if(kd) s.k else old.previousK,previousD=if(kd) s.d else old.previousD,previousAt=if(kd) s.at else null)
@@ -40,35 +36,20 @@ object OpeningMomentum {
             val profitReview = StockSessionExit.reachedProfitReview(openBuy, peak)
             val reason = StockSessionExit.exitReason(boughtAt, s.at, openBuy, price, profitReview, s.volumeRatio, kd && s.k!! < s.d!!)
             if (reason != null) {
-                val trade = OpeningTrade(boughtAt, openBuy, s.at, price, old.quantity, reason)
-                return old.copy(buy=null,buyAt=null,quantity=0,peak=null,alert=null,alertAt=null,waitUntil=null,
+                val trade = OpeningTrade(boughtAt, openBuy, s.at, price, old.quantity, reason, old.automatic)
+                return old.copy(buy=null,buyAt=null,quantity=0,peak=null,automatic=false,
                     trades=old.trades+trade,status="Paper SELL · ${reason.replace('_', ' ')}")
             }
-            return old.copy(peak=peak,alert=null,alertAt=null,
+            return old.copy(peak=peak,
                 status=if (profitReview) "Paper position open · monitoring 15m volume" else "Paper position open")
         }
-        val reason = run {
-            val window=time>=LocalTime.of(9,17) && time<LocalTime.of(9,30)
-            val positive=s.open!=null && s.previousClose!=null && s.open>0 && s.previousClose>0 && s.open>s.previousClose
-            if(!old.boughtToday && !old.skipped && window && kd && s.k!!>20 && s.k<50 && s.k>s.d!! && upward && positive) "OPENING_BUY" else null
+        val window = time >= LocalTime.of(9,17) && time < LocalTime.of(9,30)
+        val positiveOpen = s.open != null && s.previousClose != null && s.open > 0 && s.previousClose > 0 && s.open > s.previousClose
+        if (!old.boughtToday && !old.skipped && window && rising && s.k!! > 20 && s.k < 50 && s.k > s.d!! && positiveOpen) {
+            return old.copy(buy=price,buyAt=s.at,quantity=quantity.takeIf { it in 1..1000000 } ?: 1,
+                peak=price,boughtToday=true,automatic=true,status="Automatic paper BUY")
         }
-        if(reason==null) return old.copy(alert=null,alertAt=null,status="Watching opening 20<K<50, K>D, K rising and positive open · price movement/volume do not filter BUY")
-        if(old.waitUntil?.let { s.at<it }==true) return old.copy(alert=null,alertAt=null,status="Waiting · paper position unchanged")
-        if(old.alertAt?.let { Duration.between(it,s.at).seconds>=60 }==true) return old.copy(alert=null,alertAt=null,waitUntil=s.at.plusSeconds(30),status="Approval expired · rechecking")
-        return old.copy(alert=reason,alertAt=if(old.alert==reason) old.alertAt ?: s.at else s.at,status="Approval required · PAPER ONLY")
-    }
-    /** Must be called with a freshly re-evaluated sample, never the displayed price. */
-    fun approve(state:OpeningState,s:OpeningSample,command:OpeningApproval):OpeningState {
-        val checked=tick(state,s)
-        if(state.alertAt!=command.alertAt || checked.alertAt!=command.alertAt || checked.alert==null ||
-            Duration.between(command.alertAt,s.at).toMillis() !in 0..59999) return checked
-        return when(command.choice) {
-            OpeningChoice.WAIT -> checked.copy(alert=null,alertAt=null,waitUntil=s.at.plusSeconds(30),status="Wait selected · no paper order")
-            OpeningChoice.SKIP -> if(checked.buy==null) checked.copy(skipped=true,alert=null,alertAt=null,status="Opening BUY skipped today") else checked
-            OpeningChoice.BUY -> if(checked.alert=="OPENING_BUY" && checked.buy==null && command.quantity in 1..1000000)
-                checked.copy(buy=s.price,buyAt=s.at,quantity=command.quantity,peak=s.price,boughtToday=true,alert=null,alertAt=null,status="Paper BUY approved") else checked
-            OpeningChoice.SELL -> checked
-        }
+        return old.copy(status="Watching opening 20<K<50, K>D, K rising and positive open")
     }
 }
 /** Same-session price comparison; resets with feed connection and gaps. */

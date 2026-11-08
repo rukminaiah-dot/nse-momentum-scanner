@@ -45,7 +45,7 @@ object TradeResults {
     fun onDate(trades:List<UiTrade>,date:LocalDate)=trades.filter { it.sellAt?.atZone(MarketSession.ZONE)?.toLocalDate()==date }
     fun week(trades:List<UiTrade>,today:LocalDate)=trades.filter { it.sellAt?.atZone(MarketSession.ZONE)?.toLocalDate()?.let { date->date in today.minusDays(6)..today }==true }
     fun reversal(snapshot:ReversalSnapshot):List<UiTrade> = snapshot.rows.flatMap { row ->
-        row.opening.trades.map { UiTrade(row.stock.instrumentKey,row.stock.symbol,PaperSource.OPENING,it.buyAt,it.buy,it.sellAt,it.sell,it.quantity,true) }+
+        row.opening.trades.map { UiTrade(row.stock.instrumentKey,row.stock.symbol,PaperSource.OPENING,it.buyAt,it.buy,it.sellAt,it.sell,it.quantity,!it.automatic) }+
         row.state.trades.map { UiTrade(row.stock.instrumentKey,row.stock.symbol,PaperSource.REVERSAL,it.buyAt,it.buy,it.sellAt,it.sell,it.quantity,it.manual) }
     }
     fun volume(trades:List<PaperTrade>)=trades.map { UiTrade(it.symbol,it.symbol,null,it.boughtAt,it.buy,it.soldAt,it.sell) }
@@ -119,7 +119,7 @@ object TradeResults {
     var value by remember { mutableStateOf(OpeningNoticeFormatter.quantity(context).toString()) }
     Surface(shape=RoundedCornerShape(12.dp),color=MaterialTheme.colorScheme.surface) {
         Row(Modifier.fillMaxWidth().padding(horizontal=12.dp,vertical=6.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
-            Text("Manual paper qty",style=MaterialTheme.typography.bodyMedium)
+            Text("Paper qty",style=MaterialTheme.typography.bodyMedium)
             Row(verticalAlignment=Alignment.CenterVertically) {
                 fun save(v:Int) { value=v.coerceIn(1,1000000).toString();context.getSharedPreferences("opening_notification_settings",0).edit().putInt("quantity",value.toInt()).apply();onQuantity(value.toInt()) }
                 TextButton(onClick={save((value.toIntOrNull() ?: 1)-1)},contentPadding=PaddingValues(8.dp)) { Text("−") }

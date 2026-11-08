@@ -16,7 +16,6 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/update_paths" />
         </provider>
-        <receiver android:name=".OpeningActionReceiver" android:exported="false" />
         <service
             android:name=".PaperScanService"
             android:exported="false"
@@ -33,3 +32,4 @@
         </activity>
     </application>
 </manifest>
+

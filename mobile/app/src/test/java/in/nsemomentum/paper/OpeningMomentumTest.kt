@@ -8,70 +8,49 @@ class OpeningMomentumTest {
     private val at=Instant.parse("2026-11-03T03:48:00Z") // 09:18 IST
     private fun sample(seconds:Long=0,k:Double=30.0,d:Double=20.0,price:Double=102.0)=OpeningSample(at.plusSeconds(seconds),true,price,101.0,100.0,k,d,101.5,100,130,true)
     private fun seed()=OpeningMomentum.tick(OpeningState(),sample(k=29.0))
-    private fun alert()=OpeningMomentum.tick(seed(),sample(1))
-    @Test fun qualifiesWithoutCrossTwentyButCannotBuyWithoutApproval() {
-        val pending=alert();assertEquals("OPENING_BUY",pending.alert);assertNull(pending.buy)
-        val buy=OpeningMomentum.approve(pending,sample(2,k=31.0),OpeningApproval("TEST",pending.alertAt!!,OpeningChoice.BUY,5))
-        assertEquals(102.0,buy.buy!!,0.0);assertEquals(5,buy.quantity);assertTrue(buy.boughtToday)
-        assertNull(buy.alert)
+    @Test fun qualifyingTickRecordsOneAutomaticBuyAtObservedPrice() {
+        val buy = OpeningMomentum.tick(seed(),sample(1),quantity=5)
+        assertEquals(102.0,buy.buy!!,0.0)
+        assertEquals(at.plusSeconds(1),buy.buyAt)
+        assertEquals(5,buy.quantity)
+        assertTrue(buy.automatic)
+        val held = OpeningMomentum.tick(buy,sample(2,k=31.0,price=101.9),quantity=7)
+        assertEquals(buy.buyAt,held.buyAt)
+        assertEquals(5,held.quantity)
+        val sold = OpeningMomentum.tick(held,sample(3,k=30.0,d=31.0))
+        assertTrue(sold.trades.single().automatic)
+        assertNull(OpeningMomentum.tick(sold,sample(4,k=32.0)).buy)
     }
-    @Test fun openingKMustBeStrictlyBetweenTwentyAndFiftyAtAlertAndApproval() {
+    @Test fun openingKMustBeStrictlyBetweenTwentyAndFifty() {
         for(k in listOf(0.0,19.99,20.0,50.0,50.01,100.0)) {
             val first=OpeningMomentum.tick(OpeningState(),sample(k=(k-1).coerceAtLeast(0.0),d=0.0))
-            assertNull("Rejected K=$k",OpeningMomentum.tick(first,sample(1,k=k,d=0.0)).alert)
+            assertNull("Rejected K=$k",OpeningMomentum.tick(first,sample(1,k=k,d=0.0)).buy)
         }
         for(k in listOf(20.01,49.99)) {
             val first=OpeningMomentum.tick(OpeningState(),sample(k=k-1,d=10.0))
-            assertEquals("OPENING_BUY",OpeningMomentum.tick(first,sample(1,k=k,d=10.0)).alert)
-        }
-        val p=alert()
-        for(k in listOf(20.0,50.0)) assertNull(OpeningMomentum.approve(p,sample(2,k=k,d=10.0),OpeningApproval("TEST",p.alertAt!!,OpeningChoice.BUY,1)).buy)
-    }
-    @Test fun approvalLastsOneMinuteAndRejectsTheExactExpiryBoundary() {
-        var p=alert()
-        for(i in 2L..59L) p=OpeningMomentum.tick(p,sample(i,k=30.0))
-        assertNotNull(p.alert)
-        val approved=OpeningMomentum.approve(p,sample(60,k=31.0),OpeningApproval("TEST",p.alertAt!!,OpeningChoice.BUY,1))
-        assertNotNull(approved.buy)
-        val expired=OpeningMomentum.approve(p,sample(61,k=31.0),OpeningApproval("TEST",p.alertAt!!,OpeningChoice.BUY,1))
-        assertNull(expired.buy)
-    }
-    @Test fun everyEntryConditionAndFreshApprovalIsRequired() {
-        val samples=listOf(sample(1,k=50.0),sample(1,k=28.0),sample(1,d=35.0),sample(1).copy(open=99.0),
-            sample(1).copy(fresh=false),sample(1).copy(open=null),sample(1).copy(k=null),
-            sample(1).copy(at=Instant.parse("2026-11-03T03:46:59Z")),sample(1).copy(at=Instant.parse("2026-11-03T04:00:00Z")))
-        samples.forEach { assertNull(OpeningMomentum.tick(seed(),it).alert) }
-        val p=alert()
-        assertNull(OpeningMomentum.approve(p,sample(2,k=31.0).copy(fresh=false),OpeningApproval("TEST",p.alertAt!!,OpeningChoice.BUY,1)).buy)
-        assertNull(OpeningMomentum.approve(p,sample(2,k=31.0),OpeningApproval("TEST",p.alertAt!!.minusSeconds(1),OpeningChoice.BUY,1)).buy)
-        for(q in listOf(0,-1,1000001)) assertNull(OpeningMomentum.approve(p,sample(2,k=31.0),OpeningApproval("TEST",p.alertAt!!,OpeningChoice.BUY,q)).buy)
-    }
-    @Test fun buyAllowsFallingPriceBelowOpenAndMissingPriceWindow() {
-        for(s in listOf(sample(1,price=100.5).copy(price60=103.0),sample(1,price=100.0).copy(price60=null))) {
-            val pending=OpeningMomentum.tick(seed(),s)
-            assertEquals("OPENING_BUY",pending.alert)
-            assertNotNull(OpeningMomentum.approve(pending,s.copy(at=s.at.plusSeconds(1),k=31.0),OpeningApproval("TEST",pending.alertAt!!,OpeningChoice.BUY)).buy)
-        }
-        assertNull(OpeningMomentum.tick(seed(),sample(1).copy(open=100.0,previousClose=100.0)).alert)
-        assertNull(OpeningMomentum.tick(seed(),sample(1,k=28.0)).alert)
-    }
-    @Test fun buyDoesNotRequireAvailableRisingOrContinuousVolume() {
-        for(s in listOf(sample(1).copy(beforeVolume=null,latestVolume=null,continuous=false),
-            sample(1).copy(beforeVolume=100,latestVolume=0,continuous=true),sample(1).copy(beforeVolume=0,latestVolume=0,continuous=false))) {
-            val pending=OpeningMomentum.tick(seed(),s)
-            assertEquals("OPENING_BUY",pending.alert)
-            assertNotNull(OpeningMomentum.approve(pending,s.copy(at=s.at.plusSeconds(1),k=31.0),OpeningApproval("TEST",pending.alertAt!!,OpeningChoice.BUY)).buy)
+            assertNotNull(OpeningMomentum.tick(first,sample(1,k=k,d=10.0)).buy)
         }
     }
-    @Test fun waitSkipExpiryAndDuplicateApprovalNeverPlaceTrade() {
-        val p=alert();val command=OpeningApproval("TEST",p.alertAt!!,OpeningChoice.WAIT)
-        val waited=OpeningMomentum.approve(p,sample(2,k=31.0),command)
-        assertNull(waited.buy);assertNull(OpeningMomentum.tick(waited,sample(3,k=32.0)).alert)
-        val skipped=OpeningMomentum.approve(p,sample(2,k=31.0),command.copy(choice=OpeningChoice.SKIP))
-        assertTrue(skipped.skipped);assertNull(OpeningMomentum.tick(skipped,sample(3,k=32.0)).alert)
-        assertNull(OpeningMomentum.approve(p,sample(61,k=31.0),command.copy(choice=OpeningChoice.BUY)).buy)
-        val bought=OpeningMomentum.approve(p,sample(2,k=31.0),command.copy(choice=OpeningChoice.BUY,quantity=2))
-        assertEquals(2,OpeningMomentum.approve(bought,sample(3,k=32.0),command.copy(choice=OpeningChoice.BUY,quantity=9)).quantity)
+    @Test fun entryStillRequiresFreshConsecutiveReadingsAndPositiveOpenInWindow() {
+        val initial=seed()
+        val candidate=sample(1)
+        val rejected=listOf(candidate.copy(fresh=false),candidate.copy(price=null),candidate.copy(k=null),
+            candidate.copy(d=31.0),candidate.copy(open=100.0),candidate.copy(open=null),candidate.copy(k=29.0),
+            candidate.copy(at=at.plusSeconds(6)))
+        rejected.forEach { assertNull(OpeningMomentum.tick(initial,it).buy) }
+        val gap=OpeningMomentum.tick(initial,candidate.copy(fresh=false))
+        assertNull(OpeningMomentum.tick(gap,sample(2,k=31.0)).buy)
+        for (time in listOf("03:46:59Z","04:00:00Z")) {
+            val outside=Instant.parse("2026-11-03T$time")
+            val previous=OpeningMomentum.tick(OpeningState(),sample(k=29.0).copy(at=outside.minusSeconds(1)))
+            assertNull(OpeningMomentum.tick(previous,candidate.copy(at=outside)).buy)
+        }
+    }
+    @Test fun priceRelativeToOpenAndPriorMinuteAndVolumeDoNotFilterBuy() {
+        for (price in listOf(100.5,101.0,102.0)) {
+            val candidate=sample(1,price=price).copy(price60=null,beforeVolume=100,latestVolume=0,volumeRatio=0.5)
+            assertEquals(price,OpeningMomentum.tick(seed(),candidate).buy!!,0.0)
+        }
     }
     @Test fun weakVolumeBeforeProfitReviewHoldsAndBearishReadingAutomaticallySells() {
         val active=OpeningState(day="2026-11-03",buy=102.0,buyAt=at,quantity=4,peak=102.0,boughtToday=true)
