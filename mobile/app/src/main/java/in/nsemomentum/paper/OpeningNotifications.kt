@@ -44,8 +44,7 @@ object OpeningNoticeFormatter {
         val readable=when(reason) {
             "OPENING_BUY" -> "Opening K/D · positive open"
             "VOLUME_DROP_30_PERCENT" -> "Volume fell 30% or more · review exit"
-            "KD_BEARISH" -> "K is below D"
-            "STOP_1_PERCENT" -> "1% stop loss reached"
+            "KD_BEARISH" -> "K crossed below D and is falling"
             "PRICE_STOP" -> "Price stop / profit protection reached"
             "SESSION_1510" -> "15:10 exit · approval required"
             else -> reason.replace('_',' ')
