@@ -1,6 +1,7 @@
 package com.nsemomentum.paper
 
 import android.content.Context
+import java.time.Instant
 import java.time.LocalDate
 import org.junit.Assert.*
 import org.junit.Test
@@ -42,15 +43,41 @@ class PaperSignalPersistenceTest {
             assertFalse(db.hasActivePaperBuy("TEST"))
         }
     }
+    private fun closeOnQuote(db: CandleDatabase, price: Double, now: Instant, tradedAt: Instant = now): Boolean {
+        val quote = LiveQuote("NSE_EQ|TEST", price, 101.0, tradedAt, now)
+        val state = LivePriceState(connected = true, markets = mapOf("NSE_EQ" to true))
+        return db.closePaperBuyOnQuote("TEST", quote, state, now)
+    }
+
+    @Test fun quoteExitRequiresFreshPostEntryQuoteAndClosesOnlyOnce() {
+        val context = RuntimeEnvironment.getApplication() as Context
+        for (price in listOf(99.99, 103.02)) {
+            context.deleteDatabase("paper_candles.db")
+            withDatabase(context) { db ->
+                save(db, row("PAPER_BUY"))
+                val boughtAt = start.plusSeconds(900)
+                val now = boughtAt.plusSeconds(1)
+                assertFalse(closeOnQuote(db, price, now, boughtAt.minusSeconds(1)))
+                assertFalse(closeOnQuote(db, price, now.plusSeconds(31), now))
+                assertFalse(closeOnQuote(db, 103.01, now))
+                assertTrue(closeOnQuote(db, price, now))
+                assertFalse(closeOnQuote(db, price, now.plusSeconds(1)))
+                save(db, row("PAPER_SELL", 900))
+                assertEquals(price, db.paperTradeHistory().single().sell!!, 0.0)
+                assertEquals(now, db.paperTradeHistory().single().soldAt)
+            }
+        }
+    }
+
     @Test fun timedExitIsIdempotentAndDoesNotCreateBackdatedTrade() {
         val context=RuntimeEnvironment.getApplication() as Context
         context.deleteDatabase("paper_candles.db")
         withDatabase(context) { db ->
             save(db,row("PAPER_BUY"))
             val cutoff=LocalDate.parse("2026-10-27").atTime(15,10).atZone(MarketSession.ZONE).toInstant()
-            assertFalse(db.closeTimedPaperBuy("TEST",100.0,cutoff.minusSeconds(1)))
-            assertTrue(db.closeTimedPaperBuy("TEST",102.0,cutoff))
-            assertFalse(db.closeTimedPaperBuy("TEST",103.0,cutoff.plusSeconds(1)))
+            assertFalse(closeOnQuote(db,100.0,cutoff.minusSeconds(1)))
+            assertTrue(closeOnQuote(db,102.0,cutoff))
+            assertFalse(closeOnQuote(db,103.0,cutoff.plusSeconds(1)))
             assertFalse(db.hasActivePaperBuy("TEST"))
             assertEquals(102.0,db.paperTradeHistory().single().sell!!,0.0)
             assertEquals(cutoff,db.paperTradeHistory().single().soldAt)
@@ -80,3 +107,4 @@ class PaperSignalPersistenceTest {
         }
     }
 }
+

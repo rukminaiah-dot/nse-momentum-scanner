@@ -133,7 +133,14 @@ object TradeResults {
 @Composable fun CompactVolumeCard(symbol:String,peak:Double,latest:Double?,quote:LiveQuote?,preview:LiveStochastic?,row:ScanRow?,trades:List<PaperTrade>,connected:Boolean,marketOpen:Boolean,now:Instant=Instant.now()) {
     var expanded by remember(symbol) { mutableStateOf(false) }
     val fresh=quote!=null && connected && marketOpen && java.time.Duration.between(quote.tradedAt,now).seconds in 0..30
-    val display=paperSignalDisplay(row,now)
+    val lastTrade = trades.maxByOrNull { it.boughtAt }
+    val candleClose = row?.candle?.timestamp?.plusSeconds(900)
+    val recentExit = lastTrade?.soldAt?.takeIf { soldAt ->
+        soldAt <= now && soldAt.atZone(MarketSession.ZONE).toLocalDate() == now.atZone(MarketSession.ZONE).toLocalDate() &&
+            (candleClose == null || soldAt >= candleClose)
+    }
+    val display = if (recentExit != null) "SELL · PAPER · ${compactPrice(lastTrade?.sell)} at ${compactTime(recentExit)}"
+        else paperSignalDisplay(row, now)
     val signal=when { display.startsWith("BUY ·")->"BUY";display.startsWith("SELL ·")->"SELL";display.startsWith("BUY ACTIVE")->"HOLD";else->"WAIT" }
     val live=preview?.takeIf { fresh && java.time.Duration.between(it.sampledAt,now).seconds in 0..20 }
     Surface(Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),color=MaterialTheme.colorScheme.surface) {
@@ -157,7 +164,7 @@ object TradeResults {
                 DetailLine("Completed 15m volume",row?.candle?.volume?.let { "%.0f shares".format(Locale.US,it) } ?: "Unavailable")
                 DetailLine("20-session same-slot average",row?.averageSlotVolume?.let { "%.0f shares".format(Locale.US,it) } ?: "Unavailable")
                 DetailLine("15m RVOL · display only",latest?.let { "%.2f×".format(Locale.US,it) } ?: "Unavailable")
-                Text(paperSignalDisplay(row),style=MaterialTheme.typography.bodySmall)
+                Text(display,style=MaterialTheme.typography.bodySmall)
                 Text("RVOL compares completed 15m volume with the same slot in 20 prior trading sessions. Dashboard selection requires ≥1.5× once per day; selected stocks then use K>D for BUY.",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 PaperTradesTable(trades,quote?.price,quote?.label(now,connected,marketOpen))
             }

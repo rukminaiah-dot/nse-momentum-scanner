@@ -57,7 +57,7 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
     if(help) AlertDialog(onDismissRequest={help=false},title={Text("Rules & alerts")},text={Column(Modifier.heightIn(max=480.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
         Text("Opening: 09:17–09:30, 20<K<50, K>D and K rising; open above previous close. Current price need not rise or stay above open. 15m volume is informational only.")
         Text("Reversal: K>D below 20; observed cross above 20 with K>D. 15m volume is informational only; no volume requirement for BUY or SELL.")
-        Text("Initial stop −1%; profit protection advances in 0.25-point steps. MUST SELL flags an urgent exit; manual positions stay open until SELL is recorded.")
+        Text("SELL at a 1% loss, 2% profit, live K<D, or 15:10 IST. Manual positions stay open until SELL is recorded.")
         Text("Prices entered here are unverified paper records. Original automatic history is retained and labelled. Records are local and are not included in the existing backup. Avg % is the mean closed-trade return; P&L includes recorded quantity, before costs.")
         OpeningNotificationPermission(showQuantity=false)
     }},confirmButton={TextButton(onClick={help=false}) { Text("Done") }})
@@ -101,13 +101,15 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
     val displayPreview=row.preview ?: row.previousPreview
     val k=displayPreview?.context?.stochK;val d=displayPreview?.context?.stochD;val pk=row.previousPreview?.context?.stochK;val pd=row.previousPreview?.context?.stochD
     val ratio=row.candleVolume?.ratio
-    val urgent=item.held && row.preview!=null && (k!=null && d!=null && pk!=null && k<d && k<pk)
-    val required=if(item.source==PaperSource.OPENING) row.opening.alert?.takeIf { it!="OPENING_BUY" }!=null else row.state.action.contains("SELL_")
+    val required = if (item.source == PaperSource.OPENING) row.opening.alert?.let { it != "OPENING_BUY" } == true
+        else row.state.action.startsWith("SELL_REQUIRED_")
+    val urgent = item.held && required && sample?.fresh == true &&
+        java.time.Duration.between(sample.at, now).seconds in 0..5
     val fresh=sample?.fresh==true && row.preview!=null && java.time.Duration.between(sample.at,now).seconds in 0..5 && java.time.Duration.between(row.preview.sampledAt,now).seconds in 0..5
     val canBuy=row.preview!=null && if(item.source==PaperSource.OPENING) row.opening.alert=="OPENING_BUY" else row.state.buy!=null && !row.state.manual && k!=null && d!=null && k>d
     val lastTrade=TradeResults.reversal(ReversalSnapshot(listOf(row))).filter { it.source==item.source }.maxByOrNull { it.sellAt ?: Instant.EPOCH }
     val closedToday=lastTrade?.sellAt?.atZone(MarketSession.ZONE)?.toLocalDate()==LocalDate.now(MarketSession.ZONE)
-    val label=when { urgent->"MUST SELL";item.held && required->"SELL SIGNAL";item.held->"BOUGHT";canBuy->"BUY SIGNAL";closedToday->"CLOSED";item.buy==null && item.latest!=Instant.EPOCH->"IDENTIFIED";else->"WATCH" }
+    val label=when { urgent->"MUST SELL";item.held->"BOUGHT";canBuy->"BUY SIGNAL";closedToday->"CLOSED";item.buy==null && item.latest!=Instant.EPOCH->"IDENTIFIED";else->"WATCH" }
     Surface(Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),color=MaterialTheme.colorScheme.surface) {
         Column(Modifier.padding(13.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
             Row(Modifier.fillMaxWidth().clickable { expanded=!expanded }.heightIn(min=40.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
@@ -156,10 +158,9 @@ data class RecordRequest(val key:String,val symbol:String,val source:PaperSource
                 DetailLine("15m RVOL · display only",ratio?.let { "%.2f×".format(Locale.US,it) } ?: "Unavailable")
                 DetailLine("Volume candle close",compactTime(row.candleVolume?.candleStart?.plusSeconds(900)))
                 DetailLine("Open / previous close","${compactPrice(sample?.open)} / ${compactPrice(quote?.previousClose)}")
-                if(item.buy!=null) {
-                    val peak=if(item.source==PaperSource.OPENING) row.opening.peak else row.state.peakPrice
-                    val stop=item.buy!!*(1+ReversalStrategy.stopPercent(item.buy!!,maxOf(item.buy!!,peak ?: item.buy!!))/100)
-                    DetailLine("Current exit threshold",compactPrice(stop))
+                item.buy?.let { buy ->
+                    DetailLine("1% stop loss", compactPrice(StockSessionExit.stopPrice(buy)))
+                    DetailLine("2% profit target", compactPrice(StockSessionExit.targetPrice(buy)))
                 }
                 Text(if(item.source==PaperSource.OPENING) row.opening.alert?.replace('_',' ') ?: row.opening.status else reversalActionLabel(row.state.action),style=MaterialTheme.typography.bodySmall)
                 if(row.status!=row.state.action && row.status.contains("FAILED")) Text(row.status,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error)
@@ -177,7 +178,9 @@ fun reversalActionLabel(action: String): String = when(action) {
     "SELL_STEPPED_PROFIT_STOP" -> "SELL · profit-protection threshold reached"
     "SELL_SESSION_1510" -> "SELL · 15:10 session exit"
     "NO_NEW_BUYS_AFTER_1510" -> "Session entry cutoff reached · no new BUYs"
-    "SELL_STOP_1_PERCENT" -> "SELL · initial stop reached"
+    "SELL_STOP_1_PERCENT", "SELL_REQUIRED_STOP_1_PERCENT" -> "SELL · 1% stop loss reached"
+    "SELL_TARGET_2_PERCENT", "SELL_REQUIRED_TARGET_2_PERCENT" -> "SELL · 2% profit target reached"
+    "SELL_KD_BEARISH", "SELL_REQUIRED_KD_BEARISH" -> "SELL · K is below D"
     "ALREADY_ABOVE_20_WAITING_FOR_NEW_CROSS" -> "K already above 20 · waiting for a new crossing"
     "CROSS_UNOBSERVED_AFTER_DATA_GAP_NEW_CROSS_REQUIRED" -> "Crossing interrupted by a data gap · new crossing required"
     "K_NOT_ABOVE_D_AT_CROSS_NEW_CROSS_REQUIRED" -> "K was not above D at crossing · new crossing required"

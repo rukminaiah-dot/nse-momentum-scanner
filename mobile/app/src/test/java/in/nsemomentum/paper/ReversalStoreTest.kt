@@ -22,8 +22,8 @@ class ReversalStoreTest {
         assertEquals(101.0,restored.peakPrice!!,0.0);assertEquals(100L,restored.beforeVolume!!)
         assertNull(restored.previousK);assertNull(restored.confirmationAt)
         assertEquals(now,restored.identifiedAt)
-        assertEquals(100.75,ReversalStrategy.stopPrice(restored)!!,1e-8)
-        val closed=ReversalStrategy.tick(restored,100.7,null,null,now.plusSeconds(1))
+        assertNotNull(ReversalStrategy.tick(restored,100.7,null,null,now.plusSeconds(1)).buy)
+        val closed=ReversalStrategy.tick(restored,102.0,null,null,now.plusSeconds(2))
         ReversalStore(context).write(mapOf("NSE_EQ|TEST" to closed))
         val t=ReversalStore(context).read().getValue("NSE_EQ|TEST").trades.single()
         assertEquals("VOLUME_STEP_V2",t.policy);assertEquals(150L,t.afterVolume!!)
@@ -60,7 +60,8 @@ class ReversalStoreTest {
             """{"NSE_EQ|TEST":{"symbol":"TEST","buy":100.0,"buyAt":"2026-10-30T05:00:00Z","reached80":true,"trades":[["2026-10-29T05:00:00Z",100.0,"2026-10-29T06:00:00Z",101.0,"K_BACK_BELOW_80"]]}}""").commit()
         val restored=ReversalStore(context).read().getValue("NSE_EQ|TEST")
         assertNull(restored.peakPrice)
-        assertEquals(99.0,ReversalStrategy.stopPrice(restored)!!,0.0)
+        assertEquals("STOP_1_PERCENT",StockSessionExit.priceExit(restored.buy!!,99.0))
         assertEquals("LEGACY_80",restored.trades.single().policy)
     }
 }
+

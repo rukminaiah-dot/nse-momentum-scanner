@@ -73,21 +73,29 @@ class OpeningMomentumTest {
         val bought=OpeningMomentum.approve(p,sample(2,k=31.0),command.copy(choice=OpeningChoice.BUY,quantity=2))
         assertEquals(2,OpeningMomentum.approve(bought,sample(3,k=32.0),command.copy(choice=OpeningChoice.BUY,quantity=9)).quantity)
     }
-    @Test fun volumeDropDoesNotRequestSellButBearishCrossStillDoes() {
+    @Test fun volumeDropDoesNotRequestSellButBearishReadingDoes() {
         val active=OpeningState(day="2026-11-03",buy=102.0,buyAt=at,quantity=4,peak=102.0,boughtToday=true,previousK=30.0,previousD=29.0,previousAt=at)
         for(volume in listOf(0L,1L,70L,71L,10000L)) {
             val held=OpeningMomentum.tick(active,sample(1).copy(latestVolume=volume))
             assertNull(held.alert);assertNotNull(held.buy);assertTrue(held.trades.isEmpty())
         }
-        val bearish=OpeningMomentum.tick(active,sample(1,k=28.0,d=29.0))
+        val bearish=OpeningMomentum.tick(active,sample(1,k=30.0,d=31.0))
         assertEquals("KD_BEARISH",bearish.alert)
-        val closed=OpeningMomentum.approve(bearish,sample(2,k=27.0,d=29.0),OpeningApproval("TEST",bearish.alertAt!!,OpeningChoice.SELL))
+        val closed=OpeningMomentum.approve(bearish,sample(2,k=31.0,d=32.0),OpeningApproval("TEST",bearish.alertAt!!,OpeningChoice.SELL))
         assertNull(closed.buy);assertEquals(4,closed.trades.single().quantity)
     }
-    @Test fun stopsAndSessionExitStillRequireApprovalWithoutKd() {
+    @Test fun stopTargetAndSessionExitRequireApprovalWithoutKd() {
         val active=OpeningState(day="2026-11-03",buy=100.0,buyAt=at,quantity=1,peak=100.75)
-        val stop=OpeningMomentum.tick(active,sample(1,price=100.4).copy(k=null,d=null))
-        assertEquals("PRICE_STOP",stop.alert);assertNotNull(stop.buy)
+        val sample = sample(1, price = 100.4).copy(k = null, d = null)
+        assertNull(OpeningMomentum.tick(active, sample).alert)
+        val stop = OpeningMomentum.tick(active, sample.copy(price = 99.0))
+        assertEquals("STOP_1_PERCENT", stop.alert);assertNotNull(stop.buy)
+        val target = OpeningMomentum.tick(active, sample.copy(price = 102.0))
+        assertEquals("TARGET_2_PERCENT", target.alert);assertNotNull(target.buy)
+        val closed = OpeningMomentum.approve(target, sample.copy(at = at.plusSeconds(2), price = 102.1),
+            OpeningApproval("TEST", target.alertAt!!, OpeningChoice.SELL))
+        assertEquals("TARGET_2_PERCENT", closed.trades.single().reason)
+        assertEquals(102.1, closed.trades.single().sell, 0.0)
         val exit=OpeningMomentum.tick(active,sample(1).copy(at=Instant.parse("2026-11-03T09:40:00Z"),k=null,d=null))
         assertEquals("SESSION_1510",exit.alert);assertNotNull(exit.buy)
     }

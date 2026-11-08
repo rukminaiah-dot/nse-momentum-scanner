@@ -7,6 +7,19 @@ import java.time.LocalTime
 import org.json.JSONArray
 
 object StockSessionExit {
+    fun stopPrice(buy: Double): Double = buy * 0.99
+    fun targetPrice(buy: Double): Double = buy * 1.02
+
+    fun priceExit(buy: Double, price: Double): String? {
+        if (!buy.isFinite() || buy <= 0 || !price.isFinite() || price <= 0) return null
+        val tolerance = buy * 1e-12
+        return when {
+            price <= stopPrice(buy) + tolerance -> "STOP_1_PERCENT"
+            price >= targetPrice(buy) - tolerance -> "TARGET_2_PERCENT"
+            else -> null
+        }
+    }
+
     val cutoff: LocalTime = LocalTime.of(15,10)
     fun entriesClosed(now: Instant): Boolean = now.atZone(MarketSession.ZONE).toLocalTime() >= cutoff
     fun due(boughtAt: Instant, now: Instant): Boolean = now > boughtAt &&
@@ -18,7 +31,7 @@ object StockSessionExit {
         java.time.Duration.between(quote.receivedAt,now).seconds in 0..30
 }
 
-/** Existing paper ledger only. An unavailable 15:10 quote leaves a pending exit, never a fabricated fill. */
+/** Monitors Dashboard paper positions for price and session exits using fresh quotes. */
 object StockSessionCloser {
     private val scope=CoroutineScope(SupervisorJob()+Dispatchers.IO)
     private val owners=mutableSetOf<String>()
@@ -42,10 +55,10 @@ object StockSessionCloser {
                     if(instruments.isNotEmpty()) LiveMarketHub.acquire("stock-close",token,instruments.map { it.instrumentKey }.toSet())
                     else LiveMarketHub.release("stock-close")
                     val now=Instant.now();val live=LiveMarketHub.state.value
-                    open.filter { StockSessionExit.due(it.boughtAt,now) }.forEach { trade ->
+                    open.forEach { trade ->
                         val stock=instruments.singleOrNull { it.symbol == trade.symbol }
                         val quote=stock?.let { live.quotes[it.instrumentKey] }
-                        if(quote != null && StockSessionExit.fresh(quote,live,now)) db.closeTimedPaperBuy(trade.symbol,quote.price,now)
+                        if (quote != null) db.closePaperBuyOnQuote(trade.symbol, quote, live, now)
                     }
                     delay(1000)
                 }
@@ -54,3 +67,4 @@ object StockSessionCloser {
     }
     @Synchronized fun release(owner:String) { owners-=owner;if(owners.isEmpty()) { job?.cancel();job=null;credential=null } }
 }
+

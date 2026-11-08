@@ -129,30 +129,44 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
         return paperTrades(events)
     }
 
-    fun closeTimedPaperBuy(symbol:String,price:Double,now:Instant):Boolean {
-        if(!price.isFinite() || price <= 0) return false
-        val db=writableDatabase
+    fun closePaperBuyOnQuote(symbol: String, quote: LiveQuote, state: LivePriceState, now: Instant): Boolean {
+        if (!StockSessionExit.fresh(quote, state, now)) return false
+        val db = writableDatabase
         db.beginTransaction()
         try {
-            val last=lastSignal(db,symbol)
-            if(last == null || last.second != 1 || !StockSessionExit.due(last.first,now)) return false
-            val row=ContentValues().apply { put("symbol",symbol);put("signal_time",now.toString());put("direction",-1);put("price",price) }
-            val added=db.insertWithOnConflict("paper_signal_events",null,row,SQLiteDatabase.CONFLICT_IGNORE) != -1L
+            val buy = lastSignal(db, symbol) ?: return false
+            if (buy.direction != 1 || now <= buy.time || quote.tradedAt < buy.time) return false
+            val reason = if (StockSessionExit.due(buy.time, now)) "SESSION_1510"
+                else StockSessionExit.priceExit(buy.price, quote.price) ?: return false
+            val row = ContentValues().apply {
+                put("symbol", symbol)
+                put("signal_time", now.toString())
+                put("direction", -1)
+                put("price", quote.price)
+            }
+            val added = db.insertWithOnConflict("paper_signal_events", null, row, SQLiteDatabase.CONFLICT_IGNORE) != -1L
             db.setTransactionSuccessful()
-            if(added) DiagnosticLog.event("STOCK_TIMED_EXIT","SESSION_1510",symbol=symbol)
+            if (added) {
+                val event = if (reason == "SESSION_1510") "STOCK_TIMED_EXIT" else "STOCK_PRICE_EXIT"
+                DiagnosticLog.event(event, reason, symbol = symbol)
+            }
             return added
-        } finally { db.endTransaction() }
+        } finally {
+            db.endTransaction()
+        }
     }
 
-    override fun hasActivePaperBuy(symbol: String): Boolean = lastSignal(readableDatabase, symbol)?.second == 1
+    override fun hasActivePaperBuy(symbol: String): Boolean = lastSignal(readableDatabase, symbol)?.direction == 1
 
     override fun recordedPaperSignal(symbol: String, candleStart: Instant): String? = readableDatabase.rawQuery(
         "SELECT direction FROM paper_signal_events WHERE symbol=? AND signal_time=?", arrayOf(symbol, candleStart.plusSeconds(900).toString())
     ).use { if (it.moveToFirst()) (if (it.getInt(0) == 1) "PAPER_BUY" else "PAPER_SELL") else null }
 
-    private fun lastSignal(db: SQLiteDatabase, symbol: String): Pair<Instant, Int>? = db.rawQuery(
-        "SELECT signal_time,direction FROM paper_signal_events WHERE symbol=? ORDER BY signal_time DESC LIMIT 1", arrayOf(symbol)
-    ).use { if (it.moveToFirst()) Instant.parse(it.getString(0)) to it.getInt(1) else null }
+    private data class LedgerSignal(val time: Instant, val direction: Int, val price: Double)
+
+    private fun lastSignal(db: SQLiteDatabase, symbol: String): LedgerSignal? = db.rawQuery(
+        "SELECT signal_time,direction,price FROM paper_signal_events WHERE symbol=? ORDER BY signal_time DESC LIMIT 1", arrayOf(symbol)
+    ).use { if (it.moveToFirst()) LedgerSignal(Instant.parse(it.getString(0)), it.getInt(1), it.getDouble(2)) else null }
 
     private fun recordSignalEvent(db: SQLiteDatabase, row: ScanRow) {
         val candle = row.candle ?: return
@@ -162,8 +176,8 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
         val direction = when (row.signal) { "PAPER_BUY" -> 1; "PAPER_SELL" -> -1; else -> return }
         val time = candle.timestamp.plusSeconds(900)
         val last = lastSignal(db, row.symbol)
-        if (last != null && time <= last.first) return
-        if (direction == -1 && last?.second != 1 || direction == 1 && last?.second == 1) return
+        if (last != null && time <= last.time) return
+        if (direction == -1 && last?.direction != 1 || direction == 1 && last?.direction == 1) return
         val values = ContentValues().apply {
             put("symbol", row.symbol); put("signal_time", time.toString())
             put("direction", direction); put("price", candle.close)

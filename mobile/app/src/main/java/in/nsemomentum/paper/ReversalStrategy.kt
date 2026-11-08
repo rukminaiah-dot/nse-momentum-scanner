@@ -2,7 +2,6 @@ package com.nsemomentum.paper
 
 import java.time.Duration
 import java.time.Instant
-import kotlin.math.floor
 
 data class ReversalTrade(val buyAt: Instant, val buy: Double, val sellAt: Instant, val sell: Double, val reason: String,
                          val policy: String = "LEGACY_80", val beforeVolume: Long? = null, val afterVolume: Long? = null,val quantity:Int=1,val manual:Boolean=false) {
@@ -27,11 +26,6 @@ data class ReversalState(
     val quantity:Int=1,val manual:Boolean=false,val recordedAt:Instant?=null,val manualWaitUntil:Instant?=null,val identifiedAt:Instant?=null,val entryPolicy:String?=null
 )
 object ReversalStrategy {
-    fun stopPercent(buy: Double, peak: Double): Double {
-        val steps=floor((((peak / buy)-1)*100 + 1e-9)/0.25).toLong()
-        return if (steps >= 2) (steps-1)*0.25 else -1.0
-    }
-    fun stopPrice(state: ReversalState): Double? = state.buy?.let { it*(1+stopPercent(it,maxOf(it,state.peakPrice ?: it))/100) }
     fun interrupted(state: ReversalState, reason: String): ReversalState = state.copy(
         confirmationAt=null,beforeVolume=null,afterVolume=null,observationGap=true,action=reason)
 
@@ -42,14 +36,15 @@ object ReversalStrategy {
         if (state.buy != null && state.buyAt != null) {
             val active=state.copy(peakPrice=maxOf(state.buy,state.peakPrice ?: state.buy,price),
                 confirmationAt=null)
-            val stop=stopPrice(active)!!
-            if (StockSessionExit.due(state.buyAt,now) || price <= stop + state.buy*1e-12) {
-                val reason=if (StockSessionExit.due(state.buyAt,now)) "SESSION_1510" else if (stopPercent(state.buy,active.peakPrice!!) < 0) "STOP_1_PERCENT" else "STEPPED_PROFIT_STOP"
+            val reason = if (StockSessionExit.due(state.buyAt, now)) "SESSION_1510"
+                else StockSessionExit.priceExit(state.buy, price)
+                    ?: "KD_BEARISH".takeIf { k != null && d != null && k in 0.0..100.0 && d in 0.0..100.0 && k < d }
+            if (reason != null) {
                 if(state.manual) return active.copy(action=if(state.manualWaitUntil?.let { now<it }==true) "WAIT_SELL_$reason" else "SELL_REQUIRED_$reason")
                 val trade=ReversalTrade(state.buyAt,state.buy,now,price,reason,state.entryPolicy ?: if (state.beforeVolume == null) "LEGACY_ENTRY_STEP_EXIT" else "VOLUME_STEP_V2",state.beforeVolume,state.afterVolume)
                 return ReversalState(trades=state.trades+trade,symbol=state.symbol,action="SELL_$reason",previousK=k,previousAt=now)
             }
-            return active.copy(action=if (stopPercent(state.buy,active.peakPrice!!) < 0) "BUY_ACTIVE_INITIAL_STOP" else "BUY_ACTIVE_PROFIT_PROTECTED")
+            return active.copy(action="BUY_ACTIVE_INITIAL_STOP")
         }
         if (StockSessionExit.entriesClosed(now)) return interrupted(state,"NO_NEW_BUYS_AFTER_1510")
         if (k == null || d == null || !k.isFinite() || !d.isFinite() || k !in 0.0..100.0 || d !in 0.0..100.0)
@@ -74,3 +69,4 @@ object ReversalStrategy {
         return observed.copy(watchDate=watch,action=reason)
     }
 }
+

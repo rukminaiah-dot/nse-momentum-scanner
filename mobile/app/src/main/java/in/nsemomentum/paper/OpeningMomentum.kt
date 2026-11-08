@@ -30,21 +30,15 @@ object OpeningMomentum {
         val recent=old.previousAt?.let { Duration.between(it,s.at).toMillis() in 1..5000 }==true
         val rising=kd && recent && old.previousK!=null && s.k!!>old.previousK
         val upward=rising || (old.alert=="OPENING_BUY" && kd && recent && old.previousK!=null && s.k!!>=old.previousK)
-        val bearish=kd && recent && old.previousK!=null && old.previousD!=null &&
-            s.k!!<s.d!! && s.k<old.previousK && (old.previousK>=old.previousD || old.alert=="KD_BEARISH")
         val time=s.at.atZone(MarketSession.ZONE).toLocalTime()
         if(kd && time>=LocalTime.of(9,15) && time<LocalTime.of(9,30) && s.k!!>20 && s.k<50 && s.k>s.d!! && old.identifiedAt==null) old=old.copy(identifiedAt=s.at)
         old=old.copy(previousK=if(kd) s.k else old.previousK,previousD=if(kd) s.d else old.previousD,previousAt=if(kd) s.at else null)
         val openBuy=old.buy
         val reason=if(openBuy!=null && old.buyAt!=null) {
             old=old.copy(peak=maxOf(openBuy,old.peak ?: openBuy,price))
-            val stop=openBuy*(1+ReversalStrategy.stopPercent(openBuy,old.peak!!)/100)
-            when {
-                StockSessionExit.due(old.buyAt!!,s.at) -> "SESSION_1510"
-                price<=stop -> "PRICE_STOP"
-                bearish -> "KD_BEARISH"
-                else -> null
-            }
+            if (StockSessionExit.due(old.buyAt!!, s.at)) "SESSION_1510"
+            else StockSessionExit.priceExit(openBuy, price)
+                ?: "KD_BEARISH".takeIf { kd && s.k!! < s.d!! }
         } else {
             val time=s.at.atZone(MarketSession.ZONE).toLocalTime()
             val window=time>=LocalTime.of(9,17) && time<LocalTime.of(9,30)

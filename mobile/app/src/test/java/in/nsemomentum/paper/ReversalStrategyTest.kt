@@ -34,20 +34,30 @@ class ReversalStrategyTest {
         val bearish=tick(ReversalState(),18.0,19.0,0)
         assertNull(tick(bearish,21.0,20.0,1).buy)
     }
-    @Test fun profitStopStepsNeverMoveDownAndIgnoreKdEighty() {
-        var s=confirmed()
-        assertEquals(-1.0,ReversalStrategy.stopPercent(100.0,100.49),0.0)
-        for ((price,percent) in listOf(100.5 to .25,100.75 to .5,101.0 to .75,101.25 to 1.0)) {
-            s=tick(s,79.0,85.0,62,price=price)
-            assertNotNull(s.buy)
-            assertEquals(percent,ReversalStrategy.stopPercent(s.buy!!,s.peakPrice!!),1e-8)
-        }
-        val lowered=tick(s,null,null,63,price=101.1)
-        assertEquals(101.25,lowered.peakPrice!!,0.0)
-        val closed=tick(lowered,null,null,64,price=100.9)
-        assertNull(closed.buy);assertEquals("STEPPED_PROFIT_STOP",closed.trades.single().reason)
-        assertEquals(100.9,closed.trades.single().sell,0.0)
-        assertEquals(1,tick(closed,null,null,65,price=100.0).trades.size)
+    @Test fun fixedTargetAndStopUseExactBoundaries() {
+        val bought = confirmed()
+        val nearTarget = tick(bought, null, null, 2, price = 101.99)
+        assertNotNull(nearTarget.buy)
+        assertNotNull(tick(nearTarget, null, null, 3, price = 99.01).buy)
+        val target = tick(nearTarget, null, null, 4, price = 102.0)
+        assertNull(target.buy)
+        assertEquals("TARGET_2_PERCENT", target.trades.single().reason)
+        assertEquals(102.0, target.trades.single().sell, 0.0)
+        assertEquals(1, tick(target, null, null, 5).trades.size)
+        assertEquals("STOP_1_PERCENT", tick(bought, null, null, 2, price = 99.0).trades.single().reason)
+    }
+    @Test fun bearishReadingSellsWithoutCrossAndManualPositionsRequireApproval() {
+        val bought = confirmed()
+        assertNotNull(tick(bought, 25.0, 25.0, 2).buy)
+        assertNotNull(tick(bought, -1.0, 25.0, 2).buy)
+        assertEquals("KD_BEARISH", tick(bought, 25.0, 26.0, 2).trades.single().reason)
+        val manual = bought.copy(manual = true)
+        val pending = tick(manual, null, null, 2, price = 102.1)
+        assertEquals("SELL_REQUIRED_TARGET_2_PERCENT", pending.action)
+        assertNotNull(pending.buy)
+        assertTrue(pending.trades.isEmpty())
+        val waiting = tick(manual.copy(manualWaitUntil = now.plusSeconds(30)), 25.0, 26.0, 2)
+        assertEquals("WAIT_SELL_KD_BEARISH", waiting.action)
     }
     @Test fun initialStopUsesActualQuoteWithoutKdAndDayChangeCannotInventBuy() {
         val active=ReversalState(buy=100.0,buyAt=now)
@@ -59,3 +69,4 @@ class ReversalStrategyTest {
         assertNull(tomorrow.buy);assertNull(tomorrow.confirmationAt)
     }
 }
+
