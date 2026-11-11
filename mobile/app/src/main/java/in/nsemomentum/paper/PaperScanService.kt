@@ -109,7 +109,7 @@ class PaperScanService : Service() {
                         DiagnosticLog.record(applicationContext,"STOCK_SCAN",code)
                         preferences.edit().putString(PREF_STATUS,"$code · retry pending").apply()
                         if (code in setOf("MARKET_CLOSED","UPSTOX_AUTH_REQUIRED")) break
-                        delay(if (code in setOf("RATE_LIMITED","LOCAL_RATE_BUDGET_EXHAUSTED")) 60_000 else 10_000)
+                        delay(if (code in setOf("RATE_LIMITED","LOCAL_RATE_BUDGET_EXHAUSTED","UNVERIFIED_MARKET_CALENDAR")) 60_000 else 10_000)
                     }
                 }
                 delay(10_000)

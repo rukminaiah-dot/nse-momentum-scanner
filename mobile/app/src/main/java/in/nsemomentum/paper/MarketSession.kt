@@ -13,16 +13,22 @@ data class MarketSession(val date: LocalDate, val start: Instant, val end: Insta
         end.atZone(ZONE).toLocalTime() == LocalTime.of(15, 30)
 
     fun hasVerifiedSlots(): Boolean {
-        val seconds = java.time.Duration.between(start, end).seconds
         val local = start.atZone(ZONE)
-        return local.toLocalDate() == date && end.atZone(ZONE).toLocalDate() == date &&
-            start.nano == 0 && end.nano == 0 && local.second == 0 && local.minute % 15 == 0 &&
-            seconds in 900L..86400L && seconds % 900 == 0L
+        val close = end.atZone(ZONE)
+        return local.toLocalDate() == date && close.toLocalDate() == date &&
+            local.second == 0 && close.second == 0 && start.nano == 0 && end.nano == 0 &&
+            !firstFullSlot().plusSeconds(900).isAfter(end)
     }
 
+    private fun firstFullSlot(): Instant =
+        start.plusSeconds(Math.floorMod(-start.epochSecond, 900L))
+
     fun slots(): List<Instant> = if (hasVerifiedSlots())
-        (0 until (java.time.Duration.between(start, end).seconds / 900).toInt()).map { start.plusSeconds(it * 900L) }
+        generateSequence(firstFullSlot()) { it.plusSeconds(900) }
+            .takeWhile { !it.plusSeconds(900).isAfter(end) }.toList()
         else emptyList()
+
+    fun needsMinuteHistory(): Boolean = firstFullSlot() != start || end.epochSecond % 900 != 0L
 
     fun completedSlot(now: Instant): Instant? {
         if (!isRegular() || now < start.plusSeconds(900) || now > end.plusSeconds(180)) return null

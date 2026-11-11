@@ -135,6 +135,7 @@ object ReversalRunner {
                 calendars[key]
             }
         }
+        val retryAt = ConcurrentHashMap<String, Instant>()
         val permits=Semaphore(4)
         // Shares the existing socket; also keeps open positions subscribed after selection changes.
         LiveMarketHub.acquire("reversal",token, (work.map { it.instrumentKey } + StockCatalog.indices.map { it.instrumentKey }).toSet())
@@ -142,7 +143,8 @@ object ReversalRunner {
             while (true) {
                 val now=Instant.now(); val slot=now.epochSecond/900
                 work.map { stock -> async {
-                    if (done[stock.instrumentKey] != slot) permits.withPermit {
+                    if (done[stock.instrumentKey] != slot &&
+                        retryAt[stock.instrumentKey]?.isAfter(now) != true) permits.withPermit {
                         try {
                             val database=CandleDatabase(context)
                             val verified=try {
@@ -153,9 +155,16 @@ object ReversalRunner {
                             completedCandleVolume(verified,now)?.let { candleVolumes[stock.instrumentKey]=it } ?: candleVolumes.remove(stock.instrumentKey)
                             verifiedHistory[stock.instrumentKey]=verified
                             done[stock.instrumentKey]=slot;errors.remove(stock.instrumentKey)
+                            retryAt.remove(stock.instrumentKey)
                             DiagnosticLog.event("REVERSAL_HISTORY","READY","bars=${history[stock.instrumentKey]?.size ?: 0}",stock.symbol)
                         } catch (cancelled: CancellationException) { throw cancelled }
-                        catch (e: Exception) { errors[stock.instrumentKey]=DiagnosticLog.errorCode(e); DiagnosticLog.event("REVERSAL_HISTORY",DiagnosticLog.errorCode(e),symbol=stock.symbol) }
+                        catch (e: Exception) {
+                            val code = DiagnosticLog.errorCode(e)
+                            val waitSeconds = if (code in setOf("LOCAL_RATE_BUDGET_EXHAUSTED", "RATE_LIMITED", "UNVERIFIED_MARKET_CALENDAR")) 60L else 30L
+                            retryAt[stock.instrumentKey] = Instant.now().plusSeconds(waitSeconds)
+                            errors[stock.instrumentKey] = code
+                            DiagnosticLog.event("REVERSAL_HISTORY", code, symbol=stock.symbol)
+                        }
                     }
                 } }.awaitAll()
                 delay(10_000)
