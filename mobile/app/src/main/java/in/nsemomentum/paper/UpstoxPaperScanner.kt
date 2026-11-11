@@ -136,6 +136,8 @@ class UpstoxPaperScanner(
         // Only fresh intraday input can establish today's latest bar; cache cannot mask feed gaps.
         val latest = complete.single { it.timestamp == target }
         val baseline = if (isIndex) null else PaperStrategy.sameSlotAverage(latest, cached, sessions)
+        if (!isIndex && baseline == null)
+            DiagnosticLog.event("VOLUME_BASELINE","NO_COMPARABLE_20_SESSION_BASELINE","date=${today.date}",symbol)
         database.save(key, complete)
         val allBars = cached.filter { bar -> sessions.any { it.date == bar.timestamp.atZone(MarketSession.ZONE).toLocalDate() } } + complete
         val ordered = allBars.sortedBy { it.timestamp }

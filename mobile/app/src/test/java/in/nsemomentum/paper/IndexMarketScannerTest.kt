@@ -24,20 +24,36 @@ class IndexMarketScannerTest {
         var error: String? = null
         var hang = false
         var bseClosed = false
+        var special: MarketSession? = null
         var count = 61
         val paths = mutableListOf<String>()
         override suspend fun session(token: String, date: LocalDate) = session(token, date, "NSE")
         override suspend fun session(token: String, date: LocalDate, exchange: String): MarketSession? =
-            if (date.dayOfWeek.value <= 5 && !(bseClosed && exchange == "BSE" && date == this@IndexMarketScannerTest.date)) regular(date) else null
+            if (special?.date == date) special else if (date.dayOfWeek.value <= 5 && !(bseClosed && exchange == "BSE" && date == this@IndexMarketScannerTest.date)) regular(date) else null
         override suspend fun candles(token: String, path: String): List<Candle> = error("Stock volume parser must not be used")
         override suspend fun indexCandles(token: String, path: String): List<Candle> {
             paths += path
             if (hang) awaitCancellation()
             error?.let { throw IOException(it) }
             return if (path.contains("intraday")) transform(minutes(today, count))
-                else minutes(regular(LocalDate.parse(path.substringAfterLast('/'))))
+                else {
+                    val day=LocalDate.parse(path.substringAfterLast('/'))
+                    val session=special?.takeIf { it.date==day } ?: regular(day)
+                    minutes(session,java.time.Duration.between(session.start,session.end).toMinutes().toInt())
+                }
         }
     }
+    @Test fun previousSpecialSessionDoesNotHideAllIndices() = runBlocking {
+        val previous=date.minusDays(1)
+        val feed=Feed().apply {
+            special=MarketSession(previous,previous.atTime(18,15).atZone(MarketSession.ZONE).toInstant(),
+                previous.atTime(19,15).atZone(MarketSession.ZONE).toInstant())
+        }
+        val report=IndexMarketScanner(Store(),feed).scan("test",now)
+        assertEquals(3,report.rows.size)
+        assertTrue(report.rows.all { it.candle != null && it.dayChangePercent != null })
+    }
+
     @Test fun matchesWebThreeCloseDirectionAndDoesNotApplyStockFilters() {
         val bars = minutes(today, 15)
         val target = today.start.plusSeconds(600)
