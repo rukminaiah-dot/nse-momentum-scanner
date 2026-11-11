@@ -136,7 +136,8 @@ class UpstoxPaperScanner(
         // Only fresh intraday input can establish today's latest bar; cache cannot mask feed gaps.
         val latest = complete.single { it.timestamp == target }
         val baseline = if (isIndex) null else PaperStrategy.sameSlotAverage(latest, cached, sessions)
-        if (!isIndex && baseline == null)
+        val missingComparableSlot = !isIndex && baseline == null && sessions.any { !it.isRegular() }
+        if (missingComparableSlot)
             DiagnosticLog.event("VOLUME_BASELINE","NO_COMPARABLE_20_SESSION_BASELINE","date=${today.date}",symbol)
         database.save(key, complete)
         val allBars = cached.filter { bar -> sessions.any { it.date == bar.timestamp.atZone(MarketSession.ZONE).toLocalDate() } } + complete
@@ -151,12 +152,12 @@ class UpstoxPaperScanner(
             val recorded = database.recordedPaperSignal(symbol, target)
             if (recorded != null && evaluated.reason in setOf("BULLISH_ALIGNMENT", "BEARISH_CROSS_EXIT", "BUY_ACTIVE_WAITING_BEARISH_CROSS", "EMA_TREND_NOT_UP", "NO_BULLISH_CROSS", "NOT_SHORTLISTED_TODAY"))
                 evaluated.copy(signal = recorded, reason = if (recorded == "PAPER_BUY") "BULLISH_ALIGNMENT" else "BEARISH_CROSS_EXIT")
-            else if (baseline == null && evaluated.reason == "NOT_SHORTLISTED_TODAY")
+            else if (missingComparableSlot && evaluated.reason == "NOT_SHORTLISTED_TODAY")
                 evaluated.copy(reason = "NO_COMPARABLE_20_SESSION_BASELINE")
             else evaluated
         } else PaperSignal(
             signal = if ((rvol ?: 0.0) >= 1.5) "VOLUME_QUALIFIED" else "WAIT",
-            reason = if ((rvol ?: 0.0) >= 1.5) "FAVOURITE_ONLY_FOR_TECHNICALS" else if (rvol == null) "NO_COMPARABLE_20_SESSION_BASELINE" else "VOLUME_BELOW_THRESHOLD")
+            reason = if ((rvol ?: 0.0) >= 1.5) "FAVOURITE_ONLY_FOR_TECHNICALS" else if (missingComparableSlot) "NO_COMPARABLE_20_SESSION_BASELINE" else "VOLUME_BELOW_THRESHOLD")
         val previousCloseTime = sessions.first().slots().last()
         val previousClose = cached.singleOrNull { it.timestamp == previousCloseTime }?.close
         val dailyChange = previousClose?.takeIf { it > 0.0 }?.let { ((latest.close - it) / it) * 100.0 }
