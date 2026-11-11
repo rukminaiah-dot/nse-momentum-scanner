@@ -30,6 +30,32 @@ class UpstoxPaperScannerTest {
             data[symbol] = (data[symbol].orEmpty() + bars).associateBy { it.timestamp }.values.sortedBy { it.timestamp }
         }
     }
+    @Test fun specialHistoryKeepsStockScanWorkingButDoesNotInventSameSlotVolume() = runBlocking {
+        val specialDate=sessions.first().date
+        val special=MarketSession(specialDate,specialDate.atTime(18,15).atZone(MarketSession.ZONE).toInstant(),
+            specialDate.atTime(19,15).atZone(MarketSession.ZONE).toInstant())
+        val past=history.filterNot { it.timestamp.atZone(MarketSession.ZONE).toLocalDate()==specialDate } +
+            special.slots().map { bar(it) }
+        val feed=object:CandleFeed {
+            override suspend fun session(token:String,date:LocalDate):MarketSession? =
+                if(date==specialDate) special else if(date.dayOfWeek.value>5 || date==holiday) null else regular(date)
+            override suspend fun candles(token:String,path:String):List<Candle> {
+                if(path.contains("intraday")) return intraday
+                val parts=path.split('/')
+                val from=LocalDate.parse(parts.last())
+                val to=LocalDate.parse(parts[parts.lastIndex-1])
+                return past.filter { it.timestamp.atZone(MarketSession.ZONE).toLocalDate() in from..to }
+            }
+        }
+        val report=UpstoxPaperScanner(MemoryStore(),feed).scan("test",universe,emptySet(),now)
+        assertEquals(2,report.rows.size)
+        report.rows.forEach {
+            assertNotNull(it.candle)
+            assertNull(it.relativeVolume)
+            assertEquals("NO_COMPARABLE_20_SESSION_BASELINE",it.reason)
+        }
+    }
+
     @Test fun qualifiedStockCanBuyOnFirstCandleDespiteLowLatestVolume() = runBlocking {
         val store = MemoryStore().apply { qualified = true }
         val feed = Feed().apply { intradayBars = listOf(bar(today.start,50.0).copy(close=10.8)) }

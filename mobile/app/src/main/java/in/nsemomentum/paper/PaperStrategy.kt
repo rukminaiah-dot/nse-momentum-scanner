@@ -43,7 +43,7 @@ object PaperStrategy {
 
     /** Exactly the preceding 20 exchange-verified sessions; missing sessions are never substituted. */
     fun sameSlotAverage(current: Candle, priorCandles: List<Candle>, sessions: List<MarketSession>): Double? {
-        if (!validCandle(current) || sessions.size != 20 || sessions.any { !it.isRegular() } ||
+        if (!validCandle(current) || sessions.size != 20 || sessions.any { !it.hasVerifiedSlots() } ||
             sessions.map { it.date }.distinct().size != 20) return null
         val local = current.timestamp.atZone(marketZone)
         if (sessions.any { it.date >= local.toLocalDate() }) return null
@@ -52,9 +52,9 @@ object PaperStrategy {
             slot >= LocalTime.of(15, 30) || (slot.hour * 60 + slot.minute - 555) % 15 != 0) return null
         val volumes = sessions.map { session ->
             val bars = priorCandles.filter { it.timestamp.atZone(marketZone).toLocalDate() == session.date }
-            if (bars.size != 25 || bars.any { !validCandle(it) } ||
+            if (bars.size != session.slots().size || bars.any { !validCandle(it) } ||
                 bars.map { it.timestamp }.toSet() != session.slots().toSet()) return null
-            bars.single { it.timestamp.atZone(marketZone).toLocalTime() == slot }.volume
+            bars.singleOrNull { it.timestamp.atZone(marketZone).toLocalTime() == slot }?.volume ?: return null
         }
         return volumes.average().takeIf { it > 0 && it.isFinite() }
     }
@@ -62,7 +62,7 @@ object PaperStrategy {
     fun verifiedSessions(bars:List<Candle>,sessions:List<MarketSession>):Boolean =
         sessions.size==20 && sessions.map { it.date }.distinct().size==20 && sessions.all { session ->
             val day=bars.filter { it.timestamp.atZone(marketZone).toLocalDate()==session.date }
-            session.isRegular() && day.size==25 && day.all(::validCandle) && day.map { it.timestamp }.toSet()==session.slots().toSet()
+            session.hasVerifiedSlots() && day.size==session.slots().size && day.all(::validCandle) && day.map { it.timestamp }.toSet()==session.slots().toSet()
         }
 
     fun validCandle(bar: Candle): Boolean =

@@ -123,7 +123,12 @@ class UpstoxCandleFeed(
         if (entries.size != 1) throw IOException("UNVERIFIED_MARKET_CALENDAR")
         val entry = entries.single()
         val result = MarketSession(date, Instant.ofEpochMilli(entry.getLong("start_time")), Instant.ofEpochMilli(entry.getLong("end_time")))
-        if (!result.isRegular()) throw IOException("UNSUPPORTED_SPECIAL_SESSION")
+        if (!result.isRegular()) {
+            fun clock(time: Instant) = time.atZone(MarketSession.ZONE).toLocalTime().toSecondOfDay()
+            DiagnosticLog.event("MARKET_CALENDAR", if (result.hasVerifiedSlots()) "SPECIAL_SESSION" else "INVALID_SESSION",
+                "date=$date startsec=${clock(result.start)} endsec=${clock(result.end)}")
+        }
+        if (!result.hasVerifiedSlots()) throw IOException("UNVERIFIED_MARKET_CALENDAR")
         return result
     }
 

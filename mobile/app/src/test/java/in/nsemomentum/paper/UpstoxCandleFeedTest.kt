@@ -54,7 +54,7 @@ class UpstoxCandleFeedTest {
             assertTrue(job.isCancelled)
         } finally { server.shutdown() }
     }
-    @Test fun calendarSupportsClosedAndRegularDatesAndRejectsSpecial() = runBlocking {
+    @Test fun calendarReturnsVerifiedSpecialSessionsAndRejectsMalformedTimings() = runBlocking {
         val server = MockWebServer()
         try {
             val date = LocalDate.parse("2026-10-22"); val regular = regular(date)
@@ -64,8 +64,10 @@ class UpstoxCandleFeedTest {
             server.enqueue(MockResponse().setBody(body(regular.end.toEpochMilli())))
             assertEquals(regular, feed(server).session("test", date))
             server.enqueue(MockResponse().setBody(body(regular.end.minusSeconds(3600).toEpochMilli())))
-            try { feed(server).session("test", date); fail("Expected special-session rejection") }
-            catch (error: IOException) { assertEquals("UNSUPPORTED_SPECIAL_SESSION", error.message) }
+            assertEquals(regular.copy(end=regular.end.minusSeconds(3600)), feed(server).session("test", date))
+            server.enqueue(MockResponse().setBody(body(regular.start.toEpochMilli())))
+            try { feed(server).session("test", date); fail("Expected invalid-session rejection") }
+            catch (error: IOException) { assertEquals("UNVERIFIED_MARKET_CALENDAR", error.message) }
         } finally { server.shutdown() }
     }
 

@@ -8,10 +8,10 @@ import kotlin.math.abs
 object IndexPaperStrategy {
     fun verifiedHistory(bars: List<Candle>, sessions: List<MarketSession>): Boolean {
         if (sessions.size != 21 || sessions.map { it.date }.distinct().size != 21 ||
-            sessions.any { !it.isRegular() }) return false
+            sessions.any { !it.hasVerifiedSlots() }) return false
         return sessions.all { session ->
             val day = bars.filter { it.timestamp.atZone(MarketSession.ZONE).toLocalDate() == session.date }
-            day.size == 25 && day.all { PaperStrategy.validCandle(it) && it.high > it.low } &&
+            day.size == session.slots().size && day.all { PaperStrategy.validCandle(it) && it.high > it.low } &&
                 day.map { it.timestamp }.toSet() == session.slots().toSet()
         }
     }

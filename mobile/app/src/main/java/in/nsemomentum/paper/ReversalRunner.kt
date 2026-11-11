@@ -19,13 +19,13 @@ suspend fun reversalHistory(feed: CandleFeed, token: String, stock: Stock, now: 
     val sessions = mutableListOf<MarketSession>()
     var prior = date.minusDays(1)
     repeat(60) {
-        if (sessions.size < 20) { feed.session(token,prior,exchange)?.let { s -> require(s.isRegular()); sessions += s }; prior=prior.minusDays(1) }
+        if (sessions.size < 20) { feed.session(token,prior,exchange)?.let { s -> require(s.hasVerifiedSlots()) { "UNVERIFIED_MARKET_CALENDAR" }; sessions += s }; prior=prior.minusDays(1) }
     }
     require(sessions.size == 20) { "UNVERIFIED_MARKET_CALENDAR" }
     val encoded = URLEncoder.encode(stock.instrumentKey,"UTF-8").replace("+","%20")
     fun completeHistory(bars: List<Candle>): Boolean = sessions.all { session ->
         val day = bars.filter { it.timestamp.atZone(MarketSession.ZONE).toLocalDate() == session.date }
-        day.size == 25 && day.map { it.timestamp }.toSet() == session.slots().toSet() && day.all(PaperStrategy::validCandle)
+        day.size == session.slots().size && day.map { it.timestamp }.toSet() == session.slots().toSet() && day.all(PaperStrategy::validCandle)
     }
     val past = if (completeHistory(cached)) cached else {
         val fetched=mutableListOf<Candle>()
@@ -176,7 +176,9 @@ object ReversalRunner {
                     java.time.Duration.between(quote.tradedAt,now).toMillis() in -1000..30000 &&
                     java.time.Duration.between(quote.receivedAt,now).toMillis() in -1000..30000 &&
                     local >= java.time.LocalTime.of(9,15) && local < java.time.LocalTime.of(15,30)
-                val preview=LiveStochasticPreview.calculate(history[stock.instrumentKey].orEmpty(),quote,now,live.connected,marketOpen)
+                val verifiedBars=history[stock.instrumentKey].orEmpty()
+                val priorClose=verifiedBars.lastOrNull { it.timestamp.atZone(MarketSession.ZONE).toLocalDate() < now.atZone(MarketSession.ZONE).toLocalDate() }?.timestamp
+                val preview=LiveStochasticPreview.calculate(verifiedBars,quote,now,live.connected,marketOpen,verifiedPreviousClose=priorClose)
                 val old=states[stock.instrumentKey] ?: ReversalState()
                 val priceWindow=priceWindows.getValue(stock.instrumentKey)
                 if(fresh) priceWindow.add(quote!!.receivedAt,quote.price,live.connectionId) else priceWindow.clear()

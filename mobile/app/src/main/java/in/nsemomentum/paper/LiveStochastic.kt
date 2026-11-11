@@ -8,7 +8,7 @@ data class LiveStochastic(val context: TechnicalContext, val sampledAt: Instant,
 
 /** Quote-derived forming-candle preview only. Never saved as OHLCV or used for paper execution. */
 object LiveStochasticPreview {
-    fun calculate(history: List<Candle>, quote: LiveQuote?, now: Instant, connected: Boolean, marketOpen: Boolean, periodMinutes: Int = 15): LiveStochastic? {
+    fun calculate(history: List<Candle>, quote: LiveQuote?, now: Instant, connected: Boolean, marketOpen: Boolean, periodMinutes: Int = 15, verifiedPreviousClose: Instant? = null): LiveStochastic? {
         require(periodMinutes in setOf(5,15))
         val periodSeconds = periodMinutes * 60L
         if (quote == null || !connected || !marketOpen || !quote.price.isFinite() || quote.price <= 0) return null
@@ -32,7 +32,7 @@ object LiveStochasticPreview {
         val firstSlot = local.toLocalTime() < LocalTime.of(9,15).plusMinutes(periodMinutes.toLong())
         if (last != slot.minusSeconds(periodSeconds) && !(firstSlot &&
                 last.atZone(MarketSession.ZONE).toLocalDate() < local.toLocalDate() &&
-                last.atZone(MarketSession.ZONE).toLocalTime() == LocalTime.of(15,30).minusMinutes(periodMinutes.toLong()))) return null
+                (last.atZone(MarketSession.ZONE).toLocalTime() == LocalTime.of(15,30).minusMinutes(periodMinutes.toLong()) || last == verifiedPreviousClose))) return null
         if (complete.takeLast(52).zipWithNext().any { (a,b) ->
             a.timestamp.atZone(MarketSession.ZONE).toLocalDate() == b.timestamp.atZone(MarketSession.ZONE).toLocalDate() &&
                 Duration.between(a.timestamp,b.timestamp).seconds != periodSeconds }) return null

@@ -12,7 +12,17 @@ data class MarketSession(val date: LocalDate, val start: Instant, val end: Insta
         start.atZone(ZONE).toLocalTime() == LocalTime.of(9, 15) &&
         end.atZone(ZONE).toLocalTime() == LocalTime.of(15, 30)
 
-    fun slots(): List<Instant> = (0 until 25).map { start.plusSeconds(it * 900L) }
+    fun hasVerifiedSlots(): Boolean {
+        val seconds = java.time.Duration.between(start, end).seconds
+        val local = start.atZone(ZONE)
+        return local.toLocalDate() == date && end.atZone(ZONE).toLocalDate() == date &&
+            start.nano == 0 && end.nano == 0 && local.second == 0 && local.minute % 15 == 0 &&
+            seconds in 900L..86400L && seconds % 900 == 0L
+    }
+
+    fun slots(): List<Instant> = if (hasVerifiedSlots())
+        (0 until (java.time.Duration.between(start, end).seconds / 900).toInt()).map { start.plusSeconds(it * 900L) }
+        else emptyList()
 
     fun completedSlot(now: Instant): Instant? {
         if (!isRegular() || now < start.plusSeconds(900) || now > end.plusSeconds(180)) return null

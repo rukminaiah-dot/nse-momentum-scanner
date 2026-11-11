@@ -11,7 +11,7 @@ suspend fun recoverSessionHistory(feed:CandleFeed,token:String,encodedKey:String
         throw IllegalArgumentException("INVALID_HISTORY_CANDLES")
     }
     fun day(bars:List<Candle>,session:MarketSession)=bars.filter { it.timestamp.atZone(MarketSession.ZONE).toLocalDate()==session.date }
-    fun complete(bars:List<Candle>,session:MarketSession)=session.isRegular() && bars.size==25 && bars.all(PaperStrategy::validCandle) && bars.map { it.timestamp }.toSet()==session.slots().toSet()
+    fun complete(bars:List<Candle>,session:MarketSession)=session.hasVerifiedSlots() && bars.size==session.slots().size && bars.all(PaperStrategy::validCandle) && bars.map { it.timestamp }.toSet()==session.slots().toSet()
     var cacheDays=0
     val recovered=sessions.associateWith { session ->
         val raw=day(fetched,session);val saved=day(cached,session)

@@ -64,7 +64,7 @@ class IndexMarketScanner(private val database: CandleStore, private val feed: Ca
         suspend fun session(exchange: String, date: LocalDate): MarketSession? {
             val key = exchange to date
             if (!calendars.containsKey(key)) calendars[key] = feed.session(token, date, exchange)
-            return calendars[key]?.also { if (!it.isRegular()) throw IOException("UNSUPPORTED_SPECIAL_SESSION") }
+            return calendars[key]?.also { if (!it.hasVerifiedSlots()) throw IOException("UNVERIFIED_MARKET_CALENDAR") }
         }
         val rows = mutableListOf<IndexReading>()
         for (instrument in StockCatalog.indices) {
@@ -75,7 +75,8 @@ class IndexMarketScanner(private val database: CandleStore, private val feed: Ca
                 var cursor = date.minusDays(1)
                 repeat(90) { if (current == null) { current = session(exchange, cursor); cursor = cursor.minusDays(1) } }
                 val market = current ?: throw IOException("UNVERIFIED_MARKET_CALENDAR")
-                val target = (0 until 75).map { market.start.plusSeconds(it * 300L) }.lastOrNull { it.plusSeconds(300) <= now }
+                if (market.date == date && !market.isRegular()) throw IOException("UNSUPPORTED_SPECIAL_SESSION")
+                val target = (0 until (java.time.Duration.between(market.start, market.end).seconds / 300).toInt()).map { market.start.plusSeconds(it * 300L) }.lastOrNull { it.plusSeconds(300) <= now }
                     ?: throw IOException("NO_COMPLETED_MARKET_CANDLE")
                 val encoded = URLEncoder.encode(instrument.instrumentKey, "UTF-8").replace("+", "%20")
                 suspend fun download(s: MarketSession): List<Candle> {

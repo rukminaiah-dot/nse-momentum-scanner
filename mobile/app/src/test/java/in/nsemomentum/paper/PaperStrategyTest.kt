@@ -11,6 +11,21 @@ class PaperStrategyTest {
     private val current = bar(today.start)
     private fun history(): List<Candle> = sessions.flatMapIndexed { i, session -> session.slots().map { bar(it, i + 1.0) } }
 
+    @Test fun specialHistoryUsesActualSlotsWithoutSubstitutingAnOlderVolumeSession() {
+        val date=sessions.first().date
+        val special=MarketSession(date,date.atTime(18,15).atZone(MarketSession.ZONE).toInstant(),
+            date.atTime(19,15).atZone(MarketSession.ZONE).toInstant())
+        val calendar=listOf(special)+sessions.drop(1)
+        val bars=calendar.flatMap { session -> session.slots().map { bar(it) } }
+        assertEquals(4,special.slots().size)
+        assertTrue(PaperStrategy.verifiedSessions(bars,calendar))
+        assertNull(PaperStrategy.sameSlotAverage(current,bars,calendar))
+        assertFalse(PaperStrategy.verifiedSessions(bars.dropLast(1),calendar))
+        val malformed=special.copy(end=special.end.plusSeconds(1))
+        assertFalse(malformed.hasVerifiedSlots())
+        assertTrue(malformed.slots().isEmpty())
+    }
+
     @Test fun exactTwentyVerifiedSessionsAreAveraged() {
         assertEquals(10.5, PaperStrategy.sameSlotAverage(current, history(), sessions)!!, 0.0001)
     }

@@ -48,6 +48,7 @@ class UpstoxPaperScanner(
         val date = now.atZone(MarketSession.ZONE).toLocalDate()
         val calendars = universe.map { it.second.substringBefore('_') }.distinct().associateWith { exchange ->
             val today = feed.session(token, date, exchange) ?: throw IOException("MARKET_CLOSED")
+            if (!today.isRegular()) throw IOException("UNSUPPORTED_SPECIAL_SESSION")
             val target = today.completedSlot(now) ?: throw IOException("NO_COMPLETED_MARKET_CANDLE")
             val required = if (universe.any { it.second.startsWith("${exchange}_INDEX|") }) 21 else 20
             val sessions = mutableListOf<MarketSession>()
@@ -55,7 +56,7 @@ class UpstoxPaperScanner(
             repeat(60) {
                 if (sessions.size < required) {
                     feed.session(token, previous, exchange)?.let { session ->
-                        if (!session.isRegular()) throw IOException("UNSUPPORTED_SPECIAL_SESSION")
+                        if (!session.hasVerifiedSlots()) throw IOException("UNVERIFIED_MARKET_CALENDAR")
                         sessions += session
                     }
                     previous = previous.minusDays(1)
@@ -148,10 +149,12 @@ class UpstoxPaperScanner(
             val recorded = database.recordedPaperSignal(symbol, target)
             if (recorded != null && evaluated.reason in setOf("BULLISH_ALIGNMENT", "BEARISH_CROSS_EXIT", "BUY_ACTIVE_WAITING_BEARISH_CROSS", "EMA_TREND_NOT_UP", "NO_BULLISH_CROSS", "NOT_SHORTLISTED_TODAY"))
                 evaluated.copy(signal = recorded, reason = if (recorded == "PAPER_BUY") "BULLISH_ALIGNMENT" else "BEARISH_CROSS_EXIT")
+            else if (baseline == null && evaluated.reason == "NOT_SHORTLISTED_TODAY")
+                evaluated.copy(reason = "NO_COMPARABLE_20_SESSION_BASELINE")
             else evaluated
         } else PaperSignal(
             signal = if ((rvol ?: 0.0) >= 1.5) "VOLUME_QUALIFIED" else "WAIT",
-            reason = if ((rvol ?: 0.0) >= 1.5) "FAVOURITE_ONLY_FOR_TECHNICALS" else "VOLUME_BELOW_THRESHOLD")
+            reason = if ((rvol ?: 0.0) >= 1.5) "FAVOURITE_ONLY_FOR_TECHNICALS" else if (rvol == null) "NO_COMPARABLE_20_SESSION_BASELINE" else "VOLUME_BELOW_THRESHOLD")
         val previousCloseTime = sessions.first().slots().last()
         val previousClose = cached.singleOrNull { it.timestamp == previousCloseTime }?.close
         val dailyChange = previousClose?.takeIf { it > 0.0 }?.let { ((latest.close - it) / it) * 100.0 }
