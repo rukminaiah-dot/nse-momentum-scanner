@@ -77,11 +77,11 @@ def verify_upgrade(previous, candidate, report, temp):
         raise RuntimeError("The upgrade fixture requires a rootable CI emulator")
 
     adb("install", previous)
-    if installed_version() != ("0.26.0-candidate", 31):
-        raise RuntimeError("Expected signed v0.26.0 as the upgrade baseline")
+    if installed_version() != ("0.30.0-candidate", 35):
+        raise RuntimeError("Expected signed v0.30.0 as the upgrade baseline")
     launch()
     local_db = temp / "paper_candles.db"
-    wait_for_schema(local_db, 4)
+    wait_for_schema(local_db, 5)
     adb("shell", "am", "force-stop", PACKAGE)
     adb("pull", DATABASE, local_db)
     with closing(sqlite3.connect(local_db)) as db, db:
@@ -131,7 +131,7 @@ def verify_upgrade(previous, candidate, report, temp):
         actual = prefs.find(f"{setting.tag}[@name='{setting.get('name')}']")
         if actual is None or ET.tostring(actual).strip() != ET.tostring(setting).strip():
             raise RuntimeError(f"Upgrade did not preserve {name}")
-    print("Signed v0.26.0 upgrade preserved Dashboard, Opening and Reversal paper history, favourites and paper quantity.")
+    print("Signed v0.30.0 upgrade preserved Dashboard, Opening and Reversal paper history, favourites and paper quantity.")
 
 
 def main():
