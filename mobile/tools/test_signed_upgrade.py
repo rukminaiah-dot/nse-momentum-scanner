@@ -116,7 +116,7 @@ def verify_upgrade(previous, candidate, report, temp):
     if installed_version() != (report["versionName"], report["versionCode"]):
         raise RuntimeError("Installed version differs from the verified signed candidate")
     launch()
-    wait_for_schema(local_db, 5)
+    wait_for_schema(local_db, 6)
     adb("shell", "am", "force-stop", PACKAGE)
     adb("pull", DATABASE, local_db)
     with closing(sqlite3.connect(f"{local_db.as_uri()}?mode=ro", uri=True)) as db:

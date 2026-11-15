@@ -865,6 +865,21 @@ private fun SettingsPage(
             } catch (_: Exception) { "Could not save file · use Copy diagnostic summary" }
         }
     }
+    val exportSamples = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri != null) diagnosticScope.launch {
+            diagnosticStatus = try {
+                withContext(Dispatchers.IO) {
+                    val csv = CandleDatabase(context).use { it.exportDashboardSamples() }
+                    requireNotNull(context.contentResolver.openOutputStream(uri, "wt")).bufferedWriter().use { it.write(csv) }
+                }
+                "Dashboard training data exported"
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                "Could not export Dashboard training data"
+            }
+        }
+    }
     val installedVersion = remember {
         runCatching {
             @Suppress("DEPRECATION")
@@ -884,6 +899,7 @@ private fun SettingsPage(
                 diagnosticStatus = "Diagnostic summary copied"
             }
         }) { Text("Copy diagnostic summary") }
+        Button(onClick = { exportSamples.launch("dashboard-training-data.csv") }) { Text("Export Dashboard training data") }
         Text(diagnosticStatus)
         Text("Latest 7 days, size limited · excludes tokens and authorization headers", style=MaterialTheme.typography.bodySmall)
         Text("Local backup & restore", style = MaterialTheme.typography.titleMedium)

@@ -8,12 +8,13 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZonedDateTime
 
-class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candles.db", null, 5), CandleStore {
+class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candles.db", null, 6), CandleStore {
     override fun onCreate(db: SQLiteDatabase) {
         createCandles(db)
         createHistoryAttempts(db)
         createAnalytics(db)
         createSignalEvents(db)
+        createDashboardSamples(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -30,6 +31,37 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
             }
         }
         if (oldVersion == 4) db.execSQL("ALTER TABLE paper_signal_events ADD COLUMN profit_review INTEGER NOT NULL DEFAULT 0")
+        if (oldVersion < 6) createDashboardSamples(db)
+    }
+
+    private fun createDashboardSamples(db: SQLiteDatabase) {
+        db.execSQL("""CREATE TABLE IF NOT EXISTS dashboard_buy_samples (
+            symbol TEXT NOT NULL, buy_time TEXT NOT NULL, observed_at TEXT NOT NULL,
+            buy_price REAL NOT NULL, relative_volume REAL, stoch_k REAL, stoch_d REAL,
+            previous_kd_gap REAL, candle_return_pct REAL NOT NULL, sell_time TEXT,
+            sell_price REAL, PRIMARY KEY(symbol, buy_time))""")
+    }
+
+    fun exportDashboardSamples(): String = buildString {
+        appendLine("symbol,buy_time,observed_at,buy_price,relative_volume,stoch_k,stoch_d,previous_kd_gap,candle_return_pct,sell_time,sell_price")
+        readableDatabase.rawQuery(
+            "SELECT symbol,buy_time,observed_at,buy_price,relative_volume,stoch_k,stoch_d,previous_kd_gap,candle_return_pct,sell_time,sell_price FROM dashboard_buy_samples ORDER BY buy_time,symbol",
+            null
+        ).use { rows ->
+            while (rows.moveToNext()) {
+                appendLine((0 until rows.columnCount).joinToString(",") { column ->
+                    val value = rows.getString(column).orEmpty()
+                    if (column == 0) "\"${value.replace("\"", "\"\"")}\"" else value
+                })
+            }
+        }
+    }
+
+    private fun closeDashboardSample(db: SQLiteDatabase, symbol: String, buyTime: Instant, sellTime: Instant, sellPrice: Double) {
+        db.update("dashboard_buy_samples", ContentValues().apply {
+            put("sell_time", sellTime.toString())
+            put("sell_price", sellPrice)
+        }, "symbol=? AND buy_time=? AND sell_time IS NULL", arrayOf(symbol, buyTime.toString()))
     }
 
     private fun createCandles(db: SQLiteDatabase) {
@@ -155,6 +187,7 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
                 put("price", quote.price)
             }
             val added = db.insertWithOnConflict("paper_signal_events", null, row, SQLiteDatabase.CONFLICT_IGNORE) != -1L
+            if (added) closeDashboardSample(db, symbol, buy.time, now, quote.price)
             db.setTransactionSuccessful()
             if (added) {
                 DiagnosticLog.event("STOCK_QUOTE_EXIT", reason, "rvol=${ratio ?: "unavailable"}", symbol)
@@ -187,7 +220,7 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
         "SELECT signal_time,direction,price,profit_review FROM paper_signal_events WHERE symbol=? ORDER BY rtrim(signal_time, 'Z') DESC LIMIT 1", arrayOf(symbol)
     ).use { if (it.moveToFirst()) LedgerSignal(Instant.parse(it.getString(0)), it.getInt(1), it.getDouble(2), it.getInt(3) != 0) else null }
 
-    private fun recordSignalEvent(db: SQLiteDatabase, row: ScanRow) {
+    private fun recordSignalEvent(db: SQLiteDatabase, row: ScanRow, scannedAt: Instant) {
         val candle = row.candle ?: return
         val committedAt=Instant.now()
         if(row.signal == "PAPER_BUY" && candle.timestamp.atZone(MarketSession.ZONE).toLocalDate() == committedAt.atZone(MarketSession.ZONE).toLocalDate() && StockSessionExit.entriesClosed(committedAt)) return
@@ -201,7 +234,22 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
             put("symbol", row.symbol); put("signal_time", time.toString())
             put("direction", direction); put("price", candle.close)
         }
-        db.insertWithOnConflict("paper_signal_events", null, values, SQLiteDatabase.CONFLICT_IGNORE)
+        if (db.insertWithOnConflict("paper_signal_events", null, values, SQLiteDatabase.CONFLICT_IGNORE) == -1L) return
+        if (direction == -1) {
+            closeDashboardSample(db, row.symbol, requireNotNull(last).time, time, candle.close)
+            return
+        }
+        db.insertOrThrow("dashboard_buy_samples", null, ContentValues().apply {
+            put("symbol", row.symbol)
+            put("buy_time", time.toString())
+            put("observed_at", scannedAt.toString())
+            put("buy_price", candle.close)
+            put("relative_volume", row.relativeVolume)
+            put("stoch_k", row.technicals?.stochK)
+            put("stoch_d", row.technicals?.stochD)
+            put("previous_kd_gap", row.technicals?.previousGap)
+            put("candle_return_pct", (candle.close / candle.open - 1.0) * 100.0)
+        })
     }
 
     override fun save(symbol: String, bars: List<Candle>) {
@@ -252,7 +300,7 @@ class CandleDatabase(context: Context) : SQLiteOpenHelper(context, "paper_candle
                     upsertQualification(db, sessionDate, row, scannedAt)
                 }
                 if (candle != null) {
-                    recordSignalEvent(db, row)
+                    recordSignalEvent(db, row, scannedAt)
                     advancePaperOutcome(db, row)
                 }
             }
