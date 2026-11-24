@@ -77,7 +77,7 @@ import java.util.Locale
 import kotlin.math.abs
 
 private enum class Page(val title: String) {
-    DASHBOARD("Home"), UNIVERSE("Stocks"), FAVOURITES("My 40"), REVERSAL("Reversal"), COMMODITIES("MCX"), SETTINGS("Settings")
+    DASHBOARD("Home"), UNIVERSE("Stocks"), FAVOURITES("My 40"), REVERSAL("Reversal"), COMMODITIES("MCX"), WATCH("Watch"), SETTINGS("Settings")
 }
 
 class MainActivity : ComponentActivity() {
@@ -490,6 +490,7 @@ private fun PaperScannerApp() {
                             Page.FAVOURITES->android.R.drawable.btn_star_big_off
                             Page.REVERSAL->R.drawable.ic_paper_signal
                             Page.COMMODITIES->android.R.drawable.ic_menu_compass
+                            Page.WATCH->android.R.drawable.ic_menu_my_calendar
                             Page.SETTINGS->android.R.drawable.ic_menu_manage
                         }),contentDescription=null,modifier=Modifier.height(20.dp).width(20.dp)) },
                         label = { Text(if(item==Page.REVERSAL) "Signals" else item.title,maxLines=1,fontSize=11.sp) }
@@ -682,6 +683,10 @@ private fun PaperScannerApp() {
             }
             Page.REVERSAL -> ReversalPage(reversalSnapshot,livePrices,Modifier.padding(inset))
             Page.COMMODITIES -> CommodityPage(commoditySnapshot,livePrices,Modifier.padding(inset))
+            Page.WATCH -> TomorrowWatchPage(
+                baseStocks.filter { it.instrumentKey.startsWith("NSE_EQ|") },
+                tokenStore.read(), sharedFeed, Modifier.padding(inset)
+            )
             Page.SETTINGS -> SettingsPage(
                 backupStatus = backupStatus,
                 backupEnabled = !backupBusy && !scanning && !autoScanActive,

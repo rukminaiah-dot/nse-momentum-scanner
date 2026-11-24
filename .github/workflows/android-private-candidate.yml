@@ -62,13 +62,12 @@ jobs:
       - name: Run all Android unit tests
         working-directory: mobile
         run: '"$RUNNER_TEMP/gradle-8.9/bin/gradle" --no-daemon :app:testDebugUnitTest'
-      - name: Download prior installed candidate for update compatibility checks
-        uses: actions/download-artifact@v4
+      - name: Check out the v0.31.0 upgrade baseline
+        uses: actions/checkout@v4
         with:
-          name: android-permanent-signed-candidate
-          run-id: 42985861683
-          github-token: ${{ github.token }}
-          path: ${{ runner.temp }}/previous-android-candidate
+          ref: 1ec9454cef132e94b0235a932cf9f2a0bae91be7
+          path: previous-candidate
+          persist-credentials: false
       - name: Build and verify privately signed candidate
         working-directory: mobile
         shell: bash
@@ -85,6 +84,9 @@ jobs:
           trap 'rm -f "$ANDROID_SIGNING_STORE_FILE"' EXIT
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$ANDROID_SIGNING_STORE_FILE"
           "$RUNNER_TEMP/gradle-8.9/bin/gradle" --no-daemon :app:assembleRelease
+          "$RUNNER_TEMP/gradle-8.9/bin/gradle" --no-daemon -p ../previous-candidate/mobile :app:assembleRelease
+          mkdir -p "$RUNNER_TEMP/previous-android-candidate"
+          cp ../previous-candidate/mobile/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/previous-android-candidate/"
           python tools/verify_signed_apk.py app/build/outputs/apk/release/app-release.apk --build-tools "$ANDROID_HOME/build-tools/35.0.0" --expected-sha256 "$CERTIFICATE_PIN" --previous-apk "$RUNNER_TEMP/previous-android-candidate/app-release.apk" --commit "$GITHUB_SHA" --report app/build/outputs/apk/release/android-candidate.json
       - name: Build device dialog tests
         working-directory: mobile
