@@ -62,10 +62,10 @@ jobs:
       - name: Run all Android unit tests
         working-directory: mobile
         run: '"$RUNNER_TEMP/gradle-8.9/bin/gradle" --no-daemon :app:testDebugUnitTest'
-      - name: Check out the v0.31.0 upgrade baseline
+      - name: Check out the v0.32.0 upgrade baseline
         uses: actions/checkout@v4
         with:
-          ref: 1ec9454cef132e94b0235a932cf9f2a0bae91be7
+          ref: b35cd7ae5990a83532ef7d893dc3d9ddc40b129f
           path: previous-candidate
           persist-credentials: false
       - name: Build and verify privately signed candidate

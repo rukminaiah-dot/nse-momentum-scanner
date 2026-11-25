@@ -77,8 +77,8 @@ def verify_upgrade(previous, candidate, report, temp):
         raise RuntimeError("The upgrade fixture requires a rootable CI emulator")
 
     adb("install", previous)
-    if installed_version() != ("0.31.0-candidate", 36):
-        raise RuntimeError("Expected signed v0.31.0 as the upgrade baseline")
+    if installed_version() != ("0.32.0-candidate", 37):
+        raise RuntimeError("Expected signed v0.32.0 as the upgrade baseline")
     launch()
     local_db = temp / "paper_candles.db"
     wait_for_schema(local_db, 6)
@@ -131,7 +131,7 @@ def verify_upgrade(previous, candidate, report, temp):
         actual = prefs.find(f"{setting.tag}[@name='{setting.get('name')}']")
         if actual is None or ET.tostring(actual).strip() != ET.tostring(setting).strip():
             raise RuntimeError(f"Upgrade did not preserve {name}")
-    print("Signed v0.31.0 upgrade preserved Dashboard, Opening and Reversal paper history, favourites and paper quantity.")
+    print("Signed v0.32.0 upgrade preserved Dashboard, Opening and Reversal paper history, favourites and paper quantity.")
 
 
 def main():

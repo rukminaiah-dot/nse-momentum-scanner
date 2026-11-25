@@ -15,15 +15,17 @@ internal data class WatchRow(
     val close: Double,
     val previousHigh: Double,
     val previousLow: Double,
-    val result: String = ""
+    val result: String = "",
+    val dailyRelativeVolume: Double? = null
 )
 
-internal data class SavedWatch(val source: LocalDate, val target: LocalDate, val rows: List<WatchRow>, val skipped: Int) {
+internal data class SavedWatch(val source: LocalDate, val target: LocalDate, val rows: List<WatchRow>, val skipped: Int, val missing: Int = 0,
+    val upstoxVolume: Boolean = false) {
     fun encode(): String = JSONObject()
-        .put("source", source.toString()).put("target", target.toString()).put("skipped", skipped)
+        .put("source", source.toString()).put("target", target.toString()).put("skipped", skipped).put("missing", missing).put("upstoxVolume", upstoxVolume)
         .put("rows", JSONArray(rows.map {
             JSONObject().put("symbol", it.symbol).put("side", it.side.name).put("close", it.close)
-                .put("high", it.previousHigh).put("low", it.previousLow).put("result", it.result)
+                .put("high", it.previousHigh).put("low", it.previousLow).put("result", it.result).put("dailyRelativeVolume", it.dailyRelativeVolume ?: JSONObject.NULL)
         })).toString()
 
     companion object {
@@ -34,36 +36,59 @@ internal data class SavedWatch(val source: LocalDate, val target: LocalDate, val
                 (0 until items.length()).map { i ->
                     val item = items.getJSONObject(i)
                     WatchRow(item.getString("symbol"), WatchSide.valueOf(item.getString("side")),
-                        item.getDouble("close"), item.getDouble("high"), item.getDouble("low"), item.getString("result"))
-                }, json.getInt("skipped"))
+                        item.getDouble("close"), item.getDouble("high"), item.getDouble("low"), item.getString("result"),
+                        item.optDouble("dailyRelativeVolume").takeIf { it.isFinite() })
+                }, json.getInt("skipped"), json.optInt("missing"), json.optBoolean("upstoxVolume"))
         }.getOrNull()
     }
 }
 
 internal class TomorrowWatch(private val feed: CandleFeed) {
     suspend fun prepare(token: String, stocks: List<Stock>, date: LocalDate,
-                        unusual: Set<String>, now: Instant): SavedWatch {
+                        now: Instant, onProgress: suspend (Int) -> Unit = {}): SavedWatch {
         val today = now.atZone(MarketSession.ZONE).toLocalDate()
-        require(date <= today) { "Use a completed StockEdge session date." }
-        val source = requireNotNull(feed.session(token, date)) { "No NSE session on the StockEdge date." }
+        require(date <= today) { "Use a completed NSE session date." }
+        val source = requireNotNull(feed.session(token, date)) { "No NSE session on the selected date." }
         require(now >= source.end) { "Build the watchlist after market close." }
         val target = sessions(token, date, 1, 1).single().date
         require(target >= today) { "The watchlist's next session has already passed." }
-        val previous = sessions(token, date, -1, 1).single().date
-        val rows = stocks.filter { it.symbol in unusual }.mapNotNull { stock ->
-            val daily = feed.candles(token, "/v3/historical-candle/${encoded(stock)}/days/1/$date/$previous")
-            fun bar(day: LocalDate) = daily.singleOrNull { it.timestamp.atZone(MarketSession.ZONE).toLocalDate() == day }
-                ?.takeIf(PaperStrategy::validCandle)
-            val current = requireNotNull(bar(date)) { "Waiting for completed daily data for ${stock.symbol}." }
-            val prior = requireNotNull(bar(previous)) { "Missing previous session data for ${stock.symbol}." }
-            val side = when {
-                current.close > prior.high -> WatchSide.BUY
-                current.close < prior.low -> WatchSide.SELL
-                else -> return@mapNotNull null
+        val baselineDates = sessions(token, date, -1, 20).map { it.date }
+        val previous = baselineDates.first()
+        val rows = mutableListOf<WatchRow>()
+        var skipped = 0
+        var missing = 0
+        for ((index, stock) in stocks.withIndex()) {
+            val daily = try {
+                feed.candles(token, "/v3/historical-candle/${encoded(stock)}/days/1/$date/${baselineDates.last()}")
+            } catch (error: java.io.IOException) {
+                if (error.message !in setOf("INVALID_CANDLE", "DUPLICATE_CANDLE")) throw error
+                emptyList()
             }
-            WatchRow(stock.symbol, side, current.close, prior.high, prior.low)
+            val byDate = daily.groupBy { it.timestamp.atZone(MarketSession.ZONE).toLocalDate() }
+            fun bar(day: LocalDate) = byDate[day]?.singleOrNull()?.takeIf(PaperStrategy::validCandle)
+            val current = bar(date)
+            val prior = bar(previous)
+            val history = baselineDates.mapNotNull(::bar)
+            val average = history.map { it.volume }.average()
+            val ratio = if (current != null && history.size == 20 && average > 0.0)
+                (current.volume / average).takeIf { it.isFinite() } else null
+            if (current == null || prior == null || ratio == null) {
+                missing++
+            } else {
+                val side = when {
+                    ratio < 1.5 -> null
+                    current.close > prior.high -> WatchSide.BUY
+                    current.close < prior.low -> WatchSide.SELL
+                    else -> null
+                }
+                if (side == null) skipped++ else rows += WatchRow(
+                    stock.symbol, side, current.close, prior.high, prior.low, dailyRelativeVolume = ratio
+                )
+            }
+            onProgress(index + 1)
         }
-        return SavedWatch(date, target, rows, stocks.size - rows.size)
+        require(missing < stocks.size) { "Daily data is not ready. Try again after Upstox publishes the session candles." }
+        return SavedWatch(date, target, rows, skipped, missing, upstoxVolume = true)
     }
 
     suspend fun validate(token: String, watch: SavedWatch, stocks: List<Stock>, now: Instant): SavedWatch {
@@ -151,7 +176,7 @@ internal fun validateWatch(side: WatchSide, session: MarketSession, prior: List<
             return String.format(Locale.US, "Passed %s IST · close ₹%.2f · range ₹%.2f–₹%.2f · est. VWAP ₹%.2f · %.2f× volume",
                 closeTime, bar.close, low, high, vwap, ratio)
         }
-        if (status != waiting) status = "Breakout volume below 1.5×"
+        if (status != waiting) status = String.format(Locale.US, "Breakout volume %.2f× · needs 1.5×", ratio)
     }
     return status
 }

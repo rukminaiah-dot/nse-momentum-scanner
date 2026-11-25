@@ -9,8 +9,8 @@ import org.junit.Test
 class TomorrowWatchTest {
     private val friday = LocalDate.parse("2026-11-20")
 
-    @Test fun closeAndStockEdgeFlagsDetermineTheNextTradingSessionWatchlist() = runBlocking {
-        val stocks = listOf("UP", "DOWN", "INSIDE", "NOFLAG").map { Stock(it, it) }
+    @Test fun closeAndUpstoxDailyVolumeDetermineTheNextTradingSessionWatchlist() = runBlocking {
+        val stocks = listOf("UP", "DOWN", "INSIDE", "LOWVOL", "MISSING").map { Stock(it, it) }
         val feed = object : CandleFeed {
             override suspend fun session(token: String, date: LocalDate) =
                 if (date.dayOfWeek in setOf(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY)) null else regular(date)
@@ -20,18 +20,21 @@ class TomorrowWatchTest {
                     "/UP/" in path -> 505.0
                     "/DOWN/" in path -> 475.0
                     "/INSIDE/" in path -> 490.0
-                    else -> error("Unexpected request: $path")
+                    else -> 505.0
                 }
-                return listOf(
-                    Candle(regular(friday.minusDays(1)).start, 490.0, 500.0, 480.0, 490.0, 100.0),
-                    Candle(regular(friday).start, close, close, close, close, 100.0)
-                )
+                val baseline = (1L..32L).map { friday.minusDays(it) }
+                    .filter { it.dayOfWeek.value <= 5 }.take(if ("/MISSING/" in path) 19 else 20)
+                    .map { Candle(regular(it).start, 490.0, 500.0, 480.0, 490.0, 100.0) }
+                val volume = if ("/LOWVOL/" in path) 149.0 else 150.0
+                return baseline + Candle(regular(friday).start, close, close, close, close, volume)
             }
         }
-        val result = TomorrowWatch(feed).prepare("token", stocks, friday, setOf("UP", "DOWN", "INSIDE"), regular(friday).end)
+        val result = TomorrowWatch(feed).prepare("token", stocks, friday, regular(friday).end)
         assertEquals(friday.plusDays(3), result.target)
         assertEquals(listOf(WatchSide.BUY, WatchSide.SELL), result.rows.map { it.side })
         assertEquals(2, result.skipped)
+        assertEquals(1, result.missing)
+        assertTrue(result.rows.all { it.dailyRelativeVolume == 1.5 })
         assertEquals(result, SavedWatch.decode(result.encode()))
     }
 
